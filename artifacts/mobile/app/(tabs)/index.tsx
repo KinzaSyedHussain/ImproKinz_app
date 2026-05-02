@@ -1,18 +1,17 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   collection,
   getDocs,
   limit,
-  onSnapshot,
   orderBy,
   query,
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase/firestore";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -89,9 +88,15 @@ export default function HomeScreen() {
     }
   };
 
-  useEffect(() => {
-    loadPosts();
-  }, [loadPosts]);
+  // Reload feed every time this tab comes into focus (e.g. after creating a post)
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      setHasMore(true);
+      lastDocRef.current = null;
+      loadPosts();
+    }, [loadPosts])
+  );
 
   const handleRefresh = () => {
     setRefreshing(true);

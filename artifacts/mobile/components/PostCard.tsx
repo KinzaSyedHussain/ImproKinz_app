@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import React, { useState } from "react";
 import {
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -32,6 +33,11 @@ export interface Post {
   commentCount: number;
   createdAt: number;
   subject?: string;
+  // media — app writes mediaUrl/mediaType; website writes imageUrl / videoUrl
+  mediaUrl?: string;
+  mediaType?: "image" | "video";
+  imageUrl?: string;
+  videoUrl?: string;
 }
 
 interface Props {
@@ -57,12 +63,17 @@ export function PostCard({ post, onRefresh }: Props) {
   const colors = useColors();
   const { user } = useAuth();
   const router = useRouter();
+
   // Defensive defaults — old posts from the website may not have these arrays
   const likes = Array.isArray(post.likes) ? post.likes : [];
   const savedBy = Array.isArray(post.savedBy) ? post.savedBy : [];
   const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
   const [saved, setSaved] = useState(user ? savedBy.includes(user.uid) : false);
   const [likeCount, setLikeCount] = useState(likes.length);
+
+  // Resolve media — support both field naming conventions
+  const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
+  const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
 
   const handleLike = async () => {
     if (!user) return;
@@ -71,11 +82,11 @@ export function PostCard({ post, onRefresh }: Props) {
     if (liked) {
       setLiked(false);
       setLikeCount((c) => c - 1);
-      await updateDoc(ref, { likes: arrayRemove(user.uid) });
+      updateDoc(ref, { likes: arrayRemove(user.uid) }).catch(() => {});
     } else {
       setLiked(true);
       setLikeCount((c) => c + 1);
-      await updateDoc(ref, { likes: arrayUnion(user.uid) });
+      updateDoc(ref, { likes: arrayUnion(user.uid) }).catch(() => {});
     }
   };
 
@@ -85,10 +96,10 @@ export function PostCard({ post, onRefresh }: Props) {
     const ref = doc(db, "community_posts", post.id);
     if (saved) {
       setSaved(false);
-      await updateDoc(ref, { savedBy: arrayRemove(user.uid) });
+      updateDoc(ref, { savedBy: arrayRemove(user.uid) }).catch(() => {});
     } else {
       setSaved(true);
-      await updateDoc(ref, { savedBy: arrayUnion(user.uid) });
+      updateDoc(ref, { savedBy: arrayUnion(user.uid) }).catch(() => {});
     }
   };
 
@@ -101,6 +112,7 @@ export function PostCard({ post, onRefresh }: Props) {
         { backgroundColor: colors.card, borderColor: colors.border },
       ]}
     >
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.push(`/user/${post.authorId}` as any)}
@@ -120,18 +132,14 @@ export function PostCard({ post, onRefresh }: Props) {
             </Text>
           </View>
         </TouchableOpacity>
-        <View
-          style={[
-            styles.typeBadge,
-            { backgroundColor: typeConfig.color + "18" },
-          ]}
-        >
+        <View style={[styles.typeBadge, { backgroundColor: typeConfig.color + "18" }]}>
           <Text style={[styles.typeText, { color: typeConfig.color }]}>
             {typeConfig.label}
           </Text>
         </View>
       </View>
 
+      {/* Content */}
       <TouchableOpacity
         onPress={() => router.push(`/post/${post.id}` as any)}
         activeOpacity={0.8}
@@ -146,7 +154,37 @@ export function PostCard({ post, onRefresh }: Props) {
         ) : null}
       </TouchableOpacity>
 
+      {/* Image media */}
+      {!!imageSource && (
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => router.push(`/post/${post.id}` as any)}
+        >
+          <Image
+            source={{ uri: imageSource }}
+            style={styles.mediaImage}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      )}
+
+      {/* Video placeholder — tapping navigates to post detail */}
+      {!!videoSource && !imageSource && (
+        <TouchableOpacity
+          style={[styles.videoPlaceholder, { backgroundColor: colors.muted, borderColor: colors.border }]}
+          activeOpacity={0.8}
+          onPress={() => router.push(`/post/${post.id}` as any)}
+        >
+          <View style={styles.playBtn}>
+            <Feather name="play" size={28} color="#fff" />
+          </View>
+          <Text style={[styles.videoLabel, { color: colors.mutedForeground }]}>Tap to watch video</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+      {/* Actions */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.action} onPress={handleLike}>
           <Feather
@@ -154,12 +192,7 @@ export function PostCard({ post, onRefresh }: Props) {
             size={18}
             color={liked ? "#EF4444" : colors.mutedForeground}
           />
-          <Text
-            style={[
-              styles.actionText,
-              { color: liked ? "#EF4444" : colors.mutedForeground },
-            ]}
-          >
+          <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
             {likeCount}
           </Text>
         </TouchableOpacity>
@@ -170,7 +203,7 @@ export function PostCard({ post, onRefresh }: Props) {
         >
           <Feather name="message-circle" size={18} color={colors.mutedForeground} />
           <Text style={[styles.actionText, { color: colors.mutedForeground }]}>
-            {post.commentCount}
+            {post.commentCount ?? 0}
           </Text>
         </TouchableOpacity>
 
@@ -180,12 +213,7 @@ export function PostCard({ post, onRefresh }: Props) {
             size={18}
             color={saved ? colors.primary : colors.mutedForeground}
           />
-          <Text
-            style={[
-              styles.actionText,
-              { color: saved ? colors.primary : colors.mutedForeground },
-            ]}
-          >
+          <Text style={[styles.actionText, { color: saved ? colors.primary : colors.mutedForeground }]}>
             {saved ? "Saved" : "Save"}
           </Text>
         </TouchableOpacity>
@@ -216,14 +244,10 @@ const styles = StyleSheet.create({
   },
   authorRow: { flexDirection: "row", alignItems: "center", flex: 1 },
   authorInfo: { marginLeft: 10 },
-  authorName: { fontFamily: undefined, fontSize: 14 },
+  authorName: { fontFamily: undefined, fontSize: 14, fontWeight: "600" },
   time: { fontFamily: undefined, fontSize: 12, marginTop: 1 },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  typeText: { fontFamily: undefined, fontSize: 11 },
+  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  typeText: { fontFamily: undefined, fontSize: 11, fontWeight: "600" },
   content: {
     fontFamily: undefined,
     fontSize: 15,
@@ -237,6 +261,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 10,
   },
+  mediaImage: {
+    width: "100%",
+    height: 220,
+  },
+  videoPlaceholder: {
+    height: 160,
+    marginHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  playBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoLabel: { fontFamily: undefined, fontSize: 13 },
   divider: { height: 1, marginHorizontal: 14 },
   actions: {
     flexDirection: "row",
