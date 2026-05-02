@@ -3,6 +3,7 @@ import { VideoView, useVideoPlayer } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
+  arrayRemove,
   arrayUnion,
   doc,
   onSnapshot,
@@ -48,6 +49,12 @@ function timeAgo(ts: number) {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
+// ─── flat list item types ────────────────────────────────────────────────────
+type CommentItem =
+  | { kind: "top"; comment: PostComment; replyCount: number }
+  | { kind: "view-replies"; parentId: string; count: number }
+  | { kind: "reply"; comment: PostComment; parentId: string };
+
 export default function PostDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -60,9 +67,10 @@ export default function PostDetailScreen() {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
-  // Reply state
-  const [replyingTo, setReplyingTo] = useState<{ name: string } | null>(null);
+  // Reply state — now carries parentId for threading
+  const [replyingTo, setReplyingTo] = useState<{ name: string; commentId: string } | null>(null);
 
   const inputRef = useRef<TextInput>(null);
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -95,15 +103,46 @@ export default function PostDetailScreen() {
     return unsub;
   }, [id]);
 
-  const handleReply = (authorName: string) => {
-    setReplyingTo({ name: authorName });
-    setText(`@${authorName} `);
+  const toggleReplies = (commentId: string) => {
+    setExpandedReplies((prev) => {
+      const next = new Set(prev);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  };
+
+  const handleReply = (authorName: string, commentId: string) => {
+    setReplyingTo({ name: authorName, commentId });
+    setText("");
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   const cancelReply = () => {
     setReplyingTo(null);
     setText("");
+  };
+
+  const handleDelete = async (comment: PostComment) => {
+    const postId = Array.isArray(id) ? id[0] : id;
+    if (!postId) return;
+    Alert.alert("Delete comment", "Remove this comment?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await updateDoc(doc(db, "community_posts", postId), {
+              commentsList: arrayRemove(comment),
+              commentCount: Math.max(0, (post?.commentsList?.length ?? 1) - 1),
+            });
+          } catch (e: any) {
+            Alert.alert("Error", e?.message ?? "Could not delete comment.");
+          }
+        },
+      },
+    ]);
   };
 
   const handleSubmit = async () => {
@@ -127,8 +166,9 @@ export default function PostDetailScreen() {
       authorId: user.uid,
       authorName,
       authorPhoto,
-      text: text.trim(),
+      text: replyingTo ? `@${replyingTo.name} ${text.trim()}` : text.trim(),
       createdAt: Date.now(),
+      ...(replyingTo ? { replyToId: replyingTo.commentId, replyToName: replyingTo.name } : {}),
     };
 
     try {
@@ -139,13 +179,15 @@ export default function PostDetailScreen() {
       addXP(5).catch(() => {});
       setText("");
       setReplyingTo(null);
+      // Auto-expand the parent thread
+      if (newComment.replyToId) {
+        setExpandedReplies((prev) => new Set(prev).add(newComment.replyToId!));
+      }
     } catch (e: any) {
       console.warn("Comment submit error:", e?.code, e?.message);
       const msg =
         e?.code === "permission-denied"
-          ? "Firestore rules are blocking this write. Allow update for community_posts."
-          : e?.code === "not-found"
-          ? "Post document not found."
+          ? "Firestore rules are blocking this write."
           : e?.message || "Unknown error.";
       Alert.alert("Comment failed", msg);
       setError(msg);
@@ -153,6 +195,30 @@ export default function PostDetailScreen() {
       setSubmitting(false);
     }
   };
+
+  // ─── Build threaded flat list ─────────────────────────────────────────────
+  const allComments = [...(post?.commentsList ?? [])].sort((a, b) => a.createdAt - b.createdAt);
+  const topLevel = allComments.filter((c) => !c.replyToId);
+  const repliesMap: Record<string, PostComment[]> = {};
+  allComments.filter((c) => c.replyToId).forEach((c) => {
+    if (!repliesMap[c.replyToId!]) repliesMap[c.replyToId!] = [];
+    repliesMap[c.replyToId!].push(c);
+  });
+
+  const listItems: CommentItem[] = [];
+  topLevel.forEach((c) => {
+    const replies = repliesMap[c.id] ?? [];
+    listItems.push({ kind: "top", comment: c, replyCount: replies.length });
+    if (replies.length > 0) {
+      if (expandedReplies.has(c.id)) {
+        replies.forEach((r) => listItems.push({ kind: "reply", comment: r, parentId: c.id }));
+        // "Hide replies" row
+        listItems.push({ kind: "view-replies", parentId: c.id, count: -1 });
+      } else {
+        listItems.push({ kind: "view-replies", parentId: c.id, count: replies.length });
+      }
+    }
+  });
 
   if (loading) {
     return (
@@ -179,10 +245,90 @@ export default function PostDetailScreen() {
     );
   }
 
-  // Resolve video URL
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
 
-  const comments = [...(post.commentsList ?? [])].sort((a, b) => a.createdAt - b.createdAt);
+  const renderItem = ({ item }: { item: CommentItem }) => {
+    // ── "View / hide replies" row ─────────────────────────────────────────
+    if (item.kind === "view-replies") {
+      const hide = item.count === -1;
+      return (
+        <TouchableOpacity
+          style={styles.viewRepliesRow}
+          onPress={() => toggleReplies(item.parentId)}
+        >
+          <View style={styles.replyLineWrap}>
+            <View style={[styles.vertLine, { backgroundColor: colors.border }]} />
+          </View>
+          <Feather
+            name={hide ? "chevron-up" : "chevron-down"}
+            size={13}
+            color={colors.primary}
+          />
+          <Text style={[styles.viewRepliesText, { color: colors.primary }]}>
+            {hide ? "Hide replies" : `View ${item.count} ${item.count === 1 ? "reply" : "replies"}`}
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    const { comment } = item;
+    const isReply = item.kind === "reply";
+    const isOwn = comment.authorId === user?.uid;
+
+    // parse text: if starts with @Name strip prefix to show separately
+    const hasPrefix = comment.text.startsWith("@");
+    const prefixWord = hasPrefix ? comment.text.split(" ")[0] : "";
+    const restText = hasPrefix ? comment.text.split(" ").slice(1).join(" ") : comment.text;
+
+    return (
+      <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
+        {/* ↳ arrow for replies */}
+        {isReply && (
+          <View style={styles.arrowWrap}>
+            <View style={[styles.vertLineReply, { backgroundColor: colors.border }]} />
+            <View style={[styles.horizLine, { backgroundColor: colors.border }]} />
+          </View>
+        )}
+
+        <UserAvatar photoURL={comment.authorPhoto} displayName={comment.authorName} size={isReply ? 28 : 34} />
+
+        <View style={{ flex: 1 }}>
+          <View style={[styles.bubble, { backgroundColor: isReply ? colors.background : colors.muted, borderColor: colors.border, borderWidth: isReply ? 1 : 0 }]}>
+            <View style={styles.bubbleTop}>
+              <Text style={[styles.commentAuthor, { color: colors.foreground }]}>{comment.authorName}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={[styles.commentTime, { color: colors.mutedForeground }]}>{timeAgo(comment.createdAt)}</Text>
+                {isOwn && (
+                  <TouchableOpacity onPress={() => handleDelete(comment)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    <Feather name="trash-2" size={13} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            {hasPrefix ? (
+              <Text style={[styles.commentText, { color: colors.foreground }]}>
+                <Text style={{ color: colors.primary, fontWeight: "600" }}>{prefixWord} </Text>
+                {restText}
+              </Text>
+            ) : (
+              <Text style={[styles.commentText, { color: colors.foreground }]}>{comment.text}</Text>
+            )}
+          </View>
+
+          {/* Reply button — only on top-level comments */}
+          {!isReply && (
+            <TouchableOpacity
+              style={styles.replyBtn}
+              onPress={() => handleReply(comment.authorName, comment.id)}
+            >
+              <Feather name="corner-down-right" size={12} color={colors.mutedForeground} />
+              <Text style={[styles.replyBtnText, { color: colors.mutedForeground }]}>Reply</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <KeyboardAvoidingView
@@ -199,15 +345,20 @@ export default function PostDetailScreen() {
       </View>
 
       <FlatList
-        data={comments}
-        keyExtractor={(item) => item.id}
+        data={listItems}
+        keyExtractor={(item) =>
+          item.kind === "view-replies"
+            ? `vr-${item.parentId}`
+            : item.kind === "reply"
+            ? `reply-${item.comment.id}`
+            : `top-${item.comment.id}`
+        }
         contentContainerStyle={{ paddingBottom: 16 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
             <PostCard post={post} />
 
-            {/* Inline video player if post has video */}
             {!!videoSource && (
               <View style={[styles.videoWrap, { backgroundColor: "#000" }]}>
                 <VideoPlayer uri={videoSource} />
@@ -224,49 +375,18 @@ export default function PostDetailScreen() {
             <View style={[styles.commentsHeader, { borderBottomColor: colors.border }]}>
               <Feather name="message-circle" size={16} color={colors.primary} />
               <Text style={[styles.commentsTitle, { color: colors.foreground }]}>
-                Comments ({comments.length})
+                Comments ({topLevel.length})
               </Text>
             </View>
 
-            {comments.length === 0 && (
+            {topLevel.length === 0 && (
               <Text style={[styles.emptyComments, { color: colors.mutedForeground }]}>
                 No comments yet — be the first!
               </Text>
             )}
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.commentRow}>
-            <UserAvatar photoURL={item.authorPhoto} displayName={item.authorName} size={34} />
-            <View style={{ flex: 1 }}>
-              <View style={[styles.bubble, { backgroundColor: colors.muted }]}>
-                <View style={styles.bubbleTop}>
-                  <Text style={[styles.commentAuthor, { color: colors.foreground }]}>{item.authorName}</Text>
-                  <Text style={[styles.commentTime, { color: colors.mutedForeground }]}>{timeAgo(item.createdAt)}</Text>
-                </View>
-                {/* Render reply prefix in gold if text starts with @name */}
-                {item.text.startsWith("@") ? (
-                  <Text style={[styles.commentText, { color: colors.foreground }]}>
-                    <Text style={{ color: colors.primary, fontWeight: "600" }}>
-                      {item.text.split(" ")[0]}{" "}
-                    </Text>
-                    {item.text.split(" ").slice(1).join(" ")}
-                  </Text>
-                ) : (
-                  <Text style={[styles.commentText, { color: colors.foreground }]}>{item.text}</Text>
-                )}
-              </View>
-              {/* Reply button under each comment */}
-              <TouchableOpacity
-                style={styles.replyBtn}
-                onPress={() => handleReply(item.authorName)}
-              >
-                <Feather name="corner-down-right" size={12} color={colors.mutedForeground} />
-                <Text style={[styles.replyBtnText, { color: colors.mutedForeground }]}>Reply</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        renderItem={renderItem}
       />
 
       {/* Replying-to banner */}
@@ -321,7 +441,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
-  headerTitle: { fontSize: 18, fontFamily: undefined },
+  headerTitle: { fontSize: 18 },
   videoWrap: {
     marginHorizontal: 16,
     marginTop: 4,
@@ -339,8 +459,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     marginTop: 8,
   },
-  commentsTitle: { fontSize: 15, fontFamily: undefined, fontWeight: "600" },
-  emptyComments: { textAlign: "center", paddingVertical: 24, fontSize: 14, fontFamily: undefined },
+  commentsTitle: { fontSize: 15, fontWeight: "600" },
+  emptyComments: { textAlign: "center", paddingVertical: 24, fontSize: 14 },
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -352,13 +472,51 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(239,68,68,0.4)",
   },
-  errorText: { color: "#EF4444", fontSize: 13, flex: 1, lineHeight: 18, fontFamily: undefined },
-  commentRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 6, alignItems: "flex-start" },
+  errorText: { color: "#EF4444", fontSize: 13, flex: 1, lineHeight: 18 },
+
+  // ── comment rows ──────────────────────────────────────────────────────────
+  commentRow: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 2,
+    alignItems: "flex-start",
+  },
+  commentRowReply: {
+    paddingLeft: 36,
+    paddingTop: 4,
+  },
+
+  // ── ↳ arrow ───────────────────────────────────────────────────────────────
+  arrowWrap: {
+    width: 20,
+    alignItems: "flex-end",
+    marginRight: 4,
+    marginTop: 4,
+    height: 28,
+  },
+  vertLineReply: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 1.5,
+    height: 14,
+  },
+  horizLine: {
+    position: "absolute",
+    top: 14,
+    right: 0,
+    height: 1.5,
+    width: 12,
+  },
+
   bubble: { flex: 1, borderRadius: 14, padding: 10 },
-  bubbleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  commentAuthor: { fontSize: 13, fontWeight: "600", fontFamily: undefined },
-  commentTime: { fontSize: 11, fontFamily: undefined },
-  commentText: { fontSize: 14, lineHeight: 20, fontFamily: undefined },
+  bubbleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4, alignItems: "center" },
+  commentAuthor: { fontSize: 13, fontWeight: "600" },
+  commentTime: { fontSize: 11 },
+  commentText: { fontSize: 14, lineHeight: 20 },
+
   replyBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -367,7 +525,22 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 2,
   },
-  replyBtnText: { fontSize: 12, fontFamily: undefined },
+  replyBtnText: { fontSize: 12 },
+
+  // ── "View X replies" ──────────────────────────────────────────────────────
+  viewRepliesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingLeft: 60,
+    paddingRight: 16,
+    paddingVertical: 6,
+  },
+  replyLineWrap: { width: 16, alignItems: "center" },
+  vertLine: { width: 1.5, height: 16 },
+  viewRepliesText: { fontSize: 13, fontWeight: "600" },
+
+  // ── reply banner + input ──────────────────────────────────────────────────
   replyBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -376,7 +549,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderTopWidth: 1,
   },
-  replyBannerText: { flex: 1, fontSize: 13, fontFamily: undefined },
+  replyBannerText: { flex: 1, fontSize: 13 },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -391,7 +564,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    fontFamily: undefined,
     maxHeight: 100,
   },
   sendBtn: {
