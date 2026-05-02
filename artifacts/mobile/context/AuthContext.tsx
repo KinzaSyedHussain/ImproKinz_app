@@ -30,6 +30,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   photoURL: string;
+  bannerUrl?: string;
   bio: string;
   subjects: string[];
   xp: number;

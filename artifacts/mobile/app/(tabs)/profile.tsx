@@ -15,6 +15,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,19 @@ const SUBJECT_OPTIONS = [
   "Chemistry", "Biology", "Computer Science", "Economics", "Art",
 ];
 
+async function pickAndUpload(
+  options: ImagePicker.ImagePickerOptions,
+  storagePath: string
+): Promise<string | null> {
+  const result = await ImagePicker.launchImageLibraryAsync(options);
+  if (result.canceled || !result.assets[0]?.uri) return null;
+  const resp = await fetch(result.assets[0].uri);
+  const blob = await resp.blob();
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, blob);
+  return getDownloadURL(storageRef);
+}
+
 export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -45,6 +59,8 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"posts" | "saved">("posts");
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -58,7 +74,6 @@ export default function ProfileScreen() {
         const sort = (arr: Post[]) =>
           arr.sort((a, b) => b.createdAt - a.createdAt);
 
-        // Use simple where queries — sort client-side to avoid needing composite indexes
         const [snap, savedSnap] = await Promise.all([
           getDocs(query(collection(db, "community_posts"), where("authorId", "==", user.uid))),
           getDocs(query(collection(db, "community_posts"), where("savedBy", "array-contains", user.uid))),
@@ -74,25 +89,42 @@ export default function ProfileScreen() {
     fetchPosts();
   }, [user]);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"] as any,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (result.canceled || !user) return;
-    const asset = result.assets[0];
-    if (!asset?.uri) return;
+  const pickAvatar = async () => {
+    if (!user || uploadingAvatar) return;
+    setUploadingAvatar(true);
     try {
-      const resp = await fetch(asset.uri);
-      const blob = await resp.blob();
-      const storageRef = ref(storage, `avatars/${user.uid}`);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, "users", user.uid), { photoURL: url });
-      await refreshProfile();
-    } catch {}
+      const url = await pickAndUpload(
+        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [1, 1], quality: 0.8 },
+        `avatars/${user.uid}`
+      );
+      if (url) {
+        await updateDoc(doc(db, "users", user.uid), { photoURL: url });
+        await refreshProfile();
+      }
+    } catch (e) {
+      console.warn("Avatar upload failed:", e);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const pickBanner = async () => {
+    if (!user || uploadingBanner) return;
+    setUploadingBanner(true);
+    try {
+      const url = await pickAndUpload(
+        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [16, 9], quality: 0.85 },
+        `banners/${user.uid}`
+      );
+      if (url) {
+        await updateDoc(doc(db, "users", user.uid), { bannerUrl: url });
+        await refreshProfile();
+      }
+    } catch (e) {
+      console.warn("Banner upload failed:", e);
+    } finally {
+      setUploadingBanner(false);
+    }
   };
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -107,62 +139,95 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: botPad }}
         ListHeaderComponent={
           <View>
-            <LinearGradient
-              colors={[colors.gradientStart, colors.gradientEnd]}
-              style={[styles.headerBg, { paddingTop: topPad + 16 }]}
-            >
-              <TouchableOpacity style={styles.avatarWrap} onPress={pickImage}>
-                <UserAvatar
-                  photoURL={profile?.photoURL}
-                  displayName={profile?.displayName}
-                  size={80}
+            {/* Banner */}
+            <View style={[styles.bannerWrap, { paddingTop: topPad }]}>
+              {profile?.bannerUrl ? (
+                <Image source={{ uri: profile.bannerUrl }} style={styles.bannerImage} resizeMode="cover" />
+              ) : (
+                <LinearGradient
+                  colors={[colors.purpleStart, colors.purpleEnd]}
+                  style={styles.bannerImage}
                 />
-                <View style={[styles.editAvatar, { backgroundColor: colors.card }]}>
-                  <Feather name="camera" size={12} color={colors.primary} />
-                </View>
+              )}
+              {/* Banner edit button */}
+              <TouchableOpacity style={styles.bannerEditBtn} onPress={pickBanner} disabled={uploadingBanner}>
+                {uploadingBanner
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Feather name="camera" size={14} color="#fff" />}
               </TouchableOpacity>
-              <Text style={styles.name}>{profile?.displayName || "Study User"}</Text>
-              <Text style={styles.email}>{profile?.email || ""}</Text>
+
+              {/* Avatar overlapping the banner */}
+              <TouchableOpacity style={styles.avatarWrap} onPress={pickAvatar} disabled={uploadingAvatar}>
+                {uploadingAvatar
+                  ? (
+                    <View style={[styles.avatarLoadingRing, { borderColor: colors.card, backgroundColor: colors.muted }]}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  )
+                  : (
+                    <>
+                      <UserAvatar
+                        photoURL={profile?.photoURL}
+                        displayName={profile?.displayName}
+                        size={84}
+                        style={{ borderWidth: 3, borderColor: colors.card }}
+                      />
+                      <View style={[styles.editAvatarBadge, { backgroundColor: colors.primary }]}>
+                        <Feather name="camera" size={11} color="#fff" />
+                      </View>
+                    </>
+                  )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Name / bio / actions */}
+            <View style={[styles.infoBlock, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+              <Text style={[styles.name, { color: colors.foreground }]}>
+                {profile?.displayName || "Study User"}
+              </Text>
+              <Text style={[styles.email, { color: colors.mutedForeground }]}>
+                {profile?.email || ""}
+              </Text>
               {profile?.bio ? (
-                <Text style={styles.bio}>{profile.bio}</Text>
+                <Text style={[styles.bio, { color: colors.mutedForeground }]}>{profile.bio}</Text>
               ) : null}
+
               <View style={styles.profileActions}>
                 <TouchableOpacity
-                  style={styles.editProfileBtn}
+                  style={[styles.editProfileBtn, { backgroundColor: colors.primary }]}
                   onPress={() => router.push("/user/edit" as any)}
                 >
-                  <Feather name="edit-2" size={14} color="#fff" />
+                  <Feather name="edit-2" size={13} color="#fff" />
                   <Text style={styles.editProfileText}>Edit Profile</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.themeToggleBtn}
+                  style={[styles.iconBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
                   onPress={toggleTheme}
                 >
-                  <Feather name={isDark ? "sun" : "moon"} size={16} color="#fff" />
+                  <Feather name={isDark ? "sun" : "moon"} size={16} color={colors.primary} />
                 </TouchableOpacity>
               </View>
-            </LinearGradient>
-
-            <View style={{ paddingVertical: 16 }}>
-              {profile && (
-                <XPStreakBadge xp={profile.xp} streak={profile.streak} />
-              )}
             </View>
 
+            {/* XP / streak */}
+            <View style={{ paddingVertical: 12 }}>
+              {profile && <XPStreakBadge xp={profile.xp} streak={profile.streak} />}
+            </View>
+
+            {/* Subjects */}
             {profile?.subjects && profile.subjects.length > 0 ? (
               <View style={styles.subjectsRow}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
                   {profile.subjects.map((s) => (
                     <View key={s} style={[styles.subjectChip, { backgroundColor: colors.secondary }]}>
-                      <Text style={[styles.subjectText, { color: colors.primary }]}>
-                        {s}
-                      </Text>
+                      <Text style={[styles.subjectText, { color: colors.primary }]}>{s}</Text>
                     </View>
                   ))}
                 </ScrollView>
               </View>
             ) : null}
 
+            {/* Tabs */}
             <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
               {(["posts", "saved"] as const).map((t) => (
                 <TouchableOpacity
@@ -173,12 +238,7 @@ export default function ProfileScreen() {
                   ]}
                   onPress={() => setTab(t)}
                 >
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      { color: tab === t ? colors.primary : colors.mutedForeground },
-                    ]}
-                  >
+                  <Text style={[styles.tabLabel, { color: tab === t ? colors.primary : colors.mutedForeground }]}>
                     {t === "posts" ? "My Posts" : "Saved"}
                   </Text>
                 </TouchableOpacity>
@@ -212,42 +272,67 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerBg: { alignItems: "center", paddingBottom: 24, paddingHorizontal: 24, gap: 6 },
-  avatarWrap: { position: "relative", marginBottom: 6 },
-  editAvatar: {
+  bannerWrap: { position: "relative" },
+  bannerImage: { width: "100%", height: 160 },
+  bannerEditBtn: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    top: 12,
+    right: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.45)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 2,
   },
-  name: { color: "#FFFFFF", fontFamily: undefined, fontSize: 22 },
-  email: { color: "rgba(255,255,255,0.7)", fontFamily: undefined, fontSize: 13 },
-  bio: { color: "rgba(255,255,255,0.85)", fontFamily: undefined, fontSize: 14, textAlign: "center" },
-  profileActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
+  avatarWrap: {
+    position: "absolute",
+    bottom: -42,
+    left: 20,
+  },
+  avatarLoadingRing: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editAvatarBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoBlock: {
+    marginTop: 50,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+  },
+  name: { fontSize: 20, fontWeight: "700", fontFamily: undefined, marginBottom: 2 },
+  email: { fontSize: 13, fontFamily: undefined, marginBottom: 4 },
+  bio: { fontSize: 14, lineHeight: 20, fontFamily: undefined, marginBottom: 8 },
+  profileActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
   editProfileBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
-  editProfileText: { color: "#FFFFFF", fontFamily: undefined, fontSize: 13 },
-  themeToggleBtn: {
+  editProfileText: { color: "#fff", fontSize: 13, fontFamily: undefined },
+  iconBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
