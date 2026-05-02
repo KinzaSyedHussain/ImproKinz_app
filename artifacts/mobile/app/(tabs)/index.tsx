@@ -28,7 +28,17 @@ import { Post, PostCard } from "@/components/PostCard";
 import { useColors } from "@/hooks/useColors";
 import { db } from "@/lib/firebase";
 
-const PAGE_SIZE = 10;
+const POOL_SIZE = 60;
+const PAGE_SIZE = 12;
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 export default function HomeScreen() {
   const colors = useColors();
@@ -41,23 +51,28 @@ export default function HomeScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  // Shuffled pool — remaining posts not yet shown
+  const poolRef = useRef<Post[]>([]);
 
-  const loadPosts = useCallback(async (refresh = false) => {
+  const loadPosts = useCallback(async (_refresh = false) => {
     try {
       const q = query(
         collection(db, "community_posts"),
         orderBy("createdAt", "desc"),
-        limit(PAGE_SIZE)
+        limit(POOL_SIZE)
       );
       const snap = await getDocs(q);
-      const data: Post[] = snap.docs.map((d) => ({
+      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
+      const all: Post[] = snap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Post, "id">),
         createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
       }));
-      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
-      setPosts(data);
-      setHasMore(snap.docs.length === PAGE_SIZE);
+      const shuffled = shuffle(all);
+      const firstPage = shuffled.slice(0, PAGE_SIZE);
+      poolRef.current = shuffled.slice(PAGE_SIZE);
+      setPosts(firstPage);
+      setHasMore(shuffled.length > PAGE_SIZE || snap.docs.length === POOL_SIZE);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -65,24 +80,38 @@ export default function HomeScreen() {
   }, []);
 
   const loadMore = async () => {
-    if (!hasMore || loadingMore || !lastDocRef.current) return;
+    if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
+      // First drain the in-memory shuffled pool
+      if (poolRef.current.length > 0) {
+        const next = poolRef.current.slice(0, PAGE_SIZE);
+        poolRef.current = poolRef.current.slice(PAGE_SIZE);
+        setPosts((prev) => [...prev, ...next]);
+        setHasMore(poolRef.current.length > 0 || !!lastDocRef.current);
+        return;
+      }
+      // Pool exhausted — fetch next batch from Firestore and shuffle
+      if (!lastDocRef.current) { setHasMore(false); return; }
       const q = query(
         collection(db, "community_posts"),
         orderBy("createdAt", "desc"),
         startAfter(lastDocRef.current),
-        limit(PAGE_SIZE)
+        limit(POOL_SIZE)
       );
       const snap = await getDocs(q);
+      if (!snap.docs.length) { setHasMore(false); return; }
+      lastDocRef.current = snap.docs[snap.docs.length - 1];
       const more: Post[] = snap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Post, "id">),
         createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
       }));
-      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? lastDocRef.current;
-      setPosts((prev) => [...prev, ...more]);
-      setHasMore(snap.docs.length === PAGE_SIZE);
+      const shuffled = shuffle(more);
+      const next = shuffled.slice(0, PAGE_SIZE);
+      poolRef.current = shuffled.slice(PAGE_SIZE);
+      setPosts((prev) => [...prev, ...next]);
+      setHasMore(shuffled.length > PAGE_SIZE || snap.docs.length === POOL_SIZE);
     } finally {
       setLoadingMore(false);
     }
