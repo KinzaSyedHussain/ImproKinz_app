@@ -1,175 +1,205 @@
 import { Icon } from "@/components/Icon";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   collection,
-  onSnapshot,
+  getDocs,
+  limit,
   orderBy,
   query,
-  updateDoc,
-  where,
-  doc,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
+import { useUserPhoto } from "@/hooks/useUserPhotoCache";
+import { Post, PostCard } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 
-interface Notif {
-  id: string;
-  type: "like" | "comment" | "follow";
-  fromId: string;
-  fromName: string;
-  fromPhoto: string;
-  postId?: string;
-  read: boolean;
-  createdAt: number;
+interface TopUser {
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  xp: number;
+  streak: number;
 }
 
-const TYPE_ICON: Record<string, { icon: string; color: string }> = {
-  like: { icon: "heart", color: "#EF4444" },
-  comment: { icon: "message-circle", color: "#4F46E5" },
-  follow: { icon: "user-plus", color: "#10B981" },
-};
-
-function timeAgo(ts: number) {
-  const diff = Date.now() - ts;
-  if (diff < 60000) return "just now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
+function TopUserCard({ user }: { user: TopUser }) {
+  const colors = useColors();
+  const router = useRouter();
+  const livePhoto = useUserPhoto(user.uid, user.photoURL);
+  return (
+    <TouchableOpacity
+      style={[styles.topUserCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+      onPress={() => router.push(`/user/${user.uid}` as any)}
+    >
+      <UserAvatar photoURL={livePhoto} displayName={user.displayName} size={48} />
+      <Text style={[styles.topUserName, { color: colors.foreground }]} numberOfLines={1}>
+        {user.displayName}
+      </Text>
+      <View style={[styles.xpBadge, { backgroundColor: colors.secondary }]}>
+        <Text style={[styles.xpBadgeText, { color: colors.primary }]}>
+          ★ {user.xp >= 1000 ? `${(user.xp / 1000).toFixed(1)}k` : user.xp}
+        </Text>
+      </View>
+      {user.streak > 0 && (
+        <Text style={[styles.streakText, { color: colors.mutedForeground }]}>
+          ✦ {user.streak}d
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
 }
 
-function getNotifText(n: Notif) {
-  if (n.type === "like") return `${n.fromName} liked your post`;
-  if (n.type === "comment") return `${n.fromName} commented on your post`;
-  if (n.type === "follow") return `${n.fromName} started following you`;
-  return "New notification";
-}
-
-export default function NotificationsScreen() {
+export default function DiscoverScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
-  const [notifs, setNotifs] = useState<Notif[]>([]);
+  const router = useRouter();
+
+  const [topPosts, setTopPosts] = useState<Post[]>([]);
+  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
-    // Simple where query — sort client-side to avoid composite index requirement
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", user.uid)
-    );
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const data = snap.docs
-          .map((d) => ({
-            id: d.id,
-            ...(d.data() as Omit<Notif, "id">),
-            createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-          }))
-          .sort((a, b) => b.createdAt - a.createdAt);
-        setNotifs(data);
-        setLoading(false);
-      },
-      (err) => {
-        console.warn("notifications error:", err);
-        setLoading(false);
-      }
-    );
-    return unsub;
-  }, [user]);
-
-  const markRead = async (id: string) => {
-    await updateDoc(doc(db, "notifications", id), { read: true });
-  };
-
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
-  const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
+  const botPad = 70 + insets.bottom;
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const load = async () => {
+        setLoading(true);
+        try {
+          const [postsSnap, usersSnap] = await Promise.all([
+            getDocs(query(
+              collection(db, "community_posts"),
+              orderBy("likes", "desc"),
+              limit(20)
+            )).catch(() =>
+              getDocs(query(collection(db, "community_posts"), limit(20)))
+            ),
+            getDocs(query(
+              collection(db, "users"),
+              orderBy("xp", "desc"),
+              limit(8)
+            )),
+          ]);
+          if (cancelled) return;
+          const posts: Post[] = postsSnap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<Post, "id">),
+            createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
+          }));
+          const users: TopUser[] = usersSnap.docs.map((d) => ({
+            uid: d.id,
+            displayName: d.data()["displayName"] ?? "Learner",
+            photoURL: d.data()["photoURL"] ?? "",
+            xp: d.data()["xp"] ?? 0,
+            streak: d.data()["streak"] ?? 0,
+          }));
+          setTopPosts(posts);
+          setTopUsers(users);
+        } catch (e) {
+          console.warn("Discover load error:", e);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+      load();
+      return () => { cancelled = true; };
+    }, [])
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border },
-        ]}
-      >
-        <Text style={[styles.title, { color: colors.foreground }]}>Activity</Text>
-        <Icon name="bell" size={22} color={colors.foreground} />
+      <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <View>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Discover</Text>
+          <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>Trending knowledge</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.leaderboardBtn, { backgroundColor: colors.secondary }]}
+          onPress={() => router.push("/leaderboard" as any)}
+        >
+          <Icon name="award" size={16} color={colors.primary} />
+          <Text style={[styles.leaderboardBtnText, { color: colors.primary }]}>Full Board</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : (
         <FlatList
-          data={notifs}
+          data={topPosts}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingVertical: 8, paddingBottom: botPad }}
-          renderItem={({ item }) => {
-            const typeInfo = TYPE_ICON[item.type] || TYPE_ICON.like;
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.item,
-                  {
-                    backgroundColor: item.read ? colors.background : colors.secondary,
-                    borderBottomColor: colors.border,
-                  },
-                ]}
-                onPress={() => markRead(item.id)}
+          contentContainerStyle={{ paddingBottom: botPad }}
+          ListHeaderComponent={
+            <View>
+              {/* Hero banner */}
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroBanner}
               >
-                <View style={styles.avatarWrap}>
-                  <UserAvatar
-                    photoURL={item.fromPhoto}
-                    displayName={item.fromName}
-                    size={44}
-                  />
-                  <View
-                    style={[
-                      styles.typeIcon,
-                      { backgroundColor: typeInfo.color },
-                    ]}
-                  >
-                    <Icon name={typeInfo.icon as any} size={10} color="#fff" />
+                <Text style={styles.heroEmoji}>🏆</Text>
+                <Text style={styles.heroTitle}>Top Learners</Text>
+                <Text style={styles.heroSub}>Explore the best study content and connect with top students</Text>
+              </LinearGradient>
+
+              {/* Top users horizontal scroll */}
+              {topUsers.length > 0 && (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <Icon name="star" size={14} color={colors.primary} />
+                    <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Rising Stars</Text>
                   </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.usersRow}
+                  >
+                    {topUsers.map((u) => (
+                      <TopUserCard key={u.uid} user={u} />
+                    ))}
+                  </ScrollView>
                 </View>
-                <View style={styles.itemContent}>
-                  <Text style={[styles.itemText, { color: colors.foreground }]}>
-                    {getNotifText(item)}
-                  </Text>
-                  <Text style={[styles.itemTime, { color: colors.mutedForeground }]}>
-                    {timeAgo(item.createdAt)}
-                  </Text>
-                </View>
-                {!item.read && (
-                  <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-                )}
-              </TouchableOpacity>
-            );
-          }}
+              )}
+
+              {/* Trending posts header */}
+              <View style={[styles.sectionHeader, styles.trendingHeader]}>
+                <Icon name="activity" size={14} color={colors.primary} />
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Trending Posts</Text>
+              </View>
+            </View>
+          }
+          renderItem={({ item }) => <PostCard post={item} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Icon name="bell-off" size={48} color={colors.mutedForeground} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                No activity yet
-              </Text>
+              <Icon name="search" size={48} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Nothing yet</Text>
               <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                Interactions with your posts will appear here
+                Be the first to post something!
               </Text>
+              <TouchableOpacity
+                style={[styles.postCta, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/create-post" as any)}
+              >
+                <Text style={[styles.postCtaText, { color: colors.primaryForeground }]}>
+                  Create a Post
+                </Text>
+              </TouchableOpacity>
             </View>
           }
         />
@@ -188,32 +218,54 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  title: { fontFamily: undefined, fontSize: 24 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  item: {
+  headerTitle: { fontSize: 24, fontWeight: "700" },
+  headerSub: { fontSize: 12, marginTop: 2 },
+  leaderboardBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  avatarWrap: { position: "relative" },
-  typeIcon: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  leaderboardBtnText: { fontSize: 13, fontWeight: "600" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  heroBanner: {
+    margin: 16,
+    borderRadius: 20,
+    padding: 24,
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
   },
-  itemContent: { flex: 1 },
-  itemText: { fontFamily: undefined, fontSize: 14, lineHeight: 20 },
-  itemTime: { fontFamily: undefined, fontSize: 12, marginTop: 3 },
-  unreadDot: { width: 8, height: 8, borderRadius: 4 },
-  empty: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle: { fontFamily: undefined, fontSize: 18 },
-  emptySub: { fontFamily: undefined, fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
+  heroEmoji: { fontSize: 40 },
+  heroTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
+  heroSub: { color: "rgba(255,255,255,0.8)", fontSize: 13, textAlign: "center", lineHeight: 18 },
+  section: { marginBottom: 8 },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  trendingHeader: { marginTop: 8, marginBottom: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: "700" },
+  usersRow: { paddingHorizontal: 16, gap: 10, paddingBottom: 4 },
+  topUserCard: {
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    width: 100,
+    gap: 6,
+  },
+  topUserName: { fontSize: 12, fontWeight: "600", textAlign: "center" },
+  xpBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  xpBadgeText: { fontSize: 11, fontWeight: "600" },
+  streakText: { fontSize: 11 },
+  empty: { alignItems: "center", paddingTop: 60, gap: 10, paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: "600" },
+  emptySub: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  postCta: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
+  postCtaText: { fontSize: 14, fontWeight: "700" },
 });
