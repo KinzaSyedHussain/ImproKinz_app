@@ -15,12 +15,11 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
-// Load ALL icon fonts explicitly so they're registered before any icon renders.
-// @expo/vector-icons v15 removed the static `.font` export, so we require the TTFs directly.
+// Load font from the app's own assets/ folder so Metro always resolves it correctly.
+// pnpm uses symlinks in node_modules which Metro can't follow reliably for binary assets.
 const FONTS_TO_LOAD = {
-  // Feather is the primary icon set used throughout the app
-  feather: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf"),
-  Feather: require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf"),
+  feather: require("../assets/fonts/Feather.ttf"),
+  Feather: require("../assets/fonts/Feather.ttf"),
 };
 
 function RootLayoutNav() {
