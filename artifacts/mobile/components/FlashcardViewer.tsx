@@ -42,6 +42,15 @@ export function FlashcardViewer({ cards }: Props) {
     inputRange: [0, 1],
     outputRange: ["180deg", "360deg"],
   });
+  // Hide whichever face is "behind" so it never bleeds through on Android/web
+  const frontOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.49, 0.5, 1],
+    outputRange: [1, 1, 0, 0],
+  });
+  const backOpacity = flipAnim.interpolate({
+    inputRange: [0, 0.49, 0.5, 1],
+    outputRange: [0, 0, 1, 1],
+  });
 
   const next = () => {
     if (index < cards.length - 1) {
@@ -74,7 +83,7 @@ export function FlashcardViewer({ cards }: Props) {
               {
                 backgroundColor: colors.card,
                 borderColor: colors.border,
-                backfaceVisibility: "hidden",
+                opacity: frontOpacity,
                 transform: [{ rotateY: frontInterpolate }],
               },
             ]}
@@ -97,6 +106,7 @@ export function FlashcardViewer({ cards }: Props) {
               styles.cardBack,
               {
                 backgroundColor: colors.primary,
+                opacity: backOpacity,
                 transform: [{ rotateY: backInterpolate }],
               },
             ]}
