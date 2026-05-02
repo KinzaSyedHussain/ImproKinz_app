@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -26,14 +25,16 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleRegister = async () => {
+    setError("");
     if (!name.trim() || !email.trim() || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      setError("Please fill in all fields");
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
+      setError("Password must be at least 6 characters");
       return;
     }
     setLoading(true);
@@ -41,7 +42,23 @@ export default function RegisterScreen() {
       await signUp(email.trim(), password, name.trim());
       router.replace("/(tabs)/");
     } catch (e: any) {
-      Alert.alert("Sign Up Failed", e?.message || "Please try again");
+      console.error("Sign up error:", e?.code, e?.message);
+      const code = e?.code || "";
+      if (code === "auth/operation-not-allowed") {
+        setError("Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in method → enable Email/Password.");
+      } else if (code === "auth/email-already-in-use") {
+        setError("An account with this email already exists. Try signing in instead.");
+      } else if (code === "auth/invalid-email") {
+        setError("Please enter a valid email address.");
+      } else if (code === "auth/weak-password") {
+        setError("Password is too weak. Use at least 6 characters.");
+      } else if (code === "auth/network-request-failed") {
+        setError("Network error. Check your internet connection.");
+      } else if (code === "auth/invalid-api-key") {
+        setError("Firebase API key is invalid. Check EXPO_PUBLIC_FIREBASE_API_KEY secret.");
+      } else {
+        setError(e?.message || `Sign up failed (${code || "unknown error"})`);
+      }
     } finally {
       setLoading(false);
     }
@@ -74,6 +91,13 @@ export default function RegisterScreen() {
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
           Join thousands of students on StudySpace
         </Text>
+
+        {!!error && (
+          <View style={styles.errorBox}>
+            <Feather name="alert-circle" size={16} color="#DC2626" />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         <View style={styles.form}>
           <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -164,8 +188,20 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  title: { fontFamily: undefined, fontSize: 28 },
-  subtitle: { fontFamily: undefined, fontSize: 14, marginBottom: 16, textAlign: "center" },
+  title: { fontSize: 28, fontWeight: "700" },
+  subtitle: { fontSize: 14, marginBottom: 4, textAlign: "center" },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FCA5A5",
+  },
+  errorText: { color: "#DC2626", fontSize: 13, flex: 1, lineHeight: 18 },
   form: { width: "100%", gap: 14 },
   inputWrap: {
     flexDirection: "row",
