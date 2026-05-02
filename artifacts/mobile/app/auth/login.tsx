@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -26,10 +25,12 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
 
   const handleLogin = async () => {
+    setError("");
     if (!email.trim() || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      setError("Please fill in all fields");
       return;
     }
     setLoading(true);
@@ -37,7 +38,23 @@ export default function LoginScreen() {
       await signIn(email.trim(), password);
       router.replace("/(tabs)/");
     } catch (e: any) {
-      Alert.alert("Login Failed", e?.message || "Check your credentials and try again");
+      console.error("Sign in error:", e?.code, e?.message);
+      const code = e?.code || "";
+      if (code === "auth/operation-not-allowed") {
+        setError("Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in method → enable Email/Password.");
+      } else if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setError("Email or password is incorrect. Please try again.");
+      } else if (code === "auth/invalid-email") {
+        setError("Please enter a valid email address.");
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many failed attempts. Please try again later.");
+      } else if (code === "auth/network-request-failed") {
+        setError("Network error. Check your internet connection.");
+      } else if (code === "auth/invalid-api-key") {
+        setError("Firebase API key is invalid. Check EXPO_PUBLIC_FIREBASE_API_KEY secret.");
+      } else {
+        setError(e?.message || `Sign in failed (${code || "unknown error"})`);
+      }
     } finally {
       setLoading(false);
     }
@@ -67,6 +84,13 @@ export default function LoginScreen() {
         <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
           Learn together. Grow together.
         </Text>
+
+        {!!error && (
+          <View style={styles.errorBox}>
+            <Feather name="alert-circle" size={16} color="#DC2626" />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         <View style={styles.form}>
           <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -149,8 +173,20 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  appName: { fontFamily: undefined, fontSize: 32 },
-  tagline: { fontFamily: undefined, fontSize: 15, marginBottom: 16 },
+  appName: { fontSize: 32, fontWeight: "700" },
+  tagline: { fontSize: 15, marginBottom: 4 },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    width: "100%",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FCA5A5",
+  },
+  errorText: { color: "#DC2626", fontSize: 13, flex: 1, lineHeight: 18 },
   form: { width: "100%", gap: 14 },
   inputWrap: {
     flexDirection: "row",
