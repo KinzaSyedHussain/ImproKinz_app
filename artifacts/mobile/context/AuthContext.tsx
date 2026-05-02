@@ -61,12 +61,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = useCallback(async (uid: string) => {
+  const fetchProfile = useCallback(async (uid: string, fbUser?: User) => {
     try {
       const ref = doc(db, "users", uid);
       const snap = await getDoc(ref);
       if (snap.exists()) {
         setProfile(snap.data() as UserProfile);
+      } else if (fbUser) {
+        // Profile doc missing — create it now so updates work
+        const name = fbUser.displayName || "Study User";
+        const photo = fbUser.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
+        const p: UserProfile = {
+          uid: fbUser.uid,
+          email: fbUser.email || "",
+          displayName: name,
+          photoURL: photo,
+          bio: "",
+          subjects: [],
+          xp: 0,
+          streak: 1,
+          lastActiveDate: new Date().toDateString(),
+          createdAt: Date.now(),
+        };
+        await setDoc(ref, { ...p, createdAt: serverTimestamp() });
+        setProfile(p);
       }
     } catch (e) {
       console.warn("fetchProfile error:", e);
@@ -95,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setUser(fbUser);
       if (fbUser) {
-        await fetchProfile(fbUser.uid);
+        await fetchProfile(fbUser.uid, fbUser); // pass fbUser so missing doc is auto-created
         updateStreak(fbUser.uid);
       } else {
         setProfile(null);
@@ -149,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.uid);
+    if (user) await fetchProfile(user.uid, user);
   };
 
   const addXP = async (amount: number) => {
