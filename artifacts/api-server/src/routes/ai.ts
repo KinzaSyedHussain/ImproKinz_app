@@ -110,4 +110,38 @@ router.post("/ai/quiz", async (req, res) => {
   }
 });
 
+router.post("/ai/notes", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const topic = typeof body["topic"] === "string" ? body["topic"].trim() : "";
+  const subject = typeof body["subject"] === "string" ? body["subject"].trim() : "";
+  const level = typeof body["level"] === "string" ? body["level"].trim() : "high school";
+  if (!topic || topic.length > 500) {
+    res.status(400).json({ error: "Invalid topic" });
+    return;
+  }
+  try {
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert study notes writer. Generate comprehensive, well-structured study notes for a ${level} student. Use clear headings (##), subheadings (###), bullet points, numbered lists, and bold key terms (**term**). Include: an overview, key concepts, important details, examples, and a quick-review summary. Make notes thorough yet concise. Return ONLY a valid JSON object with a "title" string and a "content" string (the full notes text with markdown formatting).`,
+        },
+        {
+          role: "user",
+          content: `Topic: ${topic}${subject ? `\nSubject: ${subject}` : ""}`,
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+    const raw = completion.choices[0]?.message?.content ?? "{}";
+    const result = JSON.parse(raw) as { title?: string; content?: string };
+    res.json({ title: result.title ?? topic, content: result.content ?? "" });
+  } catch (err) {
+    req.log.error({ err }, "Notes generation failed");
+    res.status(500).json({ error: "AI generation failed" });
+  }
+});
+
 export default router;
