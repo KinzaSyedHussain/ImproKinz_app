@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
@@ -14,6 +15,7 @@ import { useTheme } from "@/context/ThemeContext";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Platform,
@@ -38,14 +40,32 @@ const SUBJECT_OPTIONS = [
 
 async function pickAndUpload(
   options: ImagePicker.ImagePickerOptions,
-  storagePath: string
+  storagePath: string,
+  maxWidth: number,
+  maxHeight: number
 ): Promise<string | null> {
   const result = await ImagePicker.launchImageLibraryAsync(options);
   if (result.canceled || !result.assets[0]?.uri) return null;
-  const resp = await fetch(result.assets[0].uri);
+
+  // Resize + compress before uploading so it doesn't hang
+  const manipulated = await ImageManipulator.manipulateAsync(
+    result.assets[0].uri,
+    [{ resize: { width: maxWidth, height: maxHeight } }],
+    { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+  );
+
+  const resp = await fetch(manipulated.uri);
   const blob = await resp.blob();
   const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, blob);
+
+  // 30-second upload timeout so it never hangs forever
+  await Promise.race([
+    uploadBytes(storageRef, blob),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Upload timed out after 30s — check your connection or Firebase Storage rules.")), 30000)
+    ),
+  ]);
+
   return getDownloadURL(storageRef);
 }
 
@@ -94,15 +114,17 @@ export default function ProfileScreen() {
     setUploadingAvatar(true);
     try {
       const url = await pickAndUpload(
-        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [1, 1], quality: 0.8 },
-        `avatars/${user.uid}`
+        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [1, 1], quality: 1 },
+        `avatars/${user.uid}`,
+        300, 300   // resize to 300×300 before uploading (~30-80KB)
       );
       if (url) {
         await updateDoc(doc(db, "users", user.uid), { photoURL: url });
         await refreshProfile();
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Avatar upload failed:", e);
+      Alert.alert("Upload failed", e?.message || "Could not upload profile photo. Check your internet connection.");
     } finally {
       setUploadingAvatar(false);
     }
@@ -113,15 +135,17 @@ export default function ProfileScreen() {
     setUploadingBanner(true);
     try {
       const url = await pickAndUpload(
-        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [16, 9], quality: 0.85 },
-        `banners/${user.uid}`
+        { mediaTypes: ["images"] as any, allowsEditing: true, aspect: [16, 9], quality: 1 },
+        `banners/${user.uid}`,
+        900, 400   // resize to 900×400 before uploading (~80-150KB)
       );
       if (url) {
         await updateDoc(doc(db, "users", user.uid), { bannerUrl: url });
         await refreshProfile();
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Banner upload failed:", e);
+      Alert.alert("Upload failed", e?.message || "Could not upload banner. Check your internet connection.");
     } finally {
       setUploadingBanner(false);
     }
