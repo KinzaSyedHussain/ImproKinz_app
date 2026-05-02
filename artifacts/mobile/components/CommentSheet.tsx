@@ -5,7 +5,6 @@ import {
   doc,
   increment,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -62,18 +61,24 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
 
   useEffect(() => {
     if (!visible) return;
-    const q = query(
-      collection(db, "community_posts", postId, "comments"),
-      orderBy("createdAt", "desc")
+    // No orderBy — sort client-side to avoid needing a Firestore composite index
+    const q = query(collection(db, "community_posts", postId, "comments"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const data: Comment[] = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<Comment, "id">),
+            createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
+          }))
+          .sort((a, b) => b.createdAt - a.createdAt);
+        setComments(data);
+      },
+      (err) => {
+        console.warn("Comments snapshot error:", err);
+      }
     );
-    const unsub = onSnapshot(q, (snap) => {
-      const data: Comment[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Comment, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      }));
-      setComments(data);
-    });
     return unsub;
   }, [postId, visible]);
 
@@ -84,15 +89,17 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
       await addDoc(collection(db, "community_posts", postId, "comments"), {
         authorId: user.uid,
         authorName: profile.displayName,
-        authorPhoto: profile.photoURL,
+        authorPhoto: profile.photoURL ?? null,
         text: text.trim(),
         createdAt: serverTimestamp(),
       });
       await updateDoc(doc(db, "community_posts", postId), {
         commentCount: increment(1),
       });
-      await addXP(5);
+      addXP(5).catch(() => {});
       setText("");
+    } catch (e) {
+      console.warn("Submit comment error:", e);
     } finally {
       setSubmitting(false);
     }
@@ -202,7 +209,7 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 16, paddingVertical: 12, flexGrow: 1 },
   comment: { flexDirection: "row", gap: 10, marginBottom: 12 },
   bubble: { flex: 1, borderRadius: 12, padding: 10, gap: 3 },
-  commentAuthor: { fontFamily: undefined, fontSize: 13 },
+  commentAuthor: { fontFamily: undefined, fontSize: 13, fontWeight: "600" },
   commentText: { fontFamily: undefined, fontSize: 14, lineHeight: 20 },
   commentTime: { fontFamily: undefined, fontSize: 11 },
   empty: { alignItems: "center", paddingVertical: 40 },
