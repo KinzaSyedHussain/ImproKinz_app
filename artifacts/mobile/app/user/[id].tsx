@@ -14,6 +14,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   ScrollView,
   StyleSheet,
@@ -82,23 +83,44 @@ export default function UserProfileScreen() {
         contentContainerStyle={{ paddingBottom: botPad }}
         ListHeaderComponent={
           <View>
-            <LinearGradient
-              colors={[colors.gradientStart, colors.gradientEnd]}
-              style={[styles.header, { paddingTop: topPad + 8 }]}
-            >
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            {/* Banner area — image if available, gradient fallback */}
+            <View style={[styles.bannerWrap, { paddingTop: topPad }]}>
+              {profile?.bannerUrl ? (
+                <Image
+                  source={{ uri: profile.bannerUrl }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[colors.gradientStart, colors.gradientEnd]}
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+              {/* Back button overlaid on banner */}
+              <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { top: topPad + 8 }]}>
                 <Feather name="arrow-left" size={22} color="#FFFFFF" />
               </TouchableOpacity>
-              <UserAvatar
-                photoURL={profile?.photoURL}
-                displayName={profile?.displayName}
-                size={72}
-              />
-              <Text style={styles.name}>{profile?.displayName || "User"}</Text>
+            </View>
+
+            {/* Avatar + name card sitting below banner */}
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+              <View style={styles.avatarRow}>
+                <View style={[styles.avatarRing, { borderColor: colors.card }]}>
+                  <UserAvatar
+                    photoURL={profile?.photoURL}
+                    displayName={profile?.displayName}
+                    size={76}
+                  />
+                </View>
+              </View>
+              <Text style={[styles.name, { color: colors.foreground }]}>
+                {profile?.displayName || "User"}
+              </Text>
               {profile?.bio ? (
-                <Text style={styles.bio}>{profile.bio}</Text>
+                <Text style={[styles.bio, { color: colors.mutedForeground }]}>{profile.bio}</Text>
               ) : null}
-            </LinearGradient>
+            </View>
 
             <View style={{ paddingVertical: 16 }}>
               {profile && <XPStreakBadge xp={profile.xp ?? 0} streak={profile.streak ?? 0} />}
@@ -136,10 +158,13 @@ export default function UserProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { alignItems: "center", paddingHorizontal: 24, paddingBottom: 24, gap: 8 },
-  backBtn: { alignSelf: "flex-start", marginBottom: 12 },
-  name: { color: "#FFFFFF", fontFamily: undefined, fontSize: 22 },
-  bio: { color: "rgba(255,255,255,0.85)", fontFamily: undefined, fontSize: 14, textAlign: "center" },
+  bannerWrap: { height: 160, position: "relative", overflow: "hidden" },
+  backBtn: { position: "absolute", left: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
+  infoCard: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1 },
+  avatarRow: { marginTop: -38, marginBottom: 8 },
+  avatarRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, overflow: "hidden" },
+  name: { fontFamily: undefined, fontSize: 20, fontWeight: "700", marginBottom: 2 },
+  bio: { fontFamily: undefined, fontSize: 14, lineHeight: 20 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   chipText: { fontFamily: undefined, fontSize: 13 },
   sectionHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, marginBottom: 4 },
