@@ -111,8 +111,6 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
-
       <View
         style={[
           styles.header,
@@ -201,6 +199,9 @@ export default function HomeScreen() {
           }
         />
       )}
+
+      {/* Sidebar last → renders on top of all content on web */}
+      <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
     </View>
   );
 }
