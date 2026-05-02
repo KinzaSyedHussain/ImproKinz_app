@@ -46,7 +46,7 @@ export default function HomeScreen() {
   const loadPosts = useCallback(async (refresh = false) => {
     try {
       const q = query(
-        collection(db, "posts"),
+        collection(db, "community_posts"),
         orderBy("createdAt", "desc"),
         limit(PAGE_SIZE)
       );
@@ -70,7 +70,7 @@ export default function HomeScreen() {
     setLoadingMore(true);
     try {
       const q = query(
-        collection(db, "posts"),
+        collection(db, "community_posts"),
         orderBy("createdAt", "desc"),
         startAfter(lastDocRef.current),
         limit(PAGE_SIZE)
@@ -127,9 +127,9 @@ export default function HomeScreen() {
           end={{ x: 1, y: 0 }}
           style={styles.logoGradient}
         >
-          <Text style={styles.logoText}>S</Text>
+          <Text style={styles.logoText}>✦</Text>
         </LinearGradient>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>StudySpace</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>ImproKinz</Text>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
           onPress={() => router.push("/search")}

@@ -56,7 +56,7 @@ export default function SearchScreen() {
     try {
       if (tab === "posts") {
         const snap = await getDocs(query(
-          collection(db, "posts"),
+          collection(db, "community_posts"),
           orderBy("createdAt", "desc"),
           limit(20)
         ));

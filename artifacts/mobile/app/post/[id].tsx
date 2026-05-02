@@ -31,7 +31,7 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     if (!id) return;
-    getDoc(doc(db, "posts", id)).then((snap) => {
+    getDoc(doc(db, "community_posts", id)).then((snap) => {
       if (snap.exists()) {
         setPost({
           id: snap.id,

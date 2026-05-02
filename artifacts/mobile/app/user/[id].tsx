@@ -43,7 +43,7 @@ export default function UserProfileScreen() {
     const fetchData = async () => {
       const [userSnap, postsSnap] = await Promise.all([
         getDoc(doc(db, "users", id)),
-        getDocs(query(collection(db, "posts"), where("authorId", "==", id), orderBy("createdAt", "desc"))),
+        getDocs(query(collection(db, "community_posts"), where("authorId", "==", id), orderBy("createdAt", "desc"))),
       ]);
       if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
       setPosts(postsSnap.docs.map((d) => ({

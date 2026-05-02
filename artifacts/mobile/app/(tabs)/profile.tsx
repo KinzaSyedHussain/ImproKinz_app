@@ -49,7 +49,7 @@ export default function ProfileScreen() {
     if (!user) return;
     const fetchPosts = async () => {
       const q = query(
-        collection(db, "posts"),
+        collection(db, "community_posts"),
         where("authorId", "==", user.uid),
         orderBy("createdAt", "desc")
       );
@@ -62,7 +62,7 @@ export default function ProfileScreen() {
       setPosts(data);
 
       const savedQ = query(
-        collection(db, "posts"),
+        collection(db, "community_posts"),
         where("savedBy", "array-contains", user.uid),
         orderBy("createdAt", "desc")
       );
