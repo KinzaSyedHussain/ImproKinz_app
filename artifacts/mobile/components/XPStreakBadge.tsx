@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
@@ -22,7 +22,7 @@ export function XPStreakBadge({ xp, streak, compact = false }: Props) {
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: colors.secondary }]}>
-          <Feather name="zap" size={12} color={colors.streakColor} />
+          <Icon name="zap" size={12} color={colors.streakColor} />
           <Text style={[styles.badgeText, { color: colors.streakColor }]}>
             {streak}d
           </Text>
@@ -43,7 +43,7 @@ export function XPStreakBadge({ xp, streak, compact = false }: Props) {
         </Text>
       </View>
       <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="zap" size={22} color={colors.streakColor} />
+        <Icon name="zap" size={22} color={colors.streakColor} />
         <Text style={[styles.statValue, { color: colors.foreground }]}>
           {streak}
         </Text>

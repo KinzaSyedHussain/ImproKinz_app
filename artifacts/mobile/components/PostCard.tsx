@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
@@ -198,7 +198,7 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
               onPress={handleDeletePost}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Feather name="trash-2" size={16} color="#EF4444" />
+              <Icon name="trash-2" size={16} color="#EF4444" />
             </TouchableOpacity>
           )}
         </View>
@@ -236,7 +236,7 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
       {/* Actions */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.action} onPress={handleLike}>
-          <Feather name="heart" size={18} color={liked ? "#EF4444" : colors.mutedForeground} />
+          <Icon name="heart" size={18} color={liked ? "#EF4444" : colors.mutedForeground} />
           <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
             {likeCount}
           </Text>
@@ -246,14 +246,14 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           style={styles.action}
           onPress={() => router.push(`/post/${post.id}` as any)}
         >
-          <Feather name="message-circle" size={18} color={colors.mutedForeground} />
+          <Icon name="message-circle" size={18} color={colors.mutedForeground} />
           <Text style={[styles.actionText, { color: colors.mutedForeground }]}>
             {post.commentCount ?? 0}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.action} onPress={handleSave}>
-          <Feather
+          <Icon
             name="bookmark"
             size={18}
             color={saved ? colors.primary : colors.mutedForeground}

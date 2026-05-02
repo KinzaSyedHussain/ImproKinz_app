@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
@@ -58,7 +58,7 @@ export default function LeaderboardScreen() {
         style={[styles.header, { paddingTop: topPad + 8 }]}
       >
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color="#FFFFFF" />
+          <Icon name="arrow-left" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Leaderboard</Text>
         <Text style={styles.headerSub}>Top students this week</Text>
@@ -85,7 +85,7 @@ export default function LeaderboardScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="award" size={40} color={colors.mutedForeground} />
+              <Icon name="award" size={40} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
                 No students ranked yet
               </Text>

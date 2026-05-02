@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import {
   addDoc,
   collection,
@@ -114,7 +114,7 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Text style={[styles.title, { color: colors.foreground }]}>Comments</Text>
           <TouchableOpacity onPress={onClose}>
-            <Feather name="x" size={22} color={colors.foreground} />
+            <Icon name="x" size={22} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
@@ -187,7 +187,7 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
             onPress={handleSubmit}
             disabled={!text.trim() || submitting}
           >
-            <Feather name="send" size={16} color={text.trim() ? "#fff" : colors.mutedForeground} />
+            <Icon name="send" size={16} color={text.trim() ? "#fff" : colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

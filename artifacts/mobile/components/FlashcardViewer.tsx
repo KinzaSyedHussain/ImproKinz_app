@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import React, { useRef, useState } from "react";
 import {
   Animated,
@@ -88,7 +88,7 @@ export function FlashcardViewer({ cards }: Props) {
               },
             ]}
           >
-            <Feather name="help-circle" size={28} color={colors.primary} />
+            <Icon name="help-circle" size={28} color={colors.primary} />
             <Text style={[styles.label, { color: colors.primary }]}>
               QUESTION
             </Text>
@@ -111,7 +111,7 @@ export function FlashcardViewer({ cards }: Props) {
               },
             ]}
           >
-            <Feather name="check-circle" size={28} color="rgba(255,255,255,0.7)" />
+            <Icon name="check-circle" size={28} color="rgba(255,255,255,0.7)" />
             <Text style={[styles.label, { color: "rgba(255,255,255,0.7)" }]}>
               ANSWER
             </Text>
@@ -134,7 +134,7 @@ export function FlashcardViewer({ cards }: Props) {
           onPress={prev}
           disabled={index === 0}
         >
-          <Feather name="arrow-left" size={20} color={colors.foreground} />
+          <Icon name="arrow-left" size={20} color={colors.foreground} />
         </TouchableOpacity>
 
         <View style={styles.dots}>
@@ -165,7 +165,7 @@ export function FlashcardViewer({ cards }: Props) {
           onPress={next}
           disabled={index === cards.length - 1}
         >
-          <Feather
+          <Icon
             name="arrow-right"
             size={20}
             color={index < cards.length - 1 ? "#fff" : colors.foreground}

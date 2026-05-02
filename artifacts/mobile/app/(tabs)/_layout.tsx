@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,28 +57,28 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="tools"
         options={{
           title: "Tools",
-          tabBarIcon: ({ color }) => <Feather name="zap" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="zap" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
           title: "Activity",
-          tabBarIcon: ({ color }) => <Feather name="bell" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="bell" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="user" size={22} color={color} />,
         }}
       />
     </Tabs>

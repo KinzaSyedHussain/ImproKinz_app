@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { VideoView, useVideoPlayer } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -233,7 +233,7 @@ export default function PostDetailScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { paddingTop: topPad, borderBottomColor: colors.border, backgroundColor: colors.card }]}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Feather name="arrow-left" size={22} color={colors.foreground} />
+            <Icon name="arrow-left" size={22} color={colors.foreground} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Post</Text>
           <View style={{ width: 22 }} />
@@ -259,7 +259,7 @@ export default function PostDetailScreen() {
           <View style={styles.replyLineWrap}>
             <View style={[styles.vertLine, { backgroundColor: colors.border }]} />
           </View>
-          <Feather
+          <Icon
             name={hide ? "chevron-up" : "chevron-down"}
             size={13}
             color={colors.primary}
@@ -300,7 +300,7 @@ export default function PostDetailScreen() {
                 <Text style={[styles.commentTime, { color: colors.mutedForeground }]}>{timeAgo(comment.createdAt)}</Text>
                 {isOwn && (
                   <TouchableOpacity onPress={() => handleDelete(comment)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Feather name="trash-2" size={13} color="#EF4444" />
+                    <Icon name="trash-2" size={13} color="#EF4444" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -321,7 +321,7 @@ export default function PostDetailScreen() {
               style={styles.replyBtn}
               onPress={() => handleReply(comment.authorName, comment.id)}
             >
-              <Feather name="corner-down-right" size={12} color={colors.mutedForeground} />
+              <Icon name="corner-down-right" size={12} color={colors.mutedForeground} />
               <Text style={[styles.replyBtnText, { color: colors.mutedForeground }]}>Reply</Text>
             </TouchableOpacity>
           )}
@@ -338,7 +338,7 @@ export default function PostDetailScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad, borderBottomColor: colors.border, backgroundColor: colors.card }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Post</Text>
         <View style={{ width: 22 }} />
@@ -367,13 +367,13 @@ export default function PostDetailScreen() {
 
             {!!error && (
               <View style={styles.errorBox}>
-                <Feather name="alert-circle" size={15} color="#EF4444" />
+                <Icon name="alert-circle" size={15} color="#EF4444" />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
 
             <View style={[styles.commentsHeader, { borderBottomColor: colors.border }]}>
-              <Feather name="message-circle" size={16} color={colors.primary} />
+              <Icon name="message-circle" size={16} color={colors.primary} />
               <Text style={[styles.commentsTitle, { color: colors.foreground }]}>
                 Comments ({topLevel.length})
               </Text>
@@ -392,12 +392,12 @@ export default function PostDetailScreen() {
       {/* Replying-to banner */}
       {!!replyingTo && (
         <View style={[styles.replyBanner, { backgroundColor: colors.secondary, borderTopColor: colors.border }]}>
-          <Feather name="corner-down-right" size={13} color={colors.primary} />
+          <Icon name="corner-down-right" size={13} color={colors.primary} />
           <Text style={[styles.replyBannerText, { color: colors.primary }]}>
             Replying to <Text style={{ fontWeight: "700" }}>@{replyingTo.name}</Text>
           </Text>
           <TouchableOpacity onPress={cancelReply} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Feather name="x" size={16} color={colors.mutedForeground} />
+            <Icon name="x" size={16} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
       )}
@@ -423,7 +423,7 @@ export default function PostDetailScreen() {
         >
           {submitting
             ? <ActivityIndicator size="small" color={colors.primary} />
-            : <Feather name="send" size={16} color={text.trim() ? "#fff" : colors.mutedForeground} />}
+            : <Icon name="send" size={16} color={text.trim() ? "#fff" : colors.mutedForeground} />}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

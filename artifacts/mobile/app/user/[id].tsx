@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -99,7 +99,7 @@ export default function UserProfileScreen() {
               )}
               {/* Back button overlaid on banner */}
               <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { top: topPad + 8 }]}>
-                <Feather name="arrow-left" size={22} color="#FFFFFF" />
+                <Icon name="arrow-left" size={22} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
@@ -146,7 +146,7 @@ export default function UserProfileScreen() {
         renderItem={({ item }) => <PostCard post={item} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Feather name="file-text" size={36} color={colors.mutedForeground} />
+            <Icon name="file-text" size={36} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No posts yet</Text>
           </View>
         }

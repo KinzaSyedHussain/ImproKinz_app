@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -71,7 +71,7 @@ export default function SummarizerScreen() {
         ]}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
@@ -83,7 +83,7 @@ export default function SummarizerScreen() {
         </View>
         {summary && (
           <TouchableOpacity onPress={reset}>
-            <Feather name="refresh-cw" size={20} color={colors.primary} />
+            <Icon name="refresh-cw" size={20} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -97,7 +97,7 @@ export default function SummarizerScreen() {
           colors={["#7C3AED", "#DB2777"]}
           style={styles.heroBanner}
         >
-          <Feather name="align-left" size={32} color="#FFFFFF" />
+          <Icon name="align-left" size={32} color="#FFFFFF" />
           <Text style={styles.heroTitle}>Smart Summary</Text>
           <Text style={styles.heroSub}>
             Turn lengthy study material into concise key points
@@ -132,7 +132,7 @@ export default function SummarizerScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Feather name="align-left" size={18} color="#fff" />
+                <Icon name="align-left" size={18} color="#fff" />
                 <Text style={styles.generateBtnText}>Generate Summary</Text>
               </>
             )}
@@ -142,7 +142,7 @@ export default function SummarizerScreen() {
         {summary ? (
           <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.summaryHeader}>
-              <Feather name="check-circle" size={18} color="#10B981" />
+              <Icon name="check-circle" size={18} color="#10B981" />
               <Text style={[styles.summaryHeaderText, { color: "#10B981" }]}>
                 Summary · +10 XP earned!
               </Text>

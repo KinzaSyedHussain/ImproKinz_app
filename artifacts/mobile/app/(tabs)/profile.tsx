@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
@@ -225,7 +225,7 @@ export default function ProfileScreen() {
                 style={[styles.cornerBtn, { top: topPad + 10, right: 12 }]}
                 onPress={toggleTheme}
               >
-                <Feather name={isDark ? "sun" : "moon"} size={16} color="#fff" />
+                <Icon name={isDark ? "sun" : "moon"} size={16} color="#fff" />
               </TouchableOpacity>
 
               {/* Banner camera — bottom right of banner */}
@@ -236,7 +236,7 @@ export default function ProfileScreen() {
               >
                 {uploadingBanner
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Feather name="camera" size={15} color="#fff" />}
+                  : <Icon name="camera" size={15} color="#fff" />}
               </TouchableOpacity>
 
               {/* Avatar — bottom left overlapping banner */}
@@ -259,7 +259,7 @@ export default function ProfileScreen() {
                       />
                     </View>
                     <View style={[styles.editAvatarBadge, { backgroundColor: colors.primary }]}>
-                      <Feather name="camera" size={10} color="#fff" />
+                      <Icon name="camera" size={10} color="#fff" />
                     </View>
                   </>
                 )}
@@ -295,7 +295,7 @@ export default function ProfileScreen() {
                     <Text style={[styles.name, { color: colors.foreground }]}>
                       {profile?.displayName || "Tap to set name"}
                     </Text>
-                    <Feather name="edit-2" size={13} color={colors.mutedForeground} style={{ marginLeft: 6 }} />
+                    <Icon name="edit-2" size={13} color={colors.mutedForeground} style={{ marginLeft: 6 }} />
                   </TouchableOpacity>
                 )}
               </View>
@@ -334,7 +334,7 @@ export default function ProfileScreen() {
                   <Text style={[styles.bioDisplay, { color: profile?.bio ? colors.foreground : colors.mutedForeground }]}>
                     {profile?.bio || "Tap to add a bio..."}
                   </Text>
-                  <Feather name="edit-2" size={11} color={colors.mutedForeground} style={{ marginLeft: 4, marginTop: 2 }} />
+                  <Icon name="edit-2" size={11} color={colors.mutedForeground} style={{ marginLeft: 4, marginTop: 2 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -347,7 +347,7 @@ export default function ProfileScreen() {
             {/* ── My Subjects ── */}
             <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
-                <Feather name="book-open" size={15} color={colors.primary} />
+                <Icon name="book-open" size={15} color={colors.primary} />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>My Subjects</Text>
               </View>
               <View style={styles.chipWrap}>
@@ -369,7 +369,7 @@ export default function ProfileScreen() {
             {/* ── Study Goal ── */}
             <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
-                <Feather name="target" size={15} color={colors.primary} />
+                <Icon name="target" size={15} color={colors.primary} />
                 <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Study Goal</Text>
               </View>
               <View style={styles.chipWrap}>
@@ -410,7 +410,7 @@ export default function ProfileScreen() {
         ListEmptyComponent={
           !loadingPosts ? (
             <View style={styles.empty}>
-              <Feather
+              <Icon
                 name={tab === "posts" ? "file-text" : "bookmark"}
                 size={36}
                 color={colors.mutedForeground}

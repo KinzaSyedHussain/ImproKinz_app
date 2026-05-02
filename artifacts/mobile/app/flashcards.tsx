@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -75,7 +75,7 @@ export default function FlashcardsScreen() {
         ]}
       >
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
@@ -87,7 +87,7 @@ export default function FlashcardsScreen() {
         </View>
         {generated && (
           <TouchableOpacity onPress={reset}>
-            <Feather name="refresh-cw" size={20} color={colors.primary} />
+            <Icon name="refresh-cw" size={20} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -103,7 +103,7 @@ export default function FlashcardsScreen() {
               colors={[colors.gradientStart, colors.gradientEnd]}
               style={styles.heroBanner}
             >
-              <Feather name="layers" size={32} color="#FFFFFF" />
+              <Icon name="layers" size={32} color="#FFFFFF" />
               <Text style={styles.heroTitle}>Create Flashcards</Text>
               <Text style={styles.heroSub}>
                 Paste your study text and let AI generate Q&A flashcards
@@ -138,7 +138,7 @@ export default function FlashcardsScreen() {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <>
-                    <Feather name="layers" size={18} color="#fff" />
+                    <Icon name="layers" size={18} color="#fff" />
                     <Text style={styles.generateBtnText}>Generate Flashcards</Text>
                   </>
                 )}
@@ -148,7 +148,7 @@ export default function FlashcardsScreen() {
         ) : (
           <>
             <View style={styles.successBadge}>
-              <Feather name="check-circle" size={18} color="#10B981" />
+              <Icon name="check-circle" size={18} color="#10B981" />
               <Text style={[styles.successText, { color: "#10B981" }]}>
                 {cards.length} flashcards generated · +15 XP earned!
               </Text>
@@ -158,7 +158,7 @@ export default function FlashcardsScreen() {
               style={[styles.secondaryBtn, { backgroundColor: colors.secondary }]}
               onPress={reset}
             >
-              <Feather name="refresh-cw" size={16} color={colors.primary} />
+              <Icon name="refresh-cw" size={16} color={colors.primary} />
               <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>
                 Generate New Flashcards
               </Text>
