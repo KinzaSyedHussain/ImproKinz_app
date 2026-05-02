@@ -64,7 +64,7 @@ export function PostCard({ post, onRefresh }: Props) {
   const handleLike = async () => {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const ref = doc(db, "posts", post.id);
+    const ref = doc(db, "community_posts", post.id);
     if (liked) {
       setLiked(false);
       setLikeCount((c) => c - 1);
@@ -79,7 +79,7 @@ export function PostCard({ post, onRefresh }: Props) {
   const handleSave = async () => {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const ref = doc(db, "posts", post.id);
+    const ref = doc(db, "community_posts", post.id);
     if (saved) {
       setSaved(false);
       await updateDoc(ref, { savedBy: arrayRemove(user.uid) });

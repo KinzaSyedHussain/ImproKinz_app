@@ -114,7 +114,7 @@ export default function CreatePostScreen() {
       const authorPhoto = profile?.photoURL || user.photoURL ||
         `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
 
-      await addDoc(collection(db, "posts"), {
+      await addDoc(collection(db, "community_posts"), {
         authorId: user.uid,
         authorName,
         authorPhoto,

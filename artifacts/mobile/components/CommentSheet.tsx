@@ -63,7 +63,7 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
   useEffect(() => {
     if (!visible) return;
     const q = query(
-      collection(db, "posts", postId, "comments"),
+      collection(db, "community_posts", postId, "comments"),
       orderBy("createdAt", "desc")
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -81,14 +81,14 @@ export function CommentSheet({ postId, visible, onClose }: Props) {
     if (!user || !profile || !text.trim()) return;
     setSubmitting(true);
     try {
-      await addDoc(collection(db, "posts", postId, "comments"), {
+      await addDoc(collection(db, "community_posts", postId, "comments"), {
         authorId: user.uid,
         authorName: profile.displayName,
         authorPhoto: profile.photoURL,
         text: text.trim(),
         createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, "posts", postId), {
+      await updateDoc(doc(db, "community_posts", postId), {
         commentCount: increment(1),
       });
       await addXP(5);
