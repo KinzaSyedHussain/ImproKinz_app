@@ -5,11 +5,13 @@ import { VideoView, useVideoPlayer } from "expo-video";
 import {
   arrayRemove,
   arrayUnion,
+  deleteDoc,
   doc,
   updateDoc,
 } from "firebase/firestore";
 import React, { useRef, useState } from "react";
 import {
+  Alert,
   Image,
   StyleSheet,
   Text,
@@ -56,6 +58,7 @@ export interface Post {
 interface Props {
   post: Post;
   onRefresh?: () => void;
+  onDelete?: (postId: string) => void;
 }
 
 const TYPE_CONFIG = {
@@ -84,7 +87,7 @@ function VideoPlayer({ uri, width, height }: { uri: string; width: number; heigh
   );
 }
 
-export function PostCard({ post, onRefresh }: Props) {
+export function PostCard({ post, onRefresh, onDelete }: Props) {
   const colors = useColors();
   const { user, profile } = useAuth();
   const router = useRouter();
@@ -104,10 +107,30 @@ export function PostCard({ post, onRefresh }: Props) {
   const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
   const [saved, setSaved] = useState(user ? savedBy.includes(user.uid) : false);
   const [likeCount, setLikeCount] = useState(likes.length);
+  const [deleted, setDeleted] = useState(false);
 
   // Resolve media — support both field naming conventions
   const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
+
+  const handleDeletePost = () => {
+    Alert.alert("Delete post", "Permanently delete this post?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteDoc(doc(db, "community_posts", post.id));
+            setDeleted(true);
+            onDelete?.(post.id);
+          } catch (e: any) {
+            Alert.alert("Error", e?.message ?? "Could not delete post.");
+          }
+        },
+      },
+    ]);
+  };
 
   const handleLike = () => {
     if (!user) return;
@@ -139,6 +162,8 @@ export function PostCard({ post, onRefresh }: Props) {
 
   const typeConfig = TYPE_CONFIG[post.type] || TYPE_CONFIG.note;
 
+  if (deleted) return null;
+
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
 
@@ -158,10 +183,20 @@ export function PostCard({ post, onRefresh }: Props) {
             </Text>
           </View>
         </TouchableOpacity>
-        <View style={[styles.typeBadge, { backgroundColor: typeConfig.color + "18" }]}>
-          <Text style={[styles.typeText, { color: typeConfig.color }]}>
-            {typeConfig.label}
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={[styles.typeBadge, { backgroundColor: typeConfig.color + "18" }]}>
+            <Text style={[styles.typeText, { color: typeConfig.color }]}>
+              {typeConfig.label}
+            </Text>
+          </View>
+          {isOwnPost && (
+            <TouchableOpacity
+              onPress={handleDeletePost}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="trash-2" size={16} color="#EF4444" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

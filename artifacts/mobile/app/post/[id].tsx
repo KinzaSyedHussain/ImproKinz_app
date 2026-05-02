@@ -357,7 +357,7 @@ export default function PostDetailScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
-            <PostCard post={post} />
+            <PostCard post={post} onDelete={() => router.back()} />
 
             {!!videoSource && (
               <View style={[styles.videoWrap, { backgroundColor: "#000" }]}>
