@@ -2,15 +2,18 @@ import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
 
 export default function TabLayout() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
+
+  const TAB_HEIGHT = isWeb ? 60 : 56;
+  const bottomPad = isIOS ? 0 : insets.bottom;
 
   return (
     <Tabs
@@ -20,28 +23,33 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.card,
+          backgroundColor: "transparent",
           borderTopWidth: 1,
           borderTopColor: colors.border,
           elevation: 0,
-          height: isWeb ? 84 : 60,
+          height: TAB_HEIGHT + bottomPad + (isWeb ? 24 : 0),
+          paddingBottom: bottomPad,
+          paddingTop: 4,
         },
-        tabBarBackground: () =>
+        tabBarBackground: () => (
           isIOS ? (
             <BlurView
               intensity={100}
-              tint={isDark ? "dark" : "light"}
+              tint="dark"
               style={StyleSheet.absoluteFill}
             />
           ) : (
             <View
               style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]}
             />
-          ),
+          )
+        ),
         tabBarLabelStyle: {
           fontFamily: undefined,
           fontSize: 11,
-          marginBottom: isWeb ? 0 : 2,
+        },
+        tabBarIconStyle: {
+          marginTop: 2,
         },
       }}
     >
