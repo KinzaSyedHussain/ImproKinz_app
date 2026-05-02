@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
+
 import {
   arrayUnion,
   doc,
@@ -26,6 +28,18 @@ import { useColors } from "@/hooks/useColors";
 import { Post, PostCard, PostComment } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 
+function VideoPlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+  return (
+    <VideoView
+      player={player}
+      style={styles.video}
+      nativeControls
+      contentFit="contain"
+    />
+  );
+}
+
 function timeAgo(ts: number) {
   const diff = Date.now() - ts;
   if (diff < 60000) return "just now";
@@ -46,10 +60,13 @@ export default function PostDetailScreen() {
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<{ name: string } | null>(null);
+
   const inputRef = useRef<TextInput>(null);
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
 
-  // Live-update the post document (comments are stored inside as commentsList)
   useEffect(() => {
     if (!id) return;
     const postId = Array.isArray(id) ? id[0] : id;
@@ -78,19 +95,26 @@ export default function PostDetailScreen() {
     return unsub;
   }, [id]);
 
+  const handleReply = (authorName: string) => {
+    setReplyingTo({ name: authorName });
+    setText(`@${authorName} `);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+    setText("");
+  };
+
   const handleSubmit = async () => {
-    // Debug: show auth state so we can diagnose
     if (!user) {
-      Alert.alert("Not signed in", "You must be signed in to comment. (user=null)");
+      Alert.alert("Not signed in", "You must be signed in to comment.");
       return;
     }
     if (!text.trim()) return;
 
     const postId = Array.isArray(id) ? id[0] : id;
-    if (!postId) {
-      Alert.alert("Error", "Cannot identify this post (id missing).");
-      return;
-    }
+    if (!postId) return;
 
     setSubmitting(true);
     setError("");
@@ -114,14 +138,15 @@ export default function PostDetailScreen() {
       });
       addXP(5).catch(() => {});
       setText("");
+      setReplyingTo(null);
     } catch (e: any) {
       console.warn("Comment submit error:", e?.code, e?.message);
       const msg =
         e?.code === "permission-denied"
-          ? "Firestore rules are blocking this write.\n\nIn Firebase Console → Firestore Database → Rules, the community_posts block must include:\n\nallow update: if request.auth != null;"
+          ? "Firestore rules are blocking this write. Allow update for community_posts."
           : e?.code === "not-found"
-          ? "Post document not found in Firestore."
-          : e?.message || "Unknown error. Check your internet connection.";
+          ? "Post document not found."
+          : e?.message || "Unknown error.";
       Alert.alert("Comment failed", msg);
       setError(msg);
     } finally {
@@ -154,7 +179,9 @@ export default function PostDetailScreen() {
     );
   }
 
-  // Sort comments newest-last
+  // Resolve video URL
+  const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
+
   const comments = [...(post.commentsList ?? [])].sort((a, b) => a.createdAt - b.createdAt);
 
   return (
@@ -162,7 +189,7 @@ export default function PostDetailScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* Top bar */}
+      {/* Header */}
       <View style={[styles.header, { paddingTop: topPad, borderBottomColor: colors.border, backgroundColor: colors.card }]}>
         <TouchableOpacity onPress={() => router.back()}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
@@ -171,7 +198,6 @@ export default function PostDetailScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {/* Post + comments list */}
       <FlatList
         data={comments}
         keyExtractor={(item) => item.id}
@@ -181,7 +207,13 @@ export default function PostDetailScreen() {
           <View>
             <PostCard post={post} />
 
-            {/* Error banner */}
+            {/* Inline video player if post has video */}
+            {!!videoSource && (
+              <View style={[styles.videoWrap, { backgroundColor: "#000" }]}>
+                <VideoPlayer uri={videoSource} />
+              </View>
+            )}
+
             {!!error && (
               <View style={styles.errorBox}>
                 <Feather name="alert-circle" size={15} color="#EF4444" />
@@ -189,7 +221,6 @@ export default function PostDetailScreen() {
               </View>
             )}
 
-            {/* Comments heading */}
             <View style={[styles.commentsHeader, { borderBottomColor: colors.border }]}>
               <Feather name="message-circle" size={16} color={colors.primary} />
               <Text style={[styles.commentsTitle, { color: colors.foreground }]}>
@@ -207,16 +238,49 @@ export default function PostDetailScreen() {
         renderItem={({ item }) => (
           <View style={styles.commentRow}>
             <UserAvatar photoURL={item.authorPhoto} displayName={item.authorName} size={34} />
-            <View style={[styles.bubble, { backgroundColor: colors.muted }]}>
-              <View style={styles.bubbleTop}>
-                <Text style={[styles.commentAuthor, { color: colors.foreground }]}>{item.authorName}</Text>
-                <Text style={[styles.commentTime, { color: colors.mutedForeground }]}>{timeAgo(item.createdAt)}</Text>
+            <View style={{ flex: 1 }}>
+              <View style={[styles.bubble, { backgroundColor: colors.muted }]}>
+                <View style={styles.bubbleTop}>
+                  <Text style={[styles.commentAuthor, { color: colors.foreground }]}>{item.authorName}</Text>
+                  <Text style={[styles.commentTime, { color: colors.mutedForeground }]}>{timeAgo(item.createdAt)}</Text>
+                </View>
+                {/* Render reply prefix in gold if text starts with @name */}
+                {item.text.startsWith("@") ? (
+                  <Text style={[styles.commentText, { color: colors.foreground }]}>
+                    <Text style={{ color: colors.primary, fontWeight: "600" }}>
+                      {item.text.split(" ")[0]}{" "}
+                    </Text>
+                    {item.text.split(" ").slice(1).join(" ")}
+                  </Text>
+                ) : (
+                  <Text style={[styles.commentText, { color: colors.foreground }]}>{item.text}</Text>
+                )}
               </View>
-              <Text style={[styles.commentText, { color: colors.foreground }]}>{item.text}</Text>
+              {/* Reply button under each comment */}
+              <TouchableOpacity
+                style={styles.replyBtn}
+                onPress={() => handleReply(item.authorName)}
+              >
+                <Feather name="corner-down-right" size={12} color={colors.mutedForeground} />
+                <Text style={[styles.replyBtnText, { color: colors.mutedForeground }]}>Reply</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
       />
+
+      {/* Replying-to banner */}
+      {!!replyingTo && (
+        <View style={[styles.replyBanner, { backgroundColor: colors.secondary, borderTopColor: colors.border }]}>
+          <Feather name="corner-down-right" size={13} color={colors.primary} />
+          <Text style={[styles.replyBannerText, { color: colors.primary }]}>
+            Replying to <Text style={{ fontWeight: "700" }}>@{replyingTo.name}</Text>
+          </Text>
+          <TouchableOpacity onPress={cancelReply} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Comment input */}
       <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 8 }]}>
@@ -224,7 +288,7 @@ export default function PostDetailScreen() {
         <TextInput
           ref={inputRef}
           style={[styles.input, { backgroundColor: colors.muted, color: colors.foreground }]}
-          placeholder="Write a comment..."
+          placeholder={replyingTo ? `Replying to @${replyingTo.name}...` : "Write a comment..."}
           placeholderTextColor={colors.mutedForeground}
           value={text}
           onChangeText={setText}
@@ -258,6 +322,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: { fontSize: 18, fontFamily: undefined },
+  videoWrap: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  video: { width: "100%", height: 220 },
   commentsHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -281,18 +353,36 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239,68,68,0.4)",
   },
   errorText: { color: "#EF4444", fontSize: 13, flex: 1, lineHeight: 18, fontFamily: undefined },
-  commentRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 8 },
+  commentRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingVertical: 6, alignItems: "flex-start" },
   bubble: { flex: 1, borderRadius: 14, padding: 10 },
   bubbleTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   commentAuthor: { fontSize: 13, fontWeight: "600", fontFamily: undefined },
   commentTime: { fontSize: 11, fontFamily: undefined },
   commentText: { fontSize: 14, lineHeight: 20, fontFamily: undefined },
+  replyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 2,
+  },
+  replyBtnText: { fontSize: 12, fontFamily: undefined },
+  replyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  replyBannerText: { flex: 1, fontSize: 13, fontFamily: undefined },
   inputBar: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
   },
   input: {

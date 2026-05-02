@@ -1,13 +1,14 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import { VideoView, useVideoPlayer } from "expo-video";
 import {
   arrayRemove,
   arrayUnion,
   doc,
   updateDoc,
 } from "firebase/firestore";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Image,
   StyleSheet,
@@ -67,6 +68,18 @@ function timeAgo(ts: number) {
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
   return `${Math.floor(diff / 86400000)}d`;
+}
+
+function VideoPlayer({ uri, width, height }: { uri: string; width: number; height: number }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+  return (
+    <VideoView
+      player={player}
+      style={{ width, height }}
+      nativeControls
+      contentFit="contain"
+    />
+  );
 }
 
 export function PostCard({ post, onRefresh }: Props) {
@@ -172,20 +185,9 @@ export function PostCard({ post, onRefresh }: Props) {
         </TouchableOpacity>
       )}
 
-      {/* Video placeholder */}
+      {/* Video player */}
       {!!videoSource && !imageSource && (
-        <TouchableOpacity
-          style={[styles.videoPlaceholder, { backgroundColor: colors.muted, borderColor: colors.border }]}
-          activeOpacity={0.8}
-          onPress={() => router.push(`/post/${post.id}` as any)}
-        >
-          <View style={styles.playBtn}>
-            <Feather name="play" size={28} color="#fff" />
-          </View>
-          <Text style={[styles.videoLabel, { color: colors.mutedForeground }]}>
-            Tap to watch video
-          </Text>
-        </TouchableOpacity>
+        <VideoPlayer uri={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
       )}
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
