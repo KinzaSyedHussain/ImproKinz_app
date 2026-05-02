@@ -21,6 +21,15 @@ import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
 import { UserAvatar } from "./UserAvatar";
 
+export interface PostComment {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorPhoto: string;
+  text: string;
+  createdAt: number;
+}
+
 export interface Post {
   id: string;
   authorId: string;
@@ -31,6 +40,7 @@ export interface Post {
   likes: string[];
   savedBy: string[];
   commentCount: number;
+  commentsList?: PostComment[];
   createdAt: number;
   subject?: string;
   // media — app writes mediaUrl/mediaType; website writes imageUrl / videoUrl
