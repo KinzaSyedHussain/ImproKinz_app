@@ -48,39 +48,34 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!user) return;
     const fetchPosts = async () => {
-      const q = query(
-        collection(db, "community_posts"),
-        where("authorId", "==", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const snap = await getDocs(q);
-      const data: Post[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Post, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      }));
-      setPosts(data);
+      try {
+        const toPost = (d: any): Post => ({
+          id: d.id,
+          ...(d.data() as Omit<Post, "id">),
+          createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
+        });
+        const sort = (arr: Post[]) =>
+          arr.sort((a, b) => b.createdAt - a.createdAt);
 
-      const savedQ = query(
-        collection(db, "community_posts"),
-        where("savedBy", "array-contains", user.uid),
-        orderBy("createdAt", "desc")
-      );
-      const savedSnap = await getDocs(savedQ);
-      const savedData: Post[] = savedSnap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Post, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      }));
-      setSavedPosts(savedData);
-      setLoading(false);
+        // Use simple where queries — sort client-side to avoid needing composite indexes
+        const [snap, savedSnap] = await Promise.all([
+          getDocs(query(collection(db, "community_posts"), where("authorId", "==", user.uid))),
+          getDocs(query(collection(db, "community_posts"), where("savedBy", "array-contains", user.uid))),
+        ]);
+        setPosts(sort(snap.docs.map(toPost)));
+        setSavedPosts(sort(savedSnap.docs.map(toPost)));
+      } catch (e) {
+        console.warn("fetchPosts error:", e);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchPosts();
   }, [user]);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"] as any,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,

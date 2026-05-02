@@ -41,17 +41,24 @@ export default function UserProfileScreen() {
   useEffect(() => {
     if (!id) return;
     const fetchData = async () => {
-      const [userSnap, postsSnap] = await Promise.all([
-        getDoc(doc(db, "users", id)),
-        getDocs(query(collection(db, "community_posts"), where("authorId", "==", id), orderBy("createdAt", "desc"))),
-      ]);
-      if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
-      setPosts(postsSnap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Post, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      })));
-      setLoading(false);
+      try {
+        const [userSnap, postsSnap] = await Promise.all([
+          getDoc(doc(db, "users", id)),
+          // Simple where query — sort client-side to avoid composite index requirement
+          getDocs(query(collection(db, "community_posts"), where("authorId", "==", id))),
+        ]);
+        if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
+        const mapped = postsSnap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Post, "id">),
+          createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
+        }));
+        setPosts(mapped.sort((a, b) => b.createdAt - a.createdAt));
+      } catch (e) {
+        console.warn("fetchData error:", e);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchData();
   }, [id]);
