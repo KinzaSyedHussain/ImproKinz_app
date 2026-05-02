@@ -58,7 +58,7 @@
   "dependencies": {
     "expo-av": "^16.0.8",
     "expo-document-picker": "^55.0.13",
-    "expo-image-manipulator": "^55.0.15",
+    "expo-image-manipulator": "^14.0.8",
     "firebase": "^12.12.1"
   }
 }
