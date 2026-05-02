@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Image, ImageStyle, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
@@ -9,8 +9,19 @@ interface Props {
   style?: StyleProp<ImageStyle & ViewStyle>;
 }
 
+function isRenderableUrl(url?: string | null): boolean {
+  if (!url) return false;
+  // base64 data: URIs can be very large and unreliable in Android Image at small sizes
+  if (url.startsWith("data:")) return false;
+  if (url.startsWith("http://") || url.startsWith("https://")) return true;
+  if (url.startsWith("file://")) return true;
+  return false;
+}
+
 export function UserAvatar({ photoURL, displayName, size = 40, style }: Props) {
   const colors = useColors();
+  const [imgError, setImgError] = useState(false);
+
   const initials = displayName
     ? displayName
         .split(" ")
@@ -20,15 +31,18 @@ export function UserAvatar({ photoURL, displayName, size = 40, style }: Props) {
         .slice(0, 2)
     : "?";
 
-  if (photoURL) {
+  const showImage = isRenderableUrl(photoURL) && !imgError;
+
+  if (showImage) {
     return (
       <Image
-        source={{ uri: photoURL }}
+        source={{ uri: photoURL! }}
         style={[
           styles.avatar,
           { width: size, height: size, borderRadius: size / 2, borderColor: colors.border },
           style as StyleProp<ImageStyle>,
         ]}
+        onError={() => setImgError(true)}
       />
     );
   }
@@ -41,7 +55,7 @@ export function UserAvatar({ photoURL, displayName, size = 40, style }: Props) {
         style as StyleProp<ViewStyle>,
       ]}
     >
-      <Text style={[styles.initials, { fontSize: size * 0.36, color: colors.primaryForeground }]}>
+      <Text style={[styles.initials, { fontSize: size * 0.38, color: colors.primaryForeground }]}>
         {initials}
       </Text>
     </View>
@@ -51,5 +65,5 @@ export function UserAvatar({ photoURL, displayName, size = 40, style }: Props) {
 const styles = StyleSheet.create({
   avatar: { borderWidth: 1 },
   fallback: { alignItems: "center", justifyContent: "center" },
-  initials: { fontFamily: undefined },
+  initials: { fontWeight: "700" },
 });
