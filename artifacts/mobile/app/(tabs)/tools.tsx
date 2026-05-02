@@ -16,6 +16,14 @@ import { useColors } from "@/hooks/useColors";
 
 const TOOLS = [
   {
+    icon: "edit-2",
+    label: "Notes Maker",
+    desc: "Write, organise and AI-enhance your study notes. Save them by subject for quick review.",
+    route: "/notes",
+    gradient: ["#D97706", "#B45309"] as [string, string],
+    xp: "+8 XP per note",
+  },
+  {
     icon: "layers",
     label: "Flashcard Generator",
     desc: "Transform any text or notes into interactive Q&A flashcards for effective memorization.",
