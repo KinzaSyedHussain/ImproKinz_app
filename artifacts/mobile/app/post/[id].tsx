@@ -9,6 +9,7 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -51,8 +52,9 @@ export default function PostDetailScreen() {
   // Live-update the post document (comments are stored inside as commentsList)
   useEffect(() => {
     if (!id) return;
+    const postId = Array.isArray(id) ? id[0] : id;
     const unsub = onSnapshot(
-      doc(db, "community_posts", id),
+      doc(db, "community_posts", postId),
       (snap) => {
         if (snap.exists()) {
           const data = snap.data();
@@ -77,32 +79,51 @@ export default function PostDetailScreen() {
   }, [id]);
 
   const handleSubmit = async () => {
-    if (!user || !profile || !text.trim() || !id) return;
+    // Debug: show auth state so we can diagnose
+    if (!user) {
+      Alert.alert("Not signed in", "You must be signed in to comment. (user=null)");
+      return;
+    }
+    if (!text.trim()) return;
+
+    const postId = Array.isArray(id) ? id[0] : id;
+    if (!postId) {
+      Alert.alert("Error", "Cannot identify this post (id missing).");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
+
+    const authorName = profile?.displayName || user.displayName || "Learner";
+    const authorPhoto = profile?.photoURL || user.photoURL || "";
+
     const newComment: PostComment = {
       id: `${user.uid}_${Date.now()}`,
       authorId: user.uid,
-      authorName: profile.displayName || "Learner",
-      authorPhoto: profile.photoURL || "",
+      authorName,
+      authorPhoto,
       text: text.trim(),
       createdAt: Date.now(),
     };
+
     try {
-      // Store comment inside the post document — uses existing allow update rule
-      await updateDoc(doc(db, "community_posts", id), {
+      await updateDoc(doc(db, "community_posts", postId), {
         commentsList: arrayUnion(newComment),
         commentCount: (post?.commentsList?.length ?? 0) + 1,
       });
       addXP(5).catch(() => {});
       setText("");
     } catch (e: any) {
-      console.warn("Comment error:", e);
-      setError(
+      console.warn("Comment submit error:", e?.code, e?.message);
+      const msg =
         e?.code === "permission-denied"
-          ? "Permission denied — check your Firestore rules."
-          : e?.message || "Failed to post comment."
-      );
+          ? "Firestore rules are blocking this write.\n\nIn Firebase Console → Firestore Database → Rules, the community_posts block must include:\n\nallow update: if request.auth != null;"
+          : e?.code === "not-found"
+          ? "Post document not found in Firestore."
+          : e?.message || "Unknown error. Check your internet connection.";
+      Alert.alert("Comment failed", msg);
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
