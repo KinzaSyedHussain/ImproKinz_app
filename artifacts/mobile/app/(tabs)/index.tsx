@@ -157,7 +157,11 @@ export default function HomeScreen() {
           data={posts}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <PostCard post={item} onRefresh={handleRefresh} />
+            <PostCard
+              post={item}
+              onRefresh={handleRefresh}
+              onDelete={(deletedId) => setPosts((prev) => prev.filter((p) => p.id !== deletedId))}
+            />
           )}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: botPad }}
           refreshControl={
