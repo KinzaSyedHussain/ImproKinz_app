@@ -40,7 +40,7 @@ interface Note {
   updatedAt: number;
 }
 
-const SUBJECTS = ["General", "Math", "Science", "History", "Language", "CS", "Other"];
+const SUBJECTS = ["General", "Math", "Science", "History", "Language", "Computer Science", "Other"];
 const LEVELS = ["Middle School", "High School", "University", "Professional"];
 
 const SUBJECT_COLORS: Record<string, string> = {
@@ -49,7 +49,7 @@ const SUBJECT_COLORS: Record<string, string> = {
   Science: "#059669",
   History: "#D97706",
   Language: "#DB2777",
-  CS: "#0891B2",
+  "Computer Science": "#0891B2",
   Other: "#7C3AED",
 };
 
@@ -540,6 +540,29 @@ export default function NotesScreen() {
             <Text style={[styles.wordBar, { color: colors.mutedForeground }]}>
               {wordCount(editContent)} words
             </Text>
+
+            {/* Big save button at bottom so it's always obvious */}
+            <TouchableOpacity
+              style={[styles.bigSaveBtn, { opacity: saving ? 0.6 : 1 }]}
+              onPress={saveNote}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={["#D97706", "#B45309"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.bigSaveBtnInner}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.bigSaveBtnText}>
+                    {editingNote ? "✓  Update Note" : "✦  Save Note  (+12 XP)"}
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
@@ -699,5 +722,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     minHeight: 400,
   },
-  wordBar: { fontSize: 12, paddingHorizontal: 20, paddingBottom: 32 },
+  wordBar: { fontSize: 12, paddingHorizontal: 20, paddingBottom: 16 },
+  bigSaveBtn: { marginHorizontal: 16, marginBottom: 32, marginTop: 8, borderRadius: 16, overflow: "hidden" },
+  bigSaveBtnInner: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },
+  bigSaveBtnText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
 });
