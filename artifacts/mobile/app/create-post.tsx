@@ -102,9 +102,16 @@ export default function CreatePostScreen() {
       setUploading(true);
       try {
         mediaUrl = await uploadMedia(mediaUri, mediaType);
-      } catch (e) {
-        console.warn("Media upload failed:", e);
-        // Continue posting without media
+      } catch (e: any) {
+        setUploading(false);
+        setSubmitting(false);
+        const code = e?.code || "";
+        if (code.includes("storage/unknown") || code.includes("storage/")) {
+          setError("Media upload failed. Make sure Firebase Storage is enabled in your Firebase Console and Storage rules allow writes (e.g. allow read, write: if true).");
+        } else {
+          setError(`Upload failed: ${e?.message || "unknown error"}`);
+        }
+        return;
       }
       setUploading(false);
     }

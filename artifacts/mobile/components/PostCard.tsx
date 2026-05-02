@@ -29,6 +29,8 @@ export interface PostComment {
   authorPhoto: string;
   text: string;
   createdAt: number;
+  replyToId?: string;
+  replyToName?: string;
 }
 
 export interface Post {
