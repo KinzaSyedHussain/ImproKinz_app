@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
+import { useUserPhoto } from "@/hooks/useUserPhotoCache";
 import { UserAvatar } from "./UserAvatar";
 
 export interface PostComment {
@@ -98,8 +99,10 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
   const IMAGE_HEIGHT = 220;
 
   const isOwnPost = post.authorId === user?.uid;
-  // Show the user's live profile photo on their own posts (data: URLs now supported)
-  const displayPhoto = isOwnPost ? (profile?.photoURL ?? post.authorPhoto) : post.authorPhoto;
+  // For own posts use the live in-memory profile photo.
+  // For others, fetch their current photo from Firestore (cached after first load).
+  const liveOtherPhoto = useUserPhoto(post.authorId, post.authorPhoto);
+  const displayPhoto = isOwnPost ? (profile?.photoURL ?? post.authorPhoto) : liveOtherPhoto;
 
   // Defensive defaults — old posts from the website may not have these arrays
   const likes = Array.isArray(post.likes) ? post.likes : [];

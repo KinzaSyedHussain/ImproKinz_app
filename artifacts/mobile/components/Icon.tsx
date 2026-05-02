@@ -14,6 +14,7 @@ const MAP: Record<string, string> = {
   "bookmark": "⊟",
   "camera": "⊙",
   "check": "✓",
+  "compass": "⊕",
   "check-circle": "✓",
   "check-square": "☑",
   "chevron-down": "▾",
