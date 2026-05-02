@@ -1,5 +1,5 @@
-// Improkinz — Dark purple space + gold treasure theme
-const palette = {
+// ImproKinz — Dark purple space + gold treasure theme (dark)
+const darkPalette = {
   text: "#FFFFFF",
   tint: "#F59E0B",
   background: "#0D0B2B",
@@ -30,9 +30,41 @@ const palette = {
   overlay: "rgba(0,0,0,0.75)",
 };
 
+// ImproKinz — Light cream + purple + gold theme
+const lightPalette = {
+  text: "#1A1040",
+  tint: "#D97706",
+  background: "#FAF7FF",
+  foreground: "#1A1040",
+  card: "#FFFFFF",
+  cardForeground: "#1A1040",
+  primary: "#D97706",
+  primaryForeground: "#FFFFFF",
+  secondary: "#EDE9FE",
+  secondaryForeground: "#7C3AED",
+  muted: "#F3F0FF",
+  mutedForeground: "#6B5FA0",
+  accent: "#7C3AED",
+  accentForeground: "#FFFFFF",
+  destructive: "#EF4444",
+  destructiveForeground: "#FFFFFF",
+  border: "#DDD6FE",
+  input: "#E8E0FF",
+  gradientStart: "#F59E0B",
+  gradientEnd: "#D97706",
+  purpleStart: "#7C3AED",
+  purpleEnd: "#4C1D95",
+  success: "#10B981",
+  warning: "#F59E0B",
+  xpColor: "#D97706",
+  streakColor: "#EF4444",
+  surface: "#FFFFFF",
+  overlay: "rgba(0,0,0,0.5)",
+};
+
 const colors = {
-  light: palette,
-  dark: palette,
+  light: lightPalette,
+  dark: darkPalette,
   radius: 12,
 };
 
