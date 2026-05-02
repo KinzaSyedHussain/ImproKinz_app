@@ -5,12 +5,12 @@ import { useRouter } from "expo-router";
 import {
   collection,
   getDocs,
-  orderBy,
   query,
   where,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { doc, updateDoc } from "firebase/firestore";
+import { useTheme } from "@/context/ThemeContext";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -39,6 +39,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { profile, user, refreshProfile } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const router = useRouter();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,13 +126,21 @@ export default function ProfileScreen() {
               {profile?.bio ? (
                 <Text style={styles.bio}>{profile.bio}</Text>
               ) : null}
-              <TouchableOpacity
-                style={styles.editProfileBtn}
-                onPress={() => router.push("/user/edit" as any)}
-              >
-                <Feather name="edit-2" size={14} color="#fff" />
-                <Text style={styles.editProfileText}>Edit Profile</Text>
-              </TouchableOpacity>
+              <View style={styles.profileActions}>
+                <TouchableOpacity
+                  style={styles.editProfileBtn}
+                  onPress={() => router.push("/user/edit" as any)}
+                >
+                  <Feather name="edit-2" size={14} color="#fff" />
+                  <Text style={styles.editProfileText}>Edit Profile</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.themeToggleBtn}
+                  onPress={toggleTheme}
+                >
+                  <Feather name={isDark ? "sun" : "moon"} size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </LinearGradient>
 
             <View style={{ paddingVertical: 16 }}>
@@ -223,6 +232,7 @@ const styles = StyleSheet.create({
   name: { color: "#FFFFFF", fontFamily: undefined, fontSize: 22 },
   email: { color: "rgba(255,255,255,0.7)", fontFamily: undefined, fontSize: 13 },
   bio: { color: "rgba(255,255,255,0.85)", fontFamily: undefined, fontSize: 14, textAlign: "center" },
+  profileActions: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
   editProfileBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -231,9 +241,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    marginTop: 8,
   },
   editProfileText: { color: "#FFFFFF", fontFamily: undefined, fontSize: 13 },
+  themeToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   subjectsRow: { marginBottom: 8 },
   subjectChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   subjectText: { fontFamily: undefined, fontSize: 13 },

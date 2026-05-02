@@ -57,9 +57,12 @@ export function PostCard({ post, onRefresh }: Props) {
   const colors = useColors();
   const { user } = useAuth();
   const router = useRouter();
-  const [liked, setLiked] = useState(user ? post.likes.includes(user.uid) : false);
-  const [saved, setSaved] = useState(user ? post.savedBy.includes(user.uid) : false);
-  const [likeCount, setLikeCount] = useState(post.likes.length);
+  // Defensive defaults — old posts from the website may not have these arrays
+  const likes = Array.isArray(post.likes) ? post.likes : [];
+  const savedBy = Array.isArray(post.savedBy) ? post.savedBy : [];
+  const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
+  const [saved, setSaved] = useState(user ? savedBy.includes(user.uid) : false);
+  const [likeCount, setLikeCount] = useState(likes.length);
 
   const handleLike = async () => {
     if (!user) return;

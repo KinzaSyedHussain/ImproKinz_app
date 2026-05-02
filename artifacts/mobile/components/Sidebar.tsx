@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useColors } from "@/hooks/useColors";
 import { UserAvatar } from "./UserAvatar";
 import { XPStreakBadge } from "./XPStreakBadge";
@@ -60,6 +61,7 @@ export function Sidebar({ visible, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, logOut } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -190,6 +192,13 @@ export function Sidebar({ visible, onClose }: Props) {
         </View>
 
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <TouchableOpacity style={styles.navItem} onPress={toggleTheme}>
+          <Feather name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
+          <Text style={[styles.navLabel, { color: colors.primary }]}>
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.navItem}
