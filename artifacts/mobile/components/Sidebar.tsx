@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
@@ -159,7 +159,7 @@ export function Sidebar({ visible, onClose }: Props) {
                   { backgroundColor: tool.color + "18" },
                 ]}
               >
-                <Feather name={tool.icon as any} size={20} color={tool.color} />
+                <Icon name={tool.icon as any} size={20} color={tool.color} />
               </View>
               <View style={styles.toolInfo}>
                 <Text style={[styles.toolLabel, { color: colors.foreground }]}>
@@ -169,7 +169,7 @@ export function Sidebar({ visible, onClose }: Props) {
                   {tool.desc}
                 </Text>
               </View>
-              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           ))}
         </View>
@@ -183,7 +183,7 @@ export function Sidebar({ visible, onClose }: Props) {
               style={styles.navItem}
               onPress={() => navigate(item.route)}
             >
-              <Feather name={item.icon as any} size={20} color={colors.foreground} />
+              <Icon name={item.icon as any} size={20} color={colors.foreground} />
               <Text style={[styles.navLabel, { color: colors.foreground }]}>
                 {item.label}
               </Text>
@@ -194,7 +194,7 @@ export function Sidebar({ visible, onClose }: Props) {
         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
         <TouchableOpacity style={styles.navItem} onPress={toggleTheme}>
-          <Feather name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
+          <Icon name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
           <Text style={[styles.navLabel, { color: colors.primary }]}>
             {isDark ? "Light Mode" : "Dark Mode"}
           </Text>
@@ -207,7 +207,7 @@ export function Sidebar({ visible, onClose }: Props) {
             await logOut();
           }}
         >
-          <Feather name="log-out" size={20} color="#EF4444" />
+          <Icon name="log-out" size={20} color="#EF4444" />
           <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
         </TouchableOpacity>
       </Animated.View>

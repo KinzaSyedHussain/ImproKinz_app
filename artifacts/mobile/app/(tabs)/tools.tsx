@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -81,7 +81,7 @@ export default function ToolsScreen() {
               colors={tool.gradient}
               style={styles.cardIcon}
             >
-              <Feather name={tool.icon as any} size={28} color="#FFFFFF" />
+              <Icon name={tool.icon as any} size={28} color="#FFFFFF" />
             </LinearGradient>
             <View style={styles.cardContent}>
               <Text style={[styles.cardTitle, { color: colors.foreground }]}>
@@ -96,12 +96,12 @@ export default function ToolsScreen() {
                 </Text>
               </View>
             </View>
-            <Feather name="chevron-right" size={20} color={colors.mutedForeground} />
+            <Icon name="chevron-right" size={20} color={colors.mutedForeground} />
           </TouchableOpacity>
         ))}
 
         <View style={[styles.tipCard, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-          <Feather name="info" size={18} color={colors.primary} />
+          <Icon name="info" size={18} color={colors.primary} />
           <Text style={[styles.tipText, { color: colors.mutedForeground }]}>
             Tip: You can input text directly or paste content from your study materials. PDF content can be copied and pasted.
           </Text>

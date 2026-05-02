@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
@@ -24,7 +24,7 @@ export function EmptyState({
       <View
         style={[styles.iconWrap, { backgroundColor: colors.secondary }]}
       >
-        <Feather name={icon as any} size={32} color={colors.primary} />
+        <Icon name={icon as any} size={32} color={colors.primary} />
       </View>
       <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
       {subtitle ? (

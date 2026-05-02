@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import {
   collection,
   onSnapshot,
@@ -107,7 +107,7 @@ export default function NotificationsScreen() {
         ]}
       >
         <Text style={[styles.title, { color: colors.foreground }]}>Activity</Text>
-        <Feather name="bell" size={22} color={colors.foreground} />
+        <Icon name="bell" size={22} color={colors.foreground} />
       </View>
 
       {loading ? (
@@ -144,7 +144,7 @@ export default function NotificationsScreen() {
                       { backgroundColor: typeInfo.color },
                     ]}
                   >
-                    <Feather name={typeInfo.icon as any} size={10} color="#fff" />
+                    <Icon name={typeInfo.icon as any} size={10} color="#fff" />
                   </View>
                 </View>
                 <View style={styles.itemContent}>
@@ -163,7 +163,7 @@ export default function NotificationsScreen() {
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="bell-off" size={48} color={colors.mutedForeground} />
+              <Icon name="bell-off" size={48} color={colors.mutedForeground} />
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
                 No activity yet
               </Text>

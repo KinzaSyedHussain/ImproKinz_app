@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -158,14 +158,14 @@ export default function LoginScreen() {
 
               {!!error && (
                 <View style={styles.errorBox}>
-                  <Feather name="alert-circle" size={14} color="#FCA5A5" />
+                  <Icon name="alert-circle" size={14} color="#FCA5A5" />
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
 
               <View style={styles.form}>
                 <View style={[styles.inputWrap, focusedField === "email" && styles.inputFocused]}>
-                  <Feather name="mail" size={17} color={focusedField === "email" ? "#A78BFA" : "#6B5FA0"} />
+                  <Icon name="mail" size={17} color={focusedField === "email" ? "#A78BFA" : "#6B5FA0"} />
                   <TextInput
                     style={styles.input}
                     placeholder="Email address"
@@ -180,7 +180,7 @@ export default function LoginScreen() {
                 </View>
 
                 <View style={[styles.inputWrap, focusedField === "pw" && styles.inputFocused]}>
-                  <Feather name="lock" size={17} color={focusedField === "pw" ? "#A78BFA" : "#6B5FA0"} />
+                  <Icon name="lock" size={17} color={focusedField === "pw" ? "#A78BFA" : "#6B5FA0"} />
                   <TextInput
                     style={styles.input}
                     placeholder="Password"
@@ -192,7 +192,7 @@ export default function LoginScreen() {
                     onBlur={() => setFocusedField(null)}
                   />
                   <TouchableOpacity onPress={() => setShowPw((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Feather name={showPw ? "eye-off" : "eye"} size={17} color="#6B5FA0" />
+                    <Icon name={showPw ? "eye-off" : "eye"} size={17} color="#6B5FA0" />
                   </TouchableOpacity>
                 </View>
 
@@ -212,7 +212,7 @@ export default function LoginScreen() {
                       : (
                         <View style={styles.btnInner}>
                           <Text style={styles.signInText}>Sign In</Text>
-                          <Feather name="arrow-right" size={18} color="#fff" />
+                          <Icon name="arrow-right" size={18} color="#fff" />
                         </View>
                       )}
                   </LinearGradient>

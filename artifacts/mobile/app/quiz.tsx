@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
@@ -96,7 +96,7 @@ export default function QuizScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Quiz Generator</Text>
@@ -106,7 +106,7 @@ export default function QuizScreen() {
         </View>
         {phase !== "input" && (
           <TouchableOpacity onPress={reset}>
-            <Feather name="refresh-cw" size={20} color={colors.primary} />
+            <Icon name="refresh-cw" size={20} color={colors.primary} />
           </TouchableOpacity>
         )}
       </View>
@@ -115,7 +115,7 @@ export default function QuizScreen() {
         {phase === "input" && (
           <>
             <LinearGradient colors={["#059669", "#0891B2"]} style={styles.heroBanner}>
-              <Feather name="check-square" size={32} color="#FFFFFF" />
+              <Icon name="check-square" size={32} color="#FFFFFF" />
               <Text style={styles.heroTitle}>Quiz Yourself</Text>
               <Text style={styles.heroSub}>Test your knowledge with AI-generated MCQs</Text>
             </LinearGradient>
@@ -131,7 +131,7 @@ export default function QuizScreen() {
             <TouchableOpacity style={[styles.generateBtn, { opacity: loading || !text.trim() ? 0.7 : 1 }]} onPress={generate} disabled={loading || !text.trim()}>
               <LinearGradient colors={["#059669", "#0891B2"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.generateGradient}>
                 {loading ? <ActivityIndicator color="#fff" /> : (
-                  <><Feather name="check-square" size={18} color="#fff" /><Text style={styles.generateBtnText}>Generate Quiz</Text></>
+                  <><Icon name="check-square" size={18} color="#fff" /><Text style={styles.generateBtnText}>Generate Quiz</Text></>
                 )}
               </LinearGradient>
             </TouchableOpacity>

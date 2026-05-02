@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
@@ -122,7 +122,7 @@ export default function HomeScreen() {
         ]}
       >
         <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerBtn}>
-          <Feather name="menu" size={22} color={colors.foreground} />
+          <Icon name="menu" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <LinearGradient
           colors={[colors.gradientStart, colors.gradientEnd]}
@@ -138,13 +138,13 @@ export default function HomeScreen() {
           onPress={() => router.push("/search")}
           style={styles.headerBtn}
         >
-          <Feather name="search" size={22} color={colors.foreground} />
+          <Icon name="search" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => router.push("/create-post")}
           style={[styles.createBtn, { backgroundColor: colors.primary }]}
         >
-          <Feather name="plus" size={18} color="#FFFFFF" />
+          <Icon name="plus" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -176,7 +176,7 @@ export default function HomeScreen() {
           scrollEnabled={!!posts.length}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="book-open" size={48} color={colors.mutedForeground} />
+              <Icon name="book-open" size={48} color={colors.mutedForeground} />
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
                 No posts yet
               </Text>

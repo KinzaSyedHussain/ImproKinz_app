@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import { useRouter } from "expo-router";
 import {
   collection,
@@ -94,10 +94,10 @@ export default function SearchScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.topBar, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <View style={[styles.searchWrap, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-          <Feather name="search" size={16} color={colors.mutedForeground} />
+          <Icon name="search" size={16} color={colors.mutedForeground} />
           <TextInput
             style={[styles.searchInput, { color: colors.foreground }]}
             placeholder="Search posts, subjects, users..."
@@ -108,7 +108,7 @@ export default function SearchScreen() {
           />
           {searchText ? (
             <TouchableOpacity onPress={() => setSearchText("")}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
+              <Icon name="x" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -141,12 +141,12 @@ export default function SearchScreen() {
           ListEmptyComponent={
             searchText ? (
               <View style={styles.empty}>
-                <Feather name="search" size={40} color={colors.mutedForeground} />
+                <Icon name="search" size={40} color={colors.mutedForeground} />
                 <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No posts found</Text>
               </View>
             ) : (
               <View style={styles.empty}>
-                <Feather name="search" size={40} color={colors.mutedForeground} />
+                <Icon name="search" size={40} color={colors.mutedForeground} />
                 <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Search for posts and topics</Text>
               </View>
             )
@@ -172,12 +172,12 @@ export default function SearchScreen() {
                   </Text>
                 ) : null}
               </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              <Icon name="chevron-right" size={18} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="users" size={40} color={colors.mutedForeground} />
+              <Icon name="users" size={40} color={colors.mutedForeground} />
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
                 {searchText ? "No users found" : "Search for students"}
               </Text>

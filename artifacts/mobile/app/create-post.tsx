@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Icon } from "@/components/Icon";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -142,7 +142,7 @@ export default function CreatePostScreen() {
     >
       <View style={[styles.header, { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="x" size={22} color={colors.foreground} />
+          <Icon name="x" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Post</Text>
         <TouchableOpacity onPress={handlePost} disabled={!content.trim() || isPosting}>
@@ -161,7 +161,7 @@ export default function CreatePostScreen() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {!!error && (
           <View style={styles.errorBox}>
-            <Feather name="alert-circle" size={15} color="#EF4444" />
+            <Icon name="alert-circle" size={15} color="#EF4444" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -176,7 +176,7 @@ export default function CreatePostScreen() {
                 style={[styles.typeChip, { backgroundColor: type === t.value ? colors.primary : colors.muted, borderColor: type === t.value ? colors.primary : colors.border }]}
                 onPress={() => setType(t.value)}
               >
-                <Feather name={t.icon as any} size={14} color={type === t.value ? colors.primaryForeground : colors.mutedForeground} />
+                <Icon name={t.icon as any} size={14} color={type === t.value ? colors.primaryForeground : colors.mutedForeground} />
                 <Text style={[styles.typeChipText, { color: type === t.value ? colors.primaryForeground : colors.mutedForeground }]}>{t.label}</Text>
               </TouchableOpacity>
             ))}
@@ -201,7 +201,7 @@ export default function CreatePostScreen() {
             style={[styles.photoBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
             onPress={pickImage}
           >
-            <Feather name="image" size={20} color={colors.primary} />
+            <Icon name="image" size={20} color={colors.primary} />
             <Text style={[styles.photoBtnText, { color: colors.foreground }]}>Add Photo</Text>
             <Text style={[styles.photoBtnSub, { color: colors.mutedForeground }]}>Stored directly — no Storage needed</Text>
           </TouchableOpacity>
@@ -218,7 +218,7 @@ export default function CreatePostScreen() {
             )}
             <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
             <TouchableOpacity style={styles.removeMedia} onPress={() => setImageUri(null)}>
-              <Feather name="x-circle" size={26} color="#EF4444" />
+              <Icon name="x-circle" size={26} color="#EF4444" />
             </TouchableOpacity>
           </View>
         )}
