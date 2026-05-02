@@ -5,18 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  AITextInput,
+  ErrorResponse,
+  FlashcardsResult,
+  HealthStatus,
+  QuizResult,
+  SummaryResult,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +109,261 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Generate flashcards from text
+ */
+export const getGenerateFlashcardsUrl = () => {
+  return `/api/ai/flashcards`;
+};
+
+export const generateFlashcards = async (
+  aITextInput: AITextInput,
+  options?: RequestInit,
+): Promise<FlashcardsResult> => {
+  return customFetch<FlashcardsResult>(getGenerateFlashcardsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aITextInput),
+  });
+};
+
+export const getGenerateFlashcardsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateFlashcards>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateFlashcards>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  const mutationKey = ["generateFlashcards"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateFlashcards>>,
+    { data: BodyType<AITextInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateFlashcards(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateFlashcardsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateFlashcards>>
+>;
+export type GenerateFlashcardsMutationBody = BodyType<AITextInput>;
+export type GenerateFlashcardsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate flashcards from text
+ */
+export const useGenerateFlashcards = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateFlashcards>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateFlashcards>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  return useMutation(getGenerateFlashcardsMutationOptions(options));
+};
+
+/**
+ * @summary Generate a summary from text
+ */
+export const getGenerateSummaryUrl = () => {
+  return `/api/ai/summary`;
+};
+
+export const generateSummary = async (
+  aITextInput: AITextInput,
+  options?: RequestInit,
+): Promise<SummaryResult> => {
+  return customFetch<SummaryResult>(getGenerateSummaryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aITextInput),
+  });
+};
+
+export const getGenerateSummaryMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateSummary>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateSummary>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  const mutationKey = ["generateSummary"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateSummary>>,
+    { data: BodyType<AITextInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateSummary(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateSummaryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateSummary>>
+>;
+export type GenerateSummaryMutationBody = BodyType<AITextInput>;
+export type GenerateSummaryMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate a summary from text
+ */
+export const useGenerateSummary = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateSummary>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateSummary>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  return useMutation(getGenerateSummaryMutationOptions(options));
+};
+
+/**
+ * @summary Generate quiz questions from text
+ */
+export const getGenerateQuizUrl = () => {
+  return `/api/ai/quiz`;
+};
+
+export const generateQuiz = async (
+  aITextInput: AITextInput,
+  options?: RequestInit,
+): Promise<QuizResult> => {
+  return customFetch<QuizResult>(getGenerateQuizUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(aITextInput),
+  });
+};
+
+export const getGenerateQuizMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateQuiz>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateQuiz>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  const mutationKey = ["generateQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateQuiz>>,
+    { data: BodyType<AITextInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateQuiz(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateQuiz>>
+>;
+export type GenerateQuizMutationBody = BodyType<AITextInput>;
+export type GenerateQuizMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate quiz questions from text
+ */
+export const useGenerateQuiz = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateQuiz>>,
+    TError,
+    { data: BodyType<AITextInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateQuiz>>,
+  TError,
+  { data: BodyType<AITextInput> },
+  TContext
+> => {
+  return useMutation(getGenerateQuizMutationOptions(options));
+};

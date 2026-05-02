@@ -14,3 +14,52 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Generate flashcards from text
+ */
+export const GenerateFlashcardsBody = zod.object({
+  text: zod.string(),
+});
+
+export const GenerateFlashcardsResponse = zod.object({
+  flashcards: zod.array(
+    zod.object({
+      question: zod.string(),
+      answer: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Generate a summary from text
+ */
+export const GenerateSummaryBody = zod.object({
+  text: zod.string(),
+});
+
+export const GenerateSummaryResponse = zod.object({
+  summary: zod.string(),
+});
+
+/**
+ * @summary Generate quiz questions from text
+ */
+export const GenerateQuizBody = zod.object({
+  text: zod.string(),
+});
+
+export const GenerateQuizResponse = zod.object({
+  questions: zod.array(
+    zod.object({
+      question: zod.string(),
+      options: zod.array(
+        zod.object({
+          label: zod.string(),
+          text: zod.string(),
+        }),
+      ),
+      answer: zod.string(),
+    }),
+  ),
+});

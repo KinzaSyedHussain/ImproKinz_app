@@ -6,4 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./aITextInput";
+export * from "./errorResponse";
+export * from "./flashcard";
+export * from "./flashcardsResult";
 export * from "./healthStatus";
+export * from "./quizOption";
+export * from "./quizQuestion";
+export * from "./quizResult";
+export * from "./summaryResult";

@@ -8,3 +8,39 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface AITextInput {
+  text: string;
+}
+
+export interface Flashcard {
+  question: string;
+  answer: string;
+}
+
+export interface FlashcardsResult {
+  flashcards: Flashcard[];
+}
+
+export interface SummaryResult {
+  summary: string;
+}
+
+export interface QuizOption {
+  label: string;
+  text: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: QuizOption[];
+  answer: string;
+}
+
+export interface QuizResult {
+  questions: QuizQuestion[];
+}
+
+export interface ErrorResponse {
+  error: string;
+}

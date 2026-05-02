@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: ai
+    description: AI-powered study tools
 paths:
   /healthz:
     get:
@@ -24,6 +26,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /ai/flashcards:
+    post:
+      operationId: generateFlashcards
+      tags: [ai]
+      summary: Generate flashcards from text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AITextInput"
+      responses:
+        "200":
+          description: Generated flashcards
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlashcardsResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/summary:
+    post:
+      operationId: generateSummary
+      tags: [ai]
+      summary: Generate a summary from text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AITextInput"
+      responses:
+        "200":
+          description: Generated summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ai/quiz:
+    post:
+      operationId: generateQuiz
+      tags: [ai]
+      summary: Generate quiz questions from text
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AITextInput"
+      responses:
+        "200":
+          description: Generated quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +107,77 @@ components:
           type: string
       required:
         - status
-
+    AITextInput:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+    Flashcard:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+      required:
+        - question
+        - answer
+    FlashcardsResult:
+      type: object
+      properties:
+        flashcards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Flashcard"
+      required:
+        - flashcards
+    SummaryResult:
+      type: object
+      properties:
+        summary:
+          type: string
+      required:
+        - summary
+    QuizOption:
+      type: object
+      properties:
+        label:
+          type: string
+        text:
+          type: string
+      required:
+        - label
+        - text
+    QuizQuestion:
+      type: object
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizOption"
+        answer:
+          type: string
+      required:
+        - question
+        - options
+        - answer
+    QuizResult:
+      type: object
+      properties:
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizQuestion"
+      required:
+        - questions
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
