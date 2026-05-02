@@ -1,8 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Dimensions,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,10 +17,24 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { useColors } from "@/hooks/useColors";
+
+const { width: W, height: H } = Dimensions.get("window");
+
+const STARS = Array.from({ length: 30 }, (_, i) => ({
+  key: i,
+  x: ((i * 97.3) % 1) * W + (i % 5) * 16,
+  y: ((i * 147.9) % 1) * H,
+  size: i % 3 === 0 ? 2.5 : 1.6,
+  delay: (i * 187) % 2200,
+}));
+
+const PERKS = [
+  { icon: "⭐", text: "Earn XP for every study session" },
+  { icon: "🤖", text: "AI tools: flashcards, quizzes & more" },
+  { icon: "🏆", text: "Climb the leaderboard with streaks" },
+];
 
 export default function RegisterScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
   const router = useRouter();
@@ -25,198 +42,327 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  const slideUp = useRef(new Animated.Value(50)).current;
+  const starAnims = useRef(STARS.map(() => new Animated.Value(0.1))).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(slideUp, { toValue: 0, duration: 700, easing: Easing.out(Easing.back(1.1)), useNativeDriver: true }),
+    ]).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+
+    starAnims.forEach((anim, i) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(STARS[i].delay),
+          Animated.timing(anim, { toValue: 0.85, duration: 550, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.1, duration: 950, useNativeDriver: true }),
+        ])
+      ).start();
+    });
+  }, []);
 
   const handleRegister = async () => {
     setError("");
-    if (!name.trim() || !email.trim() || !password) {
-      setError("Please fill in all fields");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
+    if (!name.trim() || !email.trim() || !password) { setError("Please fill in all fields"); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
     setLoading(true);
     try {
       await signUp(email.trim(), password, name.trim());
       router.replace("/(tabs)/");
     } catch (e: any) {
-      console.error("Sign up error:", e?.code, e?.message);
       const code = e?.code || "";
-      if (code === "auth/operation-not-allowed") {
-        setError("Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in method → enable Email/Password.");
-      } else if (code === "auth/email-already-in-use") {
-        setError("An account with this email already exists. Try signing in instead.");
-      } else if (code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
-      } else if (code === "auth/weak-password") {
-        setError("Password is too weak. Use at least 6 characters.");
-      } else if (code === "auth/network-request-failed") {
-        setError("Network error. Check your internet connection.");
-      } else if (code === "auth/invalid-api-key") {
-        setError("Firebase API key is invalid. Check EXPO_PUBLIC_FIREBASE_API_KEY secret.");
-      } else {
-        setError(e?.message || `Sign up failed (${code || "unknown error"})`);
-      }
+      if (code === "auth/email-already-in-use") setError("An account with this email already exists.");
+      else if (code === "auth/invalid-email") setError("Please enter a valid email address.");
+      else if (code === "auth/weak-password") setError("Password is too weak. Use at least 6 characters.");
+      else if (code === "auth/operation-not-allowed") setError("Email/Password sign-in not enabled in Firebase Console.");
+      else setError(e?.message || "Sign up failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.85] });
+  const glowScale = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={[
-          styles.container,
-          {
-            paddingTop: insets.top + (Platform.OS === "web" ? 67 : 0),
-            paddingBottom: insets.bottom + (Platform.OS === "web" ? 34 : 16),
-          },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
-          style={styles.logoWrap}
+    <View style={styles.root}>
+      <LinearGradient
+        colors={["#0A0820", "#0D0B2B", "#1C0B52"]}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Nebula blobs */}
+      <View style={[styles.blob, { top: H * 0.5, right: -70, backgroundColor: "#7C3AED20", width: 260, height: 260 }]} />
+      <View style={[styles.blob, { top: H * 0.15, left: -90, backgroundColor: "#4C1D9518", width: 230, height: 230 }]} />
+
+      {STARS.map((s, i) => (
+        <Animated.View
+          key={s.key}
+          style={[styles.star, { left: s.x, top: s.y, width: s.size, height: s.size, borderRadius: s.size, opacity: starAnims[i] }]}
+        />
+      ))}
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), paddingBottom: insets.bottom + 24 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Feather name="user-plus" size={32} color="#FFFFFF" />
-        </LinearGradient>
+          <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }], alignItems: "center", width: "100%" }}>
 
-        <Text style={[styles.title, { color: colors.foreground }]}>Create Account</Text>
-        <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          Join the ImproKinz learning community
-        </Text>
+            {/* Back button */}
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Feather name="arrow-left" size={20} color="#A78BFA" />
+            </TouchableOpacity>
 
-        {!!error && (
-          <View style={styles.errorBox}>
-            <Feather name="alert-circle" size={16} color="#DC2626" />
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
+            {/* Glowing icon */}
+            <View style={styles.iconArea}>
+              <Animated.View style={[styles.iconGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+              <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.iconBox}>
+                <Text style={styles.iconEmoji}>🗝️</Text>
+              </LinearGradient>
+              <View style={[styles.sparkle, { top: 0, right: 6 }]}><Text style={{ fontSize: 11, color: "#F59E0B" }}>✦</Text></View>
+              <View style={[styles.sparkle, { bottom: 5, left: 2 }]}><Text style={{ fontSize: 8, color: "#F59E0B" }}>★</Text></View>
+            </View>
 
-        <View style={styles.form}>
-          <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="user" size={18} color={colors.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: colors.foreground }]}
-              placeholder="Full name"
-              placeholderTextColor={colors.mutedForeground}
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
+            <Text style={styles.title}>
+              <Text style={{ color: "#FFFFFF" }}>Join </Text>
+              <Text style={{ color: "#F59E0B" }}>ImproKinz</Text>
+            </Text>
+            <Text style={styles.subtitle}>Unlock your personal learning treasury</Text>
 
-          <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="mail" size={18} color={colors.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: colors.foreground }]}
-              placeholder="Email address"
-              placeholderTextColor={colors.mutedForeground}
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+            {/* Perks row */}
+            <View style={styles.perksRow}>
+              {PERKS.map((p, i) => (
+                <View key={i} style={styles.perk}>
+                  <Text style={styles.perkIcon}>{p.icon}</Text>
+                  <Text style={styles.perkText}>{p.text}</Text>
+                </View>
+              ))}
+            </View>
 
-          <View style={[styles.inputWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Feather name="lock" size={18} color={colors.mutedForeground} />
-            <TextInput
-              style={[styles.input, { color: colors.foreground }]}
-              placeholder="Password (min. 6 characters)"
-              placeholderTextColor={colors.mutedForeground}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
+            {/* Form card */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Create your account</Text>
 
-          <TouchableOpacity
-            style={[styles.primaryBtn, { opacity: loading ? 0.7 : 1 }]}
-            onPress={handleRegister}
-            disabled={loading}
-          >
-            <LinearGradient
-              colors={[colors.gradientStart, colors.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradient}
-            >
-              <Text style={styles.primaryBtnText}>
-                {loading ? "Creating account..." : "Create Account"}
-              </Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+              {!!error && (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={14} color="#FCA5A5" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
 
-        <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: colors.mutedForeground }]}>
-            Already have an account?{" "}
-          </Text>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.link, { color: colors.primary }]}>Sign In</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+              <View style={styles.form}>
+                <View style={[styles.inputWrap, focusedField === "name" && styles.inputFocused]}>
+                  <Feather name="user" size={17} color={focusedField === "name" ? "#A78BFA" : "#6B5FA0"} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Full name"
+                    placeholderTextColor="#6B5FA0"
+                    value={name}
+                    onChangeText={setName}
+                    onFocus={() => setFocusedField("name")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+
+                <View style={[styles.inputWrap, focusedField === "email" && styles.inputFocused]}>
+                  <Feather name="mail" size={17} color={focusedField === "email" ? "#A78BFA" : "#6B5FA0"} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email address"
+                    placeholderTextColor="#6B5FA0"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    onFocus={() => setFocusedField("email")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+
+                <View style={[styles.inputWrap, focusedField === "pw" && styles.inputFocused]}>
+                  <Feather name="lock" size={17} color={focusedField === "pw" ? "#A78BFA" : "#6B5FA0"} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Password (min. 6 characters)"
+                    placeholderTextColor="#6B5FA0"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPw}
+                    onFocus={() => setFocusedField("pw")}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <TouchableOpacity onPress={() => setShowPw((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Feather name={showPw ? "eye-off" : "eye"} size={17} color="#6B5FA0" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleRegister}
+                  disabled={loading}
+                  style={{ opacity: loading ? 0.75 : 1 }}
+                >
+                  <LinearGradient
+                    colors={["#7C3AED", "#5B21B6"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.createBtn}
+                  >
+                    <View style={styles.btnInner}>
+                      <Text style={styles.createBtnText}>{loading ? "Creating account..." : "Start Learning"}</Text>
+                      {!loading && <Text style={{ fontSize: 16 }}>🚀</Text>}
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerNote}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => router.back()}>
+                <Text style={styles.footerLink}>Sign In</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    alignItems: "center",
-    paddingHorizontal: 24,
-    gap: 12,
+  root: { flex: 1 },
+  blob: { position: "absolute", borderRadius: 140 },
+  star: { position: "absolute", backgroundColor: "#FFFFFF" },
+  scroll: { alignItems: "center", paddingHorizontal: 20 },
+  backBtn: {
+    alignSelf: "flex-start",
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: "#1E1554",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2D2080",
   },
-  logoWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
+
+  iconArea: { width: 96, height: 96, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  iconGlow: {
+    position: "absolute",
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: "#F59E0B40",
+  },
+  iconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 32,
-    marginBottom: 8,
-    shadowColor: "#4F46E5",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  title: { fontSize: 28, fontWeight: "700" },
-  subtitle: { fontSize: 14, marginBottom: 4, textAlign: "center" },
+  iconEmoji: { fontSize: 40 },
+  sparkle: { position: "absolute" },
+
+  title: { fontSize: 30, fontWeight: "800", fontFamily: undefined },
+  subtitle: { fontSize: 13, color: "#8B7CC4", marginTop: 4, marginBottom: 16, fontFamily: undefined, textAlign: "center" },
+
+  perksRow: {
+    width: "100%",
+    gap: 8,
+    marginBottom: 20,
+  },
+  perk: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#1E155488",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2D208044",
+  },
+  perkIcon: { fontSize: 18 },
+  perkText: { color: "#C4B5FD", fontSize: 13, fontFamily: undefined, flex: 1 },
+
+  card: {
+    width: "100%",
+    backgroundColor: "#1E1554",
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#2D208033",
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  cardTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", fontFamily: undefined, marginBottom: 14 },
+
   errorBox: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
-    width: "100%",
-    padding: 12,
+    padding: 11,
     borderRadius: 10,
+    backgroundColor: "#3B1515",
     borderWidth: 1,
-    backgroundColor: "#FEE2E2",
-    borderColor: "#FCA5A5",
+    borderColor: "#7F1D1D",
+    marginBottom: 12,
   },
-  errorText: { color: "#DC2626", fontSize: 13, flex: 1, lineHeight: 18 },
-  form: { width: "100%", gap: 14 },
+  errorText: { color: "#FCA5A5", fontSize: 12, flex: 1, lineHeight: 17, fontFamily: undefined },
+
+  form: { gap: 12 },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
+    backgroundColor: "#13103A",
     borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: "#2D2080",
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  input: { flex: 1, fontFamily: undefined, fontSize: 15 },
-  primaryBtn: { borderRadius: 14, overflow: "hidden" },
-  gradient: { paddingVertical: 16, alignItems: "center" },
-  primaryBtnText: { color: "#FFFFFF", fontFamily: undefined, fontSize: 16 },
-  footer: { flexDirection: "row", alignItems: "center", marginTop: 8 },
-  footerText: { fontFamily: undefined, fontSize: 14 },
-  link: { fontFamily: undefined, fontSize: 14 },
+  inputFocused: { borderColor: "#A78BFA" },
+  input: { flex: 1, color: "#FFFFFF", fontSize: 15, fontFamily: undefined },
+
+  createBtn: {
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  btnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
+  createBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: undefined },
+
+  footer: { flexDirection: "row", alignItems: "center", marginTop: 18 },
+  footerNote: { color: "#6B5FA0", fontSize: 13, fontFamily: undefined },
+  footerLink: { color: "#A78BFA", fontSize: 13, fontWeight: "600", fontFamily: undefined },
 });
