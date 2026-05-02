@@ -11,8 +11,7 @@ interface Props {
 
 function isRenderableUrl(url?: string | null): boolean {
   if (!url) return false;
-  // base64 data: URIs can be very large and unreliable in Android Image at small sizes
-  if (url.startsWith("data:")) return false;
+  if (url.startsWith("data:image/")) return true;
   if (url.startsWith("http://") || url.startsWith("https://")) return true;
   if (url.startsWith("file://")) return true;
   return false;

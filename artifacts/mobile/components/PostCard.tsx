@@ -97,13 +97,9 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
   const imageWidth = screenWidth - 34;
   const IMAGE_HEIGHT = 220;
 
-  // Always show the current user's latest profile photo on their own posts,
-  // but never embed a base64 data: URL — fall back to the stored post authorPhoto
-  // (which was set to a generated avatar URL at post creation time).
   const isOwnPost = post.authorId === user?.uid;
-  const profilePhoto = profile?.photoURL;
-  const safeProfilePhoto = profilePhoto && !profilePhoto.startsWith("data:") ? profilePhoto : null;
-  const displayPhoto = isOwnPost ? (safeProfilePhoto ?? post.authorPhoto) : post.authorPhoto;
+  // Show the user's live profile photo on their own posts (data: URLs now supported)
+  const displayPhoto = isOwnPost ? (profile?.photoURL ?? post.authorPhoto) : post.authorPhoto;
 
   // Defensive defaults — old posts from the website may not have these arrays
   const likes = Array.isArray(post.likes) ? post.likes : [];
