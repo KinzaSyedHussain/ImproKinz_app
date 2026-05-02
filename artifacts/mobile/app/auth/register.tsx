@@ -89,7 +89,7 @@ export default function RegisterScreen() {
 
         <Text style={[styles.title, { color: colors.foreground }]}>Create Account</Text>
         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-          Join thousands of students on StudySpace
+          Join the ImproKinz learning community
         </Text>
 
         {!!error && (

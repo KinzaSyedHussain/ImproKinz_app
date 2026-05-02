@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "StudySpace",
+    "name": "Improkinz",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4F46E5"
+      "backgroundColor": "#0D0B2B"
     },
     "ios": {
       "supportsTablet": false
@@ -28,7 +28,14 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ImproKinz to access your photos",
+          "cameraPermission": "Allow ImproKinz to use your camera"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

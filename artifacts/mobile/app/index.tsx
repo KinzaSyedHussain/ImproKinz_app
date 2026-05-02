@@ -30,7 +30,7 @@ export default function Root() {
         <View style={styles.card}>
           <Feather name="book-open" size={48} color={colors.gradientStart} />
           <Text style={[styles.title, { color: colors.foreground }]}>
-            StudySpace
+            Improkinz
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             Firebase setup required
@@ -65,7 +65,7 @@ export default function Root() {
       style={styles.container}
     >
       <ActivityIndicator size="large" color="#FFFFFF" />
-      <Text style={styles.loadingText}>Loading StudySpace...</Text>
+      <Text style={styles.loadingText}>Loading Improkinz...</Text>
     </LinearGradient>
   );
 }
