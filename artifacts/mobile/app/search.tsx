@@ -57,8 +57,7 @@ export default function SearchScreen() {
       if (tab === "posts") {
         const snap = await getDocs(query(
           collection(db, "community_posts"),
-          orderBy("createdAt", "desc"),
-          limit(20)
+          limit(50)
         ));
         const lower = q.toLowerCase();
         const data: Post[] = snap.docs
