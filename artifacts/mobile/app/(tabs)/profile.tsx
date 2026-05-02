@@ -9,7 +9,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { useTheme } from "@/context/ThemeContext";
 import React, { useEffect, useState } from "react";
 import {
@@ -106,7 +106,8 @@ export default function ProfileScreen() {
         300, 300
       );
       if (dataUrl) {
-        await updateDoc(doc(db, "users", user.uid), { photoURL: dataUrl });
+        // setDoc with merge creates the doc if missing, updates fields if it exists
+        await setDoc(doc(db, "users", user.uid), { photoURL: dataUrl }, { merge: true });
         await refreshProfile();
       }
     } catch (e: any) {
@@ -127,7 +128,7 @@ export default function ProfileScreen() {
         900, 400
       );
       if (dataUrl) {
-        await updateDoc(doc(db, "users", user.uid), { bannerUrl: dataUrl });
+        await setDoc(doc(db, "users", user.uid), { bannerUrl: dataUrl }, { merge: true });
         await refreshProfile();
       }
     } catch (e: any) {
