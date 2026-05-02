@@ -5,7 +5,6 @@ import {
   arrayRemove,
   arrayUnion,
   doc,
-  increment,
   updateDoc,
 } from "firebase/firestore";
 import React, { useState } from "react";
@@ -14,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useAuth } from "@/context/AuthContext";
@@ -63,6 +63,11 @@ export function PostCard({ post, onRefresh }: Props) {
   const colors = useColors();
   const { user } = useAuth();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+
+  // Card spans screen width minus 32px horizontal margins, minus 2px border
+  const imageWidth = screenWidth - 34;
+  const IMAGE_HEIGHT = 220;
 
   // Defensive defaults — old posts from the website may not have these arrays
   const likes = Array.isArray(post.likes) ? post.likes : [];
@@ -75,7 +80,7 @@ export function PostCard({ post, onRefresh }: Props) {
   const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
 
-  const handleLike = async () => {
+  const handleLike = () => {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ref = doc(db, "community_posts", post.id);
@@ -90,7 +95,7 @@ export function PostCard({ post, onRefresh }: Props) {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ref = doc(db, "community_posts", post.id);
@@ -106,23 +111,15 @@ export function PostCard({ post, onRefresh }: Props) {
   const typeConfig = TYPE_CONFIG[post.type] || TYPE_CONFIG.note;
 
   return (
-    <View
-      style={[
-        styles.card,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
+    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.push(`/user/${post.authorId}` as any)}
           style={styles.authorRow}
         >
-          <UserAvatar
-            photoURL={post.authorPhoto}
-            displayName={post.authorName}
-            size={38}
-          />
+          <UserAvatar photoURL={post.authorPhoto} displayName={post.authorName} size={38} />
           <View style={styles.authorInfo}>
             <Text style={[styles.authorName, { color: colors.foreground }]}>
               {post.authorName}
@@ -139,37 +136,29 @@ export function PostCard({ post, onRefresh }: Props) {
         </View>
       </View>
 
-      {/* Content */}
-      <TouchableOpacity
-        onPress={() => router.push(`/post/${post.id}` as any)}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.content, { color: colors.foreground }]}>
-          {post.content}
-        </Text>
+      {/* Text content */}
+      <TouchableOpacity onPress={() => router.push(`/post/${post.id}` as any)} activeOpacity={0.8}>
+        <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
         {post.subject ? (
-          <Text style={[styles.subject, { color: colors.primary }]}>
-            #{post.subject}
-          </Text>
+          <Text style={[styles.subject, { color: colors.primary }]}>#{post.subject}</Text>
         ) : null}
       </TouchableOpacity>
 
-      {/* Image media — fixed-height container prevents layout bleed into next card */}
+      {/* Image — explicit pixel dimensions keep it in normal layout flow */}
       {!!imageSource && (
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => router.push(`/post/${post.id}` as any)}
-          style={styles.mediaContainer}
         >
           <Image
             source={{ uri: imageSource }}
-            style={StyleSheet.absoluteFill}
+            style={{ width: imageWidth, height: IMAGE_HEIGHT }}
             resizeMode="cover"
           />
         </TouchableOpacity>
       )}
 
-      {/* Video placeholder — tapping navigates to post detail */}
+      {/* Video placeholder */}
       {!!videoSource && !imageSource && (
         <TouchableOpacity
           style={[styles.videoPlaceholder, { backgroundColor: colors.muted, borderColor: colors.border }]}
@@ -179,7 +168,9 @@ export function PostCard({ post, onRefresh }: Props) {
           <View style={styles.playBtn}>
             <Feather name="play" size={28} color="#fff" />
           </View>
-          <Text style={[styles.videoLabel, { color: colors.mutedForeground }]}>Tap to watch video</Text>
+          <Text style={[styles.videoLabel, { color: colors.mutedForeground }]}>
+            Tap to watch video
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -188,11 +179,7 @@ export function PostCard({ post, onRefresh }: Props) {
       {/* Actions */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.action} onPress={handleLike}>
-          <Feather
-            name="heart"
-            size={18}
-            color={liked ? "#EF4444" : colors.mutedForeground}
-          />
+          <Feather name="heart" size={18} color={liked ? "#EF4444" : colors.mutedForeground} />
           <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
             {likeCount}
           </Text>
@@ -262,13 +249,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 10,
   },
-  mediaContainer: {
-    width: "100%",
-    height: 220,
-    overflow: "hidden",
-    marginTop: 2,
-    marginBottom: 2,
-  },
   videoPlaceholder: {
     height: 160,
     marginHorizontal: 14,
@@ -288,7 +268,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   videoLabel: { fontFamily: undefined, fontSize: 13 },
-  divider: { height: 1, marginHorizontal: 14 },
+  divider: { height: 1, marginHorizontal: 14, marginTop: 6 },
   actions: {
     flexDirection: "row",
     paddingHorizontal: 14,
