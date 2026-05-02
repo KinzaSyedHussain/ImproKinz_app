@@ -154,15 +154,16 @@ export function PostCard({ post, onRefresh }: Props) {
         ) : null}
       </TouchableOpacity>
 
-      {/* Image media */}
+      {/* Image media — fixed-height container prevents layout bleed into next card */}
       {!!imageSource && (
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => router.push(`/post/${post.id}` as any)}
+          style={styles.mediaContainer}
         >
           <Image
             source={{ uri: imageSource }}
-            style={styles.mediaImage}
+            style={StyleSheet.absoluteFill}
             resizeMode="cover"
           />
         </TouchableOpacity>
@@ -261,9 +262,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 10,
   },
-  mediaImage: {
+  mediaContainer: {
     width: "100%",
     height: 220,
+    overflow: "hidden",
+    marginTop: 2,
+    marginBottom: 2,
   },
   videoPlaceholder: {
     height: 160,
