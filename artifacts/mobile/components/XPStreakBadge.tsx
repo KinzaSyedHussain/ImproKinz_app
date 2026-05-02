@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   badgeIcon: { fontSize: 11 },
-  badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  badgeText: { fontSize: 12, fontFamily: undefined },
   fullRow: { flexDirection: "row", gap: 12, paddingHorizontal: 16 },
   statCard: {
     flex: 1,
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statIcon: { fontSize: 22 },
-  statValue: { fontSize: 22, fontFamily: "Inter_700Bold" },
-  statLabel: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  statValue: { fontSize: 22, fontFamily: undefined },
+  statLabel: { fontSize: 12, fontFamily: undefined },
 });

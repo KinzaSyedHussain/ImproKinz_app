@@ -92,15 +92,15 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   title: {
-    fontFamily: "Inter_700Bold",
+    fontFamily: undefined,
     fontSize: 28,
   },
   subtitle: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
     fontSize: 16,
   },
   body: {
-    fontFamily: "Inter_400Regular",
+    fontFamily: undefined,
     fontSize: 13,
     textAlign: "center",
     lineHeight: 18,
@@ -115,13 +115,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   varText: {
-    fontFamily: "Inter_500Medium",
+    fontFamily: undefined,
     fontSize: 11,
     flex: 1,
   },
   loadingText: {
     color: "#FFFFFF",
-    fontFamily: "Inter_500Medium",
+    fontFamily: undefined,
     fontSize: 16,
     marginTop: 16,
   },

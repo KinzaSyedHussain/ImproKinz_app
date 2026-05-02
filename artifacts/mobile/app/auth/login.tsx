@@ -149,8 +149,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  appName: { fontFamily: "Inter_700Bold", fontSize: 32 },
-  tagline: { fontFamily: "Inter_400Regular", fontSize: 15, marginBottom: 16 },
+  appName: { fontFamily: undefined, fontSize: 32 },
+  tagline: { fontFamily: undefined, fontSize: 15, marginBottom: 16 },
   form: { width: "100%", gap: 14 },
   inputWrap: {
     flexDirection: "row",
@@ -163,17 +163,17 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontFamily: "Inter_400Regular",
+    fontFamily: undefined,
     fontSize: 15,
   },
   primaryBtn: { borderRadius: 14, overflow: "hidden" },
   gradient: { paddingVertical: 16, alignItems: "center" },
   primaryBtnText: {
     color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+    fontFamily: undefined,
     fontSize: 16,
   },
   footer: { flexDirection: "row", alignItems: "center", marginTop: 8 },
-  footerText: { fontFamily: "Inter_400Regular", fontSize: 14 },
-  link: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  footerText: { fontFamily: undefined, fontSize: 14 },
+  link: { fontFamily: undefined, fontSize: 14 },
 });
