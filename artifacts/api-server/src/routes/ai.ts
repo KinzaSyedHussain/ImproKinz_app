@@ -6,13 +6,19 @@ const router = Router();
 function validateText(body: unknown): { text: string } | null {
   if (!body || typeof body !== "object") return null;
   const t = (body as Record<string, unknown>)["text"];
-  if (typeof t !== "string" || t.trim().length === 0 || t.length > 20000) return null;
+  if (typeof t !== "string" || t.trim().length === 0 || t.length > 20000)
+    return null;
   return { text: t.trim() };
 }
 
-function getOpenAI() {
-  return new OpenAI({ apiKey: process.env["OPENAI_API_KEY"] });
+function getGroq() {
+  return new OpenAI({
+    apiKey: process.env["GROQ_API_KEY"] ?? "",
+    baseURL: "https://api.groq.com/openai/v1",
+  });
 }
+
+const MODEL = "llama-3.1-8b-instant";
 
 router.post("/ai/flashcards", async (req, res) => {
   const parsed = validateText(req.body);
@@ -22,14 +28,14 @@ router.post("/ai/flashcards", async (req, res) => {
   }
   const { text } = parsed;
   try {
-    const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
       messages: [
         {
           role: "system",
           content:
-            "You are a study assistant. Generate flashcards from the provided text. Return a JSON object with a 'flashcards' array, each item having 'question' and 'answer' fields. Generate 5-10 flashcards. Return only valid JSON, no markdown.",
+            'You are a study assistant. Generate flashcards from the provided text. Return ONLY a valid JSON object (no markdown, no code blocks) with a "flashcards" array. Each item must have "question" and "answer" string fields. Generate 5-10 flashcards.',
         },
         { role: "user", content: text },
       ],
@@ -52,14 +58,14 @@ router.post("/ai/summary", async (req, res) => {
   }
   const { text } = parsed;
   try {
-    const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
       messages: [
         {
           role: "system",
           content:
-            "You are a study assistant. Summarize the provided text concisely, highlighting the key points and main concepts. Return a JSON object with a 'summary' field containing the summary text. Return only valid JSON, no markdown.",
+            'You are a study assistant. Summarize the provided text concisely, highlighting key points and main concepts. Return ONLY a valid JSON object (no markdown) with a "summary" string field.',
         },
         { role: "user", content: text },
       ],
@@ -82,13 +88,14 @@ router.post("/ai/quiz", async (req, res) => {
   }
   const { text } = parsed;
   try {
-    const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
       messages: [
         {
           role: "system",
-          content: `You are a study assistant. Generate multiple-choice quiz questions from the provided text. Return a JSON object with a 'questions' array. Each question must have: 'question' (string), 'options' (array of objects with 'label' (A/B/C/D) and 'text'), and 'answer' (the label of the correct option, e.g. 'A'). Generate 5 questions. Return only valid JSON, no markdown.`,
+          content:
+            'You are a study assistant. Generate 5 multiple-choice quiz questions from the provided text. Return ONLY a valid JSON object (no markdown) with a "questions" array. Each question must have: "question" (string), "options" (array of objects with "label" (A/B/C/D) and "text"), and "answer" (the correct label, e.g. "A").',
         },
         { role: "user", content: text },
       ],
