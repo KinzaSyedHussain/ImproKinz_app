@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
+  headerTitle: { fontFamily: undefined, fontSize: 18 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  notFound: { fontFamily: "Inter_400Regular", fontSize: 16 },
+  notFound: { fontFamily: undefined, fontSize: 16 },
 });

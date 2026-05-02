@@ -229,18 +229,18 @@ const styles = StyleSheet.create({
   },
   profileName: {
     color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+    fontFamily: undefined,
     fontSize: 18,
     marginTop: 8,
   },
   profileEmail: {
     color: "rgba(255,255,255,0.7)",
-    fontFamily: "Inter_400Regular",
+    fontFamily: undefined,
     fontSize: 13,
   },
   section: { paddingHorizontal: 12, paddingVertical: 8 },
   sectionLabel: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
     fontSize: 11,
     letterSpacing: 1,
     marginLeft: 4,
@@ -264,8 +264,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toolInfo: { flex: 1 },
-  toolLabel: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  toolDesc: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 1 },
+  toolLabel: { fontFamily: undefined, fontSize: 14 },
+  toolDesc: { fontFamily: undefined, fontSize: 12, marginTop: 1 },
   divider: { height: 1, marginHorizontal: 16, marginVertical: 4 },
   navItem: {
     flexDirection: "row",
@@ -275,5 +275,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 10,
   },
-  navLabel: { fontFamily: "Inter_500Medium", fontSize: 15 },
+  navLabel: { fontFamily: undefined, fontSize: 15 },
 });

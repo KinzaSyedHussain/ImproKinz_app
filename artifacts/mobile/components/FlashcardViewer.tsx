@@ -169,7 +169,7 @@ export function FlashcardViewer({ cards }: Props) {
 const styles = StyleSheet.create({
   container: { alignItems: "center", gap: 20 },
   progress: {
-    fontFamily: "Inter_500Medium",
+    fontFamily: undefined,
     fontSize: 14,
   },
   cardWrap: { width: 320, height: 220, position: "relative" },
@@ -191,17 +191,17 @@ const styles = StyleSheet.create({
   },
   cardBack: { borderWidth: 0 },
   label: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
     fontSize: 11,
     letterSpacing: 1.5,
   },
   cardText: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
     fontSize: 17,
     textAlign: "center",
     lineHeight: 26,
   },
-  hint: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 4 },
+  hint: { fontFamily: undefined, fontSize: 12, marginTop: 4 },
   nav: {
     flexDirection: "row",
     alignItems: "center",

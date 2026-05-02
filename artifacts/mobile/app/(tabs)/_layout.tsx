@@ -39,7 +39,7 @@ export default function TabLayout() {
             />
           ),
         tabBarLabelStyle: {
-          fontFamily: "Inter_500Medium",
+          fontFamily: undefined,
           fontSize: 11,
           marginBottom: isWeb ? 0 : 2,
         },

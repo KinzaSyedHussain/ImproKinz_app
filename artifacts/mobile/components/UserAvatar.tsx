@@ -69,6 +69,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   initials: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
   },
 });

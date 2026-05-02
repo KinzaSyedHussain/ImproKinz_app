@@ -101,9 +101,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 24, gap: 4 },
   backBtn: { marginBottom: 12 },
-  headerTitle: { color: "#FFFFFF", fontFamily: "Inter_700Bold", fontSize: 28 },
-  headerSub: { color: "rgba(255,255,255,0.75)", fontFamily: "Inter_400Regular", fontSize: 14 },
+  headerTitle: { color: "#FFFFFF", fontFamily: undefined, fontSize: 28 },
+  headerSub: { color: "rgba(255,255,255,0.75)", fontFamily: undefined, fontSize: 14 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingTop: 60, gap: 10 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14 },
+  emptyText: { fontFamily: undefined, fontSize: 14 },
 });

@@ -118,19 +118,19 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     color: "rgba(255,255,255,0.7)",
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: undefined,
     fontSize: 11,
     letterSpacing: 2,
     marginBottom: 8,
   },
   headerTitle: {
     color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+    fontFamily: undefined,
     fontSize: 28,
   },
   headerSub: {
     color: "rgba(255,255,255,0.8)",
-    fontFamily: "Inter_400Regular",
+    fontFamily: undefined,
     fontSize: 14,
     marginTop: 6,
   },
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   xpText: {
     color: "#FFFFFF",
-    fontFamily: "Inter_700Bold",
+    fontFamily: undefined,
     fontSize: 14,
   },
   content: { padding: 16, gap: 14 },
@@ -169,8 +169,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cardContent: { flex: 1, gap: 6 },
-  cardTitle: { fontFamily: "Inter_700Bold", fontSize: 16 },
-  cardDesc: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 18 },
+  cardTitle: { fontFamily: undefined, fontSize: 16 },
+  cardDesc: { fontFamily: undefined, fontSize: 13, lineHeight: 18 },
   xpBadge: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginTop: 2,
   },
-  xpBadgeText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  xpBadgeText: { fontFamily: undefined, fontSize: 11 },
   tipCard: {
     flexDirection: "row",
     gap: 10,
@@ -187,5 +187,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "flex-start",
   },
-  tipText: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 18 },
+  tipText: { flex: 1, fontFamily: undefined, fontSize: 13, lineHeight: 18 },
 });

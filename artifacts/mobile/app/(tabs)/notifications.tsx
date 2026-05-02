@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  title: { fontFamily: "Inter_700Bold", fontSize: 24 },
+  title: { fontFamily: undefined, fontSize: 24 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   item: {
     flexDirection: "row",
@@ -202,10 +202,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   itemContent: { flex: 1 },
-  itemText: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 20 },
-  itemTime: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3 },
+  itemText: { fontFamily: undefined, fontSize: 14, lineHeight: 20 },
+  itemTime: { fontFamily: undefined, fontSize: 12, marginTop: 3 },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle: { fontFamily: "Inter_600SemiBold", fontSize: 18 },
-  emptySub: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
+  emptyTitle: { fontFamily: undefined, fontSize: 18 },
+  emptySub: { fontFamily: undefined, fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
 });
