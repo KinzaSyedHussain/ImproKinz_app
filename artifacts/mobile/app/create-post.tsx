@@ -1,9 +1,9 @@
 import { Feather } from "@expo/vector-icons";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
 
 const POST_TYPES = [
@@ -33,94 +33,71 @@ const SUBJECTS = [
   "Chemistry", "Biology", "Computer Science", "Economics", "Other",
 ];
 
+// Compress image and return base64 data URL — no Firebase Storage needed
+async function imageToBase64(uri: string): Promise<string> {
+  const manipulated = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: 900 } }],
+    { compress: 0.55, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+  );
+  if (!manipulated.base64) throw new Error("Image conversion failed.");
+  return `data:image/jpeg;base64,${manipulated.base64}`;
+}
+
 export default function CreatePostScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, profile, addXP } = useAuth();
+
   const [content, setContent] = useState("");
   const [type, setType] = useState<"note" | "question" | "tip">("note");
   const [subject, setSubject] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<"image" | "video" | null>(null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
 
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.8,
+        quality: 0.9,
         allowsEditing: true,
       });
       if (!result.canceled && result.assets[0]) {
-        setMediaUri(result.assets[0].uri);
-        setMediaType("image");
+        setImageUri(result.assets[0].uri);
         setError("");
       }
     } catch {
-      setError("Could not open image picker");
+      setError("Could not open image picker.");
     }
-  };
-
-  const pickVideo = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["videos"],
-        quality: 0.8,
-        videoMaxDuration: 120,
-      });
-      if (!result.canceled && result.assets[0]) {
-        setMediaUri(result.assets[0].uri);
-        setMediaType("video");
-        setError("");
-      }
-    } catch {
-      setError("Could not open video picker");
-    }
-  };
-
-  const uploadMedia = async (uri: string, mType: "image" | "video"): Promise<string> => {
-    const resp = await fetch(uri);
-    const blob = await resp.blob();
-    const ext = mType === "image" ? "jpg" : "mp4";
-    const storageRef = ref(storage, `posts/${user!.uid}/${Date.now()}.${ext}`);
-    await uploadBytes(storageRef, blob);
-    return getDownloadURL(storageRef);
   };
 
   const handlePost = async () => {
     setError("");
-    if (!user) { setError("You must be signed in to post"); return; }
-    if (!content.trim()) { setError("Please write something first"); return; }
+    if (!user) { setError("You must be signed in to post."); return; }
+    if (!content.trim()) { setError("Please write something first."); return; }
 
     setSubmitting(true);
-    let mediaUrl: string | null = null;
+    let imageUrl: string | null = null;
 
-    if (mediaUri && mediaType) {
-      setUploading(true);
+    if (imageUri) {
+      setProcessing(true);
       try {
-        mediaUrl = await uploadMedia(mediaUri, mediaType);
+        imageUrl = await imageToBase64(imageUri);
       } catch (e: any) {
-        setUploading(false);
+        setProcessing(false);
         setSubmitting(false);
-        const code = e?.code || "";
-        if (code.includes("storage/unknown") || code.includes("storage/")) {
-          setError("Media upload failed. Make sure Firebase Storage is enabled in your Firebase Console and Storage rules allow writes (e.g. allow read, write: if true).");
-        } else {
-          setError(`Upload failed: ${e?.message || "unknown error"}`);
-        }
+        setError("Image processing failed: " + (e?.message ?? "unknown error"));
         return;
       }
-      setUploading(false);
+      setProcessing(false);
     }
 
     try {
       const authorName = profile?.displayName || user.displayName || "Learner";
       const rawPhoto = profile?.photoURL || user.photoURL || "";
-      // Don't embed base64 data URLs in post documents — use a generated avatar URL instead
-      // PostCard will override this with the live profile photo for the current user's posts
       const authorPhoto = rawPhoto.startsWith("data:")
         ? `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`
         : rawPhoto || `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
@@ -132,22 +109,23 @@ export default function CreatePostScreen() {
         content: content.trim(),
         type,
         subject: subject || null,
-        mediaUrl,
-        mediaType: mediaUrl ? mediaType : null,
+        imageUrl,
+        mediaUrl: null,
+        mediaType: imageUrl ? "image" : null,
         likes: [],
         savedBy: [],
         commentCount: 0,
         createdAt: serverTimestamp(),
       });
+
       addXP(10).catch(console.warn);
       router.back();
     } catch (e: any) {
-      console.error("Post error:", e);
       const code = e?.code || "";
       if (code.includes("permission-denied")) {
-        setError("Permission denied — go to Firebase Console → Firestore Database → Rules and set allow read, write: if true; for testing.");
+        setError("Permission denied — update your Firestore rules to allow writes.");
       } else {
-        setError(e?.message || "Failed to post. Make sure Firestore is set up.");
+        setError(e?.message || "Failed to post. Please try again.");
       }
     } finally {
       setSubmitting(false);
@@ -155,6 +133,7 @@ export default function CreatePostScreen() {
   };
 
   const topPad = insets.top + (Platform.OS === "web" ? 12 : 0);
+  const isPosting = submitting || processing;
 
   return (
     <KeyboardAvoidingView
@@ -166,13 +145,15 @@ export default function CreatePostScreen() {
           <Feather name="x" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Post</Text>
-        <TouchableOpacity onPress={handlePost} disabled={!content.trim() || submitting}>
+        <TouchableOpacity onPress={handlePost} disabled={!content.trim() || isPosting}>
           <LinearGradient
             colors={[colors.gradientStart, colors.gradientEnd]}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={[styles.postBtn, { opacity: !content.trim() || submitting ? 0.5 : 1 }]}
+            style={[styles.postBtn, { opacity: !content.trim() || isPosting ? 0.5 : 1 }]}
           >
-            {submitting ? <ActivityIndicator size="small" color="#0D0B2B" /> : <Text style={styles.postBtnText}>Post ✦</Text>}
+            {isPosting
+              ? <ActivityIndicator size="small" color="#0D0B2B" />
+              : <Text style={styles.postBtnText}>Post ✦</Text>}
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -185,6 +166,7 @@ export default function CreatePostScreen() {
           </View>
         )}
 
+        {/* Post type */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.mutedForeground }]}>POST TYPE</Text>
           <View style={styles.typeRow}>
@@ -201,6 +183,7 @@ export default function CreatePostScreen() {
           </View>
         </View>
 
+        {/* Content */}
         <TextInput
           style={[styles.contentInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
           placeholder="Share your knowledge treasure..."
@@ -212,46 +195,35 @@ export default function CreatePostScreen() {
           autoFocus
         />
 
-        {/* Media buttons */}
-        <View style={styles.mediaRow}>
-          <TouchableOpacity style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: colors.border }]} onPress={pickImage}>
-            <Feather name="image" size={18} color={colors.primary} />
-            <Text style={[styles.mediaBtnText, { color: colors.mutedForeground }]}>Add Photo</Text>
+        {/* Add photo button */}
+        {!imageUri && (
+          <TouchableOpacity
+            style={[styles.photoBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+            onPress={pickImage}
+          >
+            <Feather name="image" size={20} color={colors.primary} />
+            <Text style={[styles.photoBtnText, { color: colors.foreground }]}>Add Photo</Text>
+            <Text style={[styles.photoBtnSub, { color: colors.mutedForeground }]}>Stored directly — no Storage needed</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: colors.border }]} onPress={pickVideo}>
-            <Feather name="video" size={18} color={colors.accent} />
-            <Text style={[styles.mediaBtnText, { color: colors.mutedForeground }]}>Add Video</Text>
-          </TouchableOpacity>
-        </View>
+        )}
 
         {/* Image preview */}
-        {mediaUri && mediaType === "image" && (
+        {!!imageUri && (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: mediaUri }} style={styles.imagePreview} resizeMode="cover" />
-            <TouchableOpacity style={styles.removeMedia} onPress={() => { setMediaUri(null); setMediaType(null); }}>
-              <Feather name="x-circle" size={24} color="#EF4444" />
+            {processing && (
+              <View style={styles.processingOverlay}>
+                <ActivityIndicator color="#F59E0B" size="large" />
+                <Text style={styles.processingText}>Compressing image...</Text>
+              </View>
+            )}
+            <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+            <TouchableOpacity style={styles.removeMedia} onPress={() => setImageUri(null)}>
+              <Feather name="x-circle" size={26} color="#EF4444" />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Video preview */}
-        {mediaUri && mediaType === "video" && (
-          <View style={[styles.videoPreview, { backgroundColor: colors.muted, borderColor: colors.border }]}>
-            <Feather name="film" size={28} color={colors.accent} />
-            <Text style={[styles.videoText, { color: colors.foreground }]}>Video ready to upload</Text>
-            <TouchableOpacity onPress={() => { setMediaUri(null); setMediaType(null); }}>
-              <Feather name="x-circle" size={20} color="#EF4444" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {uploading && (
-          <View style={[styles.uploadRow, { backgroundColor: colors.muted }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.uploadText, { color: colors.mutedForeground }]}>Uploading media...</Text>
-          </View>
-        )}
-
+        {/* Subject */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: colors.mutedForeground }]}>SUBJECT (optional)</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
@@ -289,16 +261,14 @@ const styles = StyleSheet.create({
   typeChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
   typeChipText: { fontSize: 13 },
   contentInput: { borderRadius: 16, borderWidth: 1, padding: 16, minHeight: 140, fontSize: 16, lineHeight: 24 },
-  mediaRow: { flexDirection: "row", gap: 12 },
-  mediaBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 12, borderRadius: 12, borderWidth: 1 },
-  mediaBtnText: { fontSize: 14 },
-  previewWrap: { borderRadius: 12, overflow: "hidden" },
-  imagePreview: { width: "100%", height: 200, borderRadius: 12 },
-  removeMedia: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 12 },
-  videoPreview: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 12, borderWidth: 1 },
-  videoText: { flex: 1, fontSize: 14 },
-  uploadRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 10 },
-  uploadText: { fontSize: 13 },
+  photoBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1, borderStyle: "dashed" },
+  photoBtnText: { fontSize: 15, fontWeight: "600", flex: 1 },
+  photoBtnSub: { fontSize: 11 },
+  previewWrap: { borderRadius: 14, overflow: "hidden", minHeight: 180 },
+  imagePreview: { width: "100%", height: 220 },
+  processingOverlay: { position: "absolute", inset: 0, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
+  processingText: { color: "#F59E0B", fontWeight: "600", fontSize: 14 },
+  removeMedia: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 14 },
   subjectChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   subjectText: { fontSize: 13 },
   xpNote: { padding: 12, borderRadius: 10, alignItems: "center" },
