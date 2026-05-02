@@ -218,6 +218,8 @@ export function Sidebar({ visible, onClose }: Props) {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    elevation: 999,
   },
   sidebar: {
     position: "absolute",
@@ -225,11 +227,12 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SIDEBAR_WIDTH,
+    zIndex: 1000,
+    elevation: 1000,
     shadowColor: "#000",
     shadowOffset: { width: 4, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 16,
-    elevation: 12,
   },
   profileHeader: {
     padding: 20,
