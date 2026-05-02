@@ -130,7 +130,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (email: string, password: string, displayName: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName });
-    await createUserProfile(cred.user, displayName);
+    // Don't await — Firestore write shouldn't block auth success
+    createUserProfile(cred.user, displayName).catch((e) =>
+      console.warn("createUserProfile error:", e)
+    );
   };
 
   const googleSignIn = async (idToken: string) => {

@@ -80,9 +80,9 @@ export default function LoginScreen() {
           <Feather name="book-open" size={36} color="#FFFFFF" />
         </LinearGradient>
 
-        <Text style={[styles.appName, { color: colors.foreground }]}>StudySpace</Text>
+        <Text style={[styles.appName, { color: colors.foreground }]}>ImproKinz</Text>
         <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
-          Learn together. Grow together.
+          AI-Powered Treasure Map to Learning
         </Text>
 
         {!!error && (
