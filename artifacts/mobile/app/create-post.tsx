@@ -111,8 +111,12 @@ export default function CreatePostScreen() {
 
     try {
       const authorName = profile?.displayName || user.displayName || "Learner";
-      const authorPhoto = profile?.photoURL || user.photoURL ||
-        `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
+      const rawPhoto = profile?.photoURL || user.photoURL || "";
+      // Don't embed base64 data URLs in post documents — use a generated avatar URL instead
+      // PostCard will override this with the live profile photo for the current user's posts
+      const authorPhoto = rawPhoto.startsWith("data:")
+        ? `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`
+        : rawPhoto || `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
 
       await addDoc(collection(db, "community_posts"), {
         authorId: user.uid,

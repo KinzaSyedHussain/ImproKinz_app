@@ -71,13 +71,17 @@ function timeAgo(ts: number) {
 
 export function PostCard({ post, onRefresh }: Props) {
   const colors = useColors();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
 
   // Card spans screen width minus 32px horizontal margins, minus 2px border
   const imageWidth = screenWidth - 34;
   const IMAGE_HEIGHT = 220;
+
+  // Always show the current user's latest profile photo on their own posts
+  const isOwnPost = post.authorId === user?.uid;
+  const displayPhoto = isOwnPost ? (profile?.photoURL ?? post.authorPhoto) : post.authorPhoto;
 
   // Defensive defaults — old posts from the website may not have these arrays
   const likes = Array.isArray(post.likes) ? post.likes : [];
@@ -129,7 +133,7 @@ export function PostCard({ post, onRefresh }: Props) {
           onPress={() => router.push(`/user/${post.authorId}` as any)}
           style={styles.authorRow}
         >
-          <UserAvatar photoURL={post.authorPhoto} displayName={post.authorName} size={38} />
+          <UserAvatar photoURL={displayPhoto} displayName={post.authorName} size={38} />
           <View style={styles.authorInfo}>
             <Text style={[styles.authorName, { color: colors.foreground }]}>
               {post.authorName}
