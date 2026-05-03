@@ -1,4 +1,5 @@
 import { Icon } from "@/components/Icon";
+import { SkeletonCard } from "@/components/SkeletonCard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter, useFocusEffect } from "expo-router";
 import {
@@ -178,8 +179,8 @@ export default function HomeScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={{ paddingTop: 8 }}>
+          {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
         </View>
       ) : (
         <FlatList
@@ -257,8 +258,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  logoText: { color: "#fff", fontFamily: undefined, fontSize: 16 },
-  headerTitle: { fontFamily: undefined, fontSize: 18 },
+  logoText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16 },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
   createBtn: {
     width: 34,
     height: 34,
@@ -268,7 +269,7 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle: { fontFamily: undefined, fontSize: 18 },
-  emptyText: { fontFamily: undefined, fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
+  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
+  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
   emptyBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
 });

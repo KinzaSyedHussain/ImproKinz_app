@@ -1,10 +1,18 @@
 import { BlurView } from "expo-blur";
+import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Icon } from "@/components/Icon";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+
+type IoniconName = keyof typeof Ionicons.glyphMap;
+
+function tabIcon(filled: IoniconName, outline: IoniconName) {
+  return ({ color, focused }: { color: string; focused: boolean }) => (
+    <Ionicons name={focused ? filled : outline} size={24} color={color} />
+  );
+}
 
 export default function TabLayout() {
   const colors = useColors();
@@ -31,54 +39,45 @@ export default function TabLayout() {
           paddingBottom: bottomPad,
           paddingTop: 4,
         },
-        tabBarBackground: () => (
+        tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={100}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
           ) : (
-            <View
-              style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]}
-            />
-          )
-        ),
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />
+          ),
         tabBarLabelStyle: {
-          fontFamily: undefined,
+          fontFamily: "Inter_500Medium",
           fontSize: 11,
         },
-        tabBarIconStyle: {
-          marginTop: 2,
-        },
+        tabBarIconStyle: { marginTop: 2 },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color }) => <Icon name="home" size={22} color={color} />,
+          tabBarIcon: tabIcon("home", "home-outline"),
         }}
       />
       <Tabs.Screen
         name="tools"
         options={{
           title: "Tools",
-          tabBarIcon: ({ color }) => <Icon name="zap" size={22} color={color} />,
+          tabBarIcon: tabIcon("flash", "flash-outline"),
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
           title: "Videos",
-          tabBarIcon: ({ color }) => <Icon name="video" size={22} color={color} />,
+          tabBarIcon: tabIcon("play-circle", "play-circle-outline"),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color }) => <Icon name="user" size={22} color={color} />,
+          tabBarIcon: tabIcon("person", "person-outline"),
         }}
       />
     </Tabs>
