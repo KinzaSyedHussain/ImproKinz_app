@@ -1,7 +1,7 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -109,21 +110,29 @@ export default function StudyVideosScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [activeSubject, setActiveSubject] = useState("all");
+  const [searchText, setSearchText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const searchRef = useRef<TextInput>(null);
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = 70 + insets.bottom;
 
-  const loadVideos = useCallback(async (subject: string, isRefresh = false) => {
+  const loadVideos = useCallback(async (subject: string, query: string, isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     setError(false);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-      // Add cache-bust param so every refresh picks a different query on the server
-      const res = await fetch(`https://${domain}/api/videos?subject=${subject}&t=${Date.now()}`);
+      const params = new URLSearchParams({ t: String(Date.now()) });
+      if (query.trim()) {
+        params.set("q", query.trim());
+      } else {
+        params.set("subject", subject);
+      }
+      const res = await fetch(`https://${domain}/api/videos?${params.toString()}`);
       if (!res.ok) throw new Error("fetch failed");
       const data = await res.json() as { videos: Video[] };
       setVideos(data.videos ?? []);
@@ -137,19 +146,37 @@ export default function StudyVideosScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadVideos(activeSubject);
-    }, [activeSubject])
+      loadVideos(activeSubject, searchQuery);
+    }, [activeSubject, searchQuery])
   );
 
   const changeSubject = (key: string) => {
     setActiveSubject(key);
-    loadVideos(key);
+    setSearchText("");
+    setSearchQuery("");
+    loadVideos(key, "");
   };
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadVideos(activeSubject, true);
+    loadVideos(activeSubject, searchQuery, true);
   };
+
+  const submitSearch = () => {
+    const q = searchText.trim();
+    setSearchQuery(q);
+    loadVideos(activeSubject, q);
+    searchRef.current?.blur();
+  };
+
+  const clearSearch = () => {
+    setSearchText("");
+    setSearchQuery("");
+    loadVideos(activeSubject, "");
+    searchRef.current?.blur();
+  };
+
+  const isSearchMode = !!searchQuery;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -161,7 +188,9 @@ export default function StudyVideosScreen() {
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Study Videos</Text>
-            <Text style={styles.headerSub}>Handpicked educational YouTube content</Text>
+            <Text style={styles.headerSub}>
+              {isSearchMode ? `Results for "${searchQuery}"` : "Handpicked educational content"}
+            </Text>
           </View>
           <View style={[styles.liveBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
             <View style={styles.liveDot} />
@@ -169,39 +198,62 @@ export default function StudyVideosScreen() {
           </View>
         </View>
 
-        {/* Subject filter */}
-        <FlatList
-          data={SUBJECTS}
-          keyExtractor={(item) => item.key}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.subjectRow}
-          renderItem={({ item }) => {
-            const active = activeSubject === item.key;
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.subjectChip,
-                  {
-                    backgroundColor: active ? "#FFFFFF" : "rgba(255,255,255,0.15)",
-                    borderColor: active ? "#FFFFFF" : "transparent",
-                  },
-                ]}
-                onPress={() => changeSubject(item.key)}
-              >
-                <Text style={styles.subjectIcon}>{item.icon}</Text>
-                <Text
+        {/* Search bar */}
+        <View style={[styles.searchBar, { backgroundColor: "rgba(255,255,255,0.15)" }]}>
+          <Icon name="search" size={16} color="rgba(255,255,255,0.7)" />
+          <TextInput
+            ref={searchRef}
+            style={styles.searchInput}
+            placeholder="Search any topic…"
+            placeholderTextColor="rgba(255,255,255,0.5)"
+            value={searchText}
+            onChangeText={setSearchText}
+            onSubmitEditing={submitSearch}
+            returnKeyType="search"
+            selectionColor="#F59E0B"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={clearSearch} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="x" size={14} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Subject filter — hidden when actively searching */}
+        {!isSearchMode && (
+          <FlatList
+            data={SUBJECTS}
+            keyExtractor={(item) => item.key}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.subjectRow}
+            renderItem={({ item }) => {
+              const active = activeSubject === item.key;
+              return (
+                <TouchableOpacity
                   style={[
-                    styles.subjectLabel,
-                    { color: active ? colors.purpleEnd : "rgba(255,255,255,0.85)" },
+                    styles.subjectChip,
+                    {
+                      backgroundColor: active ? "#FFFFFF" : "rgba(255,255,255,0.15)",
+                      borderColor: active ? "#FFFFFF" : "transparent",
+                    },
                   ]}
+                  onPress={() => changeSubject(item.key)}
                 >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
+                  <Text style={styles.subjectIcon}>{item.icon}</Text>
+                  <Text
+                    style={[
+                      styles.subjectLabel,
+                      { color: active ? colors.purpleEnd : "rgba(255,255,255,0.85)" },
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        )}
       </LinearGradient>
 
       {/* Content */}
@@ -209,7 +261,7 @@ export default function StudyVideosScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
           <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-            Fetching latest study videos…
+            {isSearchMode ? `Searching for "${searchQuery}"…` : "Fetching latest study videos…"}
           </Text>
         </View>
       ) : error ? (
@@ -221,7 +273,7 @@ export default function StudyVideosScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryBtn, { backgroundColor: colors.primary }]}
-            onPress={() => loadVideos(activeSubject)}
+            onPress={() => loadVideos(activeSubject, searchQuery)}
           >
             <Text style={[styles.retryText, { color: colors.primaryForeground }]}>Retry</Text>
           </TouchableOpacity>
@@ -244,7 +296,9 @@ export default function StudyVideosScreen() {
             <View style={[styles.channelNote, { backgroundColor: colors.secondary }]}>
               <Icon name="refresh-cw" size={13} color={colors.primary} />
               <Text style={[styles.channelNoteText, { color: colors.mutedForeground }]}>
-                Pull down to refresh for a new set of videos
+                {isSearchMode
+                  ? `${videos.length} result${videos.length !== 1 ? "s" : ""} · Pull down to refresh`
+                  : "Pull down to refresh for a new set of videos"}
               </Text>
             </View>
           }
@@ -252,7 +306,9 @@ export default function StudyVideosScreen() {
             <View style={styles.center}>
               <Text style={{ fontSize: 40 }}>📺</Text>
               <Text style={[styles.errorTitle, { color: colors.foreground }]}>No videos found</Text>
-              <Text style={[styles.errorSub, { color: colors.mutedForeground }]}>Pull down to try again</Text>
+              <Text style={[styles.errorSub, { color: colors.mutedForeground }]}>
+                {isSearchMode ? "Try a different search term" : "Pull down to try again"}
+              </Text>
             </View>
           }
         />
@@ -263,8 +319,8 @@ export default function StudyVideosScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 18, paddingBottom: 16 },
-  headerRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 14 },
+  header: { paddingHorizontal: 18, paddingBottom: 16, gap: 12 },
+  headerRow: { flexDirection: "row", alignItems: "flex-start" },
   headerTitle: { color: "#FFFFFF", fontSize: 24, fontWeight: "700" },
   headerSub: { color: "rgba(255,255,255,0.75)", fontSize: 12, marginTop: 3 },
   liveBadge: {
@@ -277,6 +333,20 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#EF4444" },
   liveText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 14,
+    padding: 0,
+  },
   subjectRow: { gap: 8 },
   subjectChip: {
     flexDirection: "row",
@@ -342,20 +412,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   playIcon: { color: "#FFFFFF", fontSize: 20, marginLeft: 3 },
-  ytBadge: {
-    position: "absolute",
-    bottom: 8,
-    right: 8,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  ytBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
   cardInfo: { padding: 14, gap: 8 },
   cardTitle: { fontSize: 15, fontWeight: "600", lineHeight: 21 },
   cardMeta: { flexDirection: "row", alignItems: "center", gap: 10 },
   channelPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   channelText: { fontSize: 11, fontWeight: "600" },
-  timeText: { fontSize: 12 },
 });
