@@ -4,12 +4,13 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
+  Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -48,11 +49,17 @@ const TOOLS = [
     route: "/quiz",
     color: "#059669",
   },
+  {
+    icon: "file-text",
+    label: "Notes Maker",
+    desc: "AI-generated study notes",
+    route: "/notes",
+    color: "#D97706",
+  },
 ];
 
 const NAV_ITEMS = [
   { icon: "search", label: "Search", route: "/search" },
-  { icon: "bookmark", label: "Saved Posts", route: "/(tabs)/" },
   { icon: "settings", label: "Settings", route: "/settings" },
 ];
 
@@ -62,168 +69,158 @@ export function Sidebar({ visible, onClose }: Props) {
   const router = useRouter();
   const { profile, logOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
-  const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
   useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.spring(translateX, {
-          toValue: 0,
-          useNativeDriver: true,
-          damping: 20,
-          stiffness: 200,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.spring(translateX, {
-          toValue: -SIDEBAR_WIDTH,
-          useNativeDriver: true,
-          damping: 20,
-          stiffness: 200,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible, translateX, opacity]);
+    Animated.spring(slideAnim, {
+      toValue: visible ? 0 : -SIDEBAR_WIDTH,
+      useNativeDriver: true,
+      damping: 22,
+      stiffness: 220,
+    }).start();
+  }, [visible]);
 
   const navigate = (route: string) => {
     onClose();
-    setTimeout(() => router.push(route as any), 200);
+    setTimeout(() => router.push(route as any), 220);
   };
 
-  if (!visible && Platform.OS !== "web") return null;
-
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={visible ? "auto" : "none"}>
-      {/* Dim overlay — row layout: left gap (sidebar area) + right tappable area */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="box-none">
-        <View style={{ flex: 1, flexDirection: "row" }} pointerEvents="box-none">
-          {/* Left gap: same width as sidebar, no touch interception */}
-          <View style={{ width: SIDEBAR_WIDTH }} pointerEvents="none" />
-          {/* Right: tap-to-close dark area */}
-          <TouchableWithoutFeedback onPress={onClose}>
-            <View style={[styles.overlayRight, { backgroundColor: colors.overlay }]} />
-          </TouchableWithoutFeedback>
-        </View>
-      </Animated.View>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={styles.modalRoot}>
+        {/* Tap outside to close */}
+        <Pressable style={styles.backdrop} onPress={onClose} />
 
-      <Animated.View
-        style={[
-          styles.sidebar,
-          { backgroundColor: colors.card, transform: [{ translateX }] },
-        ]}
-      >
-        {/* Fixed gradient header */}
-        <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.profileHeader, { paddingTop: insets.top + 16 }]}
+        {/* Sidebar panel */}
+        <Animated.View
+          style={[
+            styles.sidebar,
+            { backgroundColor: colors.card, transform: [{ translateX: slideAnim }] },
+          ]}
         >
-          <UserAvatar
-            photoURL={profile?.photoURL}
-            displayName={profile?.displayName}
-            size={56}
-          />
-          <Text style={styles.profileName}>
-            {profile?.displayName || "Study User"}
-          </Text>
-          <Text style={styles.profileEmail}>{profile?.email || ""}</Text>
-          {profile && (
-            <XPStreakBadge xp={profile.xp} streak={profile.streak} compact />
-          )}
-        </LinearGradient>
-
-        {/* Scrollable content — ensures Light Mode / Sign Out are always reachable */}
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              AI STUDY TOOLS
-            </Text>
-            {TOOLS.map((tool) => (
-              <TouchableOpacity
-                key={tool.route}
-                style={[styles.toolItem, { borderColor: colors.border }]}
-                onPress={() => navigate(tool.route)}
-              >
-                <View style={[styles.toolIcon, { backgroundColor: tool.color + "18" }]}>
-                  <Icon name={tool.icon as any} size={20} color={tool.color} />
-                </View>
-                <View style={styles.toolInfo}>
-                  <Text style={[styles.toolLabel, { color: colors.foreground }]}>
-                    {tool.label}
-                  </Text>
-                  <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
-                    {tool.desc}
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <View style={styles.section}>
-            {NAV_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.route}
-                style={styles.navItem}
-                onPress={() => navigate(item.route)}
-              >
-                <Icon name={item.icon as any} size={20} color={colors.foreground} />
-                <Text style={[styles.navLabel, { color: colors.foreground }]}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <TouchableOpacity style={styles.navItem} onPress={toggleTheme}>
-            <Icon name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
-            <Text style={[styles.navLabel, { color: colors.primary }]}>
-              {isDark ? "Light Mode" : "Dark Mode"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={async () => {
-              onClose();
-              await logOut();
-            }}
+          {/* Profile header */}
+          <LinearGradient
+            colors={[colors.gradientStart, colors.gradientEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.profileHeader, { paddingTop: insets.top + 16 }]}
           >
-            <Icon name="log-out" size={20} color="#EF4444" />
-            <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </Animated.View>
-    </View>
+            <UserAvatar
+              photoURL={profile?.photoURL}
+              displayName={profile?.displayName}
+              size={56}
+            />
+            <Text style={styles.profileName}>
+              {profile?.displayName || "Study User"}
+            </Text>
+            <Text style={styles.profileEmail}>{profile?.email || ""}</Text>
+            {profile && (
+              <XPStreakBadge xp={profile.xp} streak={profile.streak} compact />
+            )}
+          </LinearGradient>
+
+          {/* Scrollable body */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+            showsVerticalScrollIndicator={false}
+            bounces={Platform.OS === "ios"}
+            overScrollMode="never"
+          >
+            {/* AI Tools */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+                AI STUDY TOOLS
+              </Text>
+              {TOOLS.map((tool) => (
+                <TouchableOpacity
+                  key={tool.route}
+                  style={[styles.toolItem, { borderColor: colors.border }]}
+                  onPress={() => navigate(tool.route)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.toolIcon, { backgroundColor: tool.color + "18" }]}>
+                    <Icon name={tool.icon as any} size={20} color={tool.color} />
+                  </View>
+                  <View style={styles.toolInfo}>
+                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>
+                      {tool.label}
+                    </Text>
+                    <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
+                      {tool.desc}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            {/* Nav items */}
+            <View style={styles.section}>
+              {NAV_ITEMS.map((item) => (
+                <TouchableOpacity
+                  key={item.route}
+                  style={styles.navItem}
+                  onPress={() => navigate(item.route)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name={item.icon as any} size={20} color={colors.foreground} />
+                  <Text style={[styles.navLabel, { color: colors.foreground }]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            {/* Theme toggle */}
+            <TouchableOpacity
+              style={styles.navItem}
+              onPress={toggleTheme}
+              activeOpacity={0.7}
+            >
+              <Icon name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
+              <Text style={[styles.navLabel, { color: colors.primary }]}>
+                {isDark ? "Light Mode" : "Dark Mode"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Sign out */}
+            <TouchableOpacity
+              style={[styles.navItem, styles.signOutItem]}
+              onPress={async () => {
+                onClose();
+                await logOut();
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon name="log-out" size={20} color="#EF4444" />
+              <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlayRight: {
+  modalRoot: {
     flex: 1,
-    height: "100%",
+    flexDirection: "row",
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   sidebar: {
     position: "absolute",
@@ -231,12 +228,11 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SIDEBAR_WIDTH,
-    zIndex: 1000,
-    elevation: 1000,
     shadowColor: "#000",
     shadowOffset: { width: 4, height: 0 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 16,
+    elevation: 24,
   },
   profileHeader: {
     padding: 20,
@@ -245,20 +241,19 @@ const styles = StyleSheet.create({
   },
   profileName: {
     color: "#FFFFFF",
-    fontFamily: undefined,
     fontSize: 18,
+    fontWeight: "700",
     marginTop: 8,
   },
   profileEmail: {
-    color: "rgba(255,255,255,0.7)",
-    fontFamily: undefined,
+    color: "rgba(255,255,255,0.75)",
     fontSize: 13,
   },
   section: { paddingHorizontal: 12, paddingVertical: 8 },
   sectionLabel: {
-    fontFamily: undefined,
     fontSize: 11,
     letterSpacing: 1,
+    fontWeight: "600",
     marginLeft: 4,
     marginBottom: 8,
     marginTop: 4,
@@ -280,16 +275,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toolInfo: { flex: 1 },
-  toolLabel: { fontFamily: undefined, fontSize: 14 },
-  toolDesc: { fontFamily: undefined, fontSize: 12, marginTop: 1 },
+  toolLabel: { fontSize: 14, fontWeight: "500" },
+  toolDesc: { fontSize: 12, marginTop: 1 },
   divider: { height: 1, marginHorizontal: 16, marginVertical: 4 },
   navItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     borderRadius: 10,
   },
-  navLabel: { fontFamily: undefined, fontSize: 15 },
+  signOutItem: {
+    marginTop: 4,
+  },
+  navLabel: { fontSize: 15, fontWeight: "500" },
 });
