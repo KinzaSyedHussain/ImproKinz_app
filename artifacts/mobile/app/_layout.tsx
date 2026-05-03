@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Font from "expo-font";
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -9,7 +8,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -21,11 +20,6 @@ import { ThemeProvider } from "@/context/ThemeContext";
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
-
-// Load the Ionicons .ttf directly — bypasses the lazy Ionicons.font getter
-// which can silently fail in Expo Go on Android
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const IONICONS_TTF = require("@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf");
 
 function RootLayoutNav() {
   return (
@@ -67,36 +61,21 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  // Load Inter fonts via useFonts (handles remote + local fonts well)
-  const [interLoaded, interError] = useFonts({
+  // Only load Inter fonts — icons now use SVG (no font needed)
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
   });
 
-  // Load Ionicons separately using Font.loadAsync with a direct require path
-  // This is more reliable than spreading Ionicons.font into useFonts
-  const [iconsReady, setIconsReady] = useState(false);
-
   useEffect(() => {
-    Font.loadAsync({ Ionicons: IONICONS_TTF })
-      .then(() => setIconsReady(true))
-      .catch(() => {
-        // Still mark as ready so the app renders even without icons
-        setIconsReady(true);
-      });
-  }, []);
-
-  const ready = (interLoaded || !!interError) && iconsReady;
-
-  useEffect(() => {
-    if (ready) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [ready]);
+  }, [fontsLoaded, fontError]);
 
-  if (!ready) return null;
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>

@@ -1,16 +1,14 @@
 import { BlurView } from "expo-blur";
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { SvgIcon } from "@/components/SvgIcon";
 
-type IoniconName = keyof typeof Ionicons.glyphMap;
-
-function tabIcon(filled: IoniconName, outline: IoniconName) {
+function tabIcon(filled: string, outline: string) {
   return ({ color, focused }: { color: string; focused: boolean }) => (
-    <Ionicons name={focused ? filled : outline} size={24} color={color} />
+    <SvgIcon name={focused ? filled : outline} size={24} color={color} />
   );
 }
 
