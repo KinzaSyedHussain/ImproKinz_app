@@ -1,17 +1,7 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,7 +18,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
 
 interface Note {
@@ -65,6 +54,25 @@ function wordCount(text: string) {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
+function storageKey(uid: string) {
+  return `notes_v1_${uid}`;
+}
+
+async function loadNotes(uid: string): Promise<Note[]> {
+  try {
+    const raw = await AsyncStorage.getItem(storageKey(uid));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Note[];
+    return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+async function persistNotes(uid: string, notes: Note[]): Promise<void> {
+  await AsyncStorage.setItem(storageKey(uid), JSON.stringify(notes));
+}
+
 export default function NotesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -95,26 +103,14 @@ export default function NotesScreen() {
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
-  const notesCol = user ? collection(db, "users", user.uid, "notes") : null;
-
   const fetchNotes = async () => {
-    if (!notesCol) return;
-    try {
-      const snap = await getDocs(query(notesCol, orderBy("updatedAt", "desc")));
-      setNotes(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Note, "id">),
-          createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-          updatedAt: d.data()["updatedAt"]?.toMillis?.() ?? Date.now(),
-        }))
-      );
-    } finally {
-      setLoadingNotes(false);
-    }
+    if (!user) { setLoadingNotes(false); return; }
+    const loaded = await loadNotes(user.uid);
+    setNotes(loaded);
+    setLoadingNotes(false);
   };
 
-  useEffect(() => { fetchNotes(); }, [user]);
+  useEffect(() => { fetchNotes(); }, [user?.uid]);
 
   const generateNotes = async () => {
     if (!topic.trim()) {
@@ -132,7 +128,6 @@ export default function NotesScreen() {
       if (!res.ok) throw new Error("Generation failed");
       const data = await res.json() as { title: string; content: string };
       if (!data.content) throw new Error("Empty response");
-      // Open in editor so user can review + save
       setEditingNote(null);
       setEditTitle(data.title || topic.trim());
       setEditContent(data.content);
@@ -156,29 +151,36 @@ export default function NotesScreen() {
   const saveNote = async () => {
     if (!editTitle.trim()) { Alert.alert("Title required", "Please add a title."); return; }
     if (!editContent.trim()) { Alert.alert("Content required", "Note has no content."); return; }
-    if (!notesCol) return;
+    if (!user) { Alert.alert("Not signed in", "Please sign in to save notes."); return; }
+
     setSaving(true);
     try {
+      const now = Date.now();
+      let updated: Note[];
+
       if (editingNote) {
-        await updateDoc(doc(db, "users", user!.uid, "notes", editingNote.id), {
-          title: editTitle.trim(),
-          content: editContent.trim(),
-          subject: editSubject,
-          updatedAt: serverTimestamp(),
-        });
+        updated = notes.map((n) =>
+          n.id === editingNote.id
+            ? { ...n, title: editTitle.trim(), content: editContent.trim(), subject: editSubject, updatedAt: now }
+            : n
+        );
       } else {
-        await addDoc(notesCol, {
+        const newNote: Note = {
+          id: `${user.uid}_${now}`,
           title: editTitle.trim(),
           content: editContent.trim(),
           subject: editSubject,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        await addXP(12);
+          createdAt: now,
+          updatedAt: now,
+        };
+        updated = [newNote, ...notes];
+        addXP(12).catch(() => {});
       }
+
+      await persistNotes(user.uid, updated);
+      setNotes(updated);
       setModalVisible(false);
       setTopic("");
-      fetchNotes();
       setActiveTab("saved");
     } catch (e: any) {
       Alert.alert("Error", e?.message ?? "Could not save note.");
@@ -193,8 +195,9 @@ export default function NotesScreen() {
       {
         text: "Delete", style: "destructive",
         onPress: async () => {
-          await deleteDoc(doc(db, "users", user!.uid, "notes", note.id));
-          setNotes((prev) => prev.filter((n) => n.id !== note.id));
+          const updated = notes.filter((n) => n.id !== note.id);
+          await persistNotes(user!.uid, updated);
+          setNotes(updated);
         },
       },
     ]);
@@ -360,9 +363,7 @@ export default function NotesScreen() {
                     <Text style={styles.generateBtnText}>Generating notes…</Text>
                   </>
                 ) : (
-                  <>
-                    <Text style={styles.generateBtnText}>✦  Generate Notes</Text>
-                  </>
+                  <Text style={styles.generateBtnText}>✦  Generate Notes</Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -541,7 +542,6 @@ export default function NotesScreen() {
               {wordCount(editContent)} words
             </Text>
 
-            {/* Big save button at bottom so it's always obvious */}
             <TouchableOpacity
               style={[styles.bigSaveBtn, { opacity: saving ? 0.6 : 1 }]}
               onPress={saveNote}
@@ -598,31 +598,32 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: "#FFFFFF" },
   tabText: { fontSize: 13, fontWeight: "600" },
   tabTextActive: { color: "#B45309" },
-  tabTextInactive: { color: "rgba(255,255,255,0.75)" },
-  generateContent: { padding: 20, gap: 6 },
+  tabTextInactive: { color: "rgba(255,255,255,0.8)" },
+
+  generateContent: { padding: 20, gap: 4 },
   aiBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    alignSelf: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
   },
-  aiBadgeEmoji: { fontSize: 14 },
+  aiBadgeEmoji: { fontSize: 16 },
   aiBadgeText: { fontSize: 13, fontWeight: "600" },
-  label: { fontSize: 14, fontWeight: "600", marginTop: 14, marginBottom: 8 },
+  label: { fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 12 },
   topicInput: {
-    borderWidth: 1.5,
     borderRadius: 14,
-    padding: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 15,
     minHeight: 80,
     textAlignVertical: "top",
-    lineHeight: 22,
+    marginBottom: 4,
   },
-  chipRow: { gap: 8, paddingBottom: 4 },
+  chipRow: { gap: 8, paddingVertical: 4, paddingHorizontal: 2 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -630,33 +631,36 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   chipText: { fontSize: 13, fontWeight: "600" },
-  levelRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  levelRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   levelChip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   levelChipText: { fontSize: 13, fontWeight: "500" },
   previewCard: {
-    borderWidth: 1,
     borderRadius: 14,
+    borderWidth: 1,
     padding: 16,
     gap: 6,
-    marginTop: 14,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  previewTitle: { fontSize: 13, fontWeight: "700", marginBottom: 4 },
+  previewTitle: { fontSize: 14, fontWeight: "600", marginBottom: 4 },
   previewItem: { fontSize: 13, lineHeight: 20 },
-  generateBtn: { marginTop: 20, borderRadius: 16, overflow: "hidden" },
+  generateBtn: { marginTop: 16, borderRadius: 16, overflow: "hidden" },
   generateBtnInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    paddingVertical: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
-  generateBtnText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
-  generatingHint: { textAlign: "center", fontSize: 13, marginTop: 12 },
+  generateBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  generatingHint: { textAlign: "center", fontSize: 13, marginTop: 12, lineHeight: 20 },
+
   searchWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -665,31 +669,27 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  searchInput: { flex: 1, fontSize: 14 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: "600" },
-  emptySub: { fontSize: 14, textAlign: "center" },
-  goGenerateBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 20 },
-  goGenerateBtnText: { fontSize: 14, fontWeight: "700" },
-  list: { padding: 14, gap: 12 },
+  searchInput: { flex: 1, fontSize: 15 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8, padding: 32 },
+  emptyTitle: { fontSize: 18, fontWeight: "700", textAlign: "center" },
+  emptySub: { fontSize: 14, textAlign: "center", lineHeight: 20 },
+  goGenerateBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  goGenerateBtnText: { fontSize: 15, fontWeight: "700" },
+  list: { padding: 16, gap: 12 },
   noteCard: {
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
     gap: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
   },
   noteHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
   subjectPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  subjectText: { fontSize: 11, fontWeight: "600" },
-  noteTime: { flex: 1, fontSize: 12 },
+  subjectText: { fontSize: 11, fontWeight: "700" },
+  noteTime: { flex: 1, fontSize: 11 },
   noteTitle: { fontSize: 16, fontWeight: "700" },
   notePreview: { fontSize: 13, lineHeight: 19 },
-  noteWords: { fontSize: 11, marginTop: 2 },
+  noteWords: { fontSize: 11 },
+
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -698,32 +698,36 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     gap: 12,
   },
-  modalClose: { padding: 4 },
-  modalTitle: { flex: 1, fontSize: 17, fontWeight: "600" },
+  modalClose: { padding: 2 },
+  modalTitle: { flex: 1, fontSize: 17, fontWeight: "700" },
   saveBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    minWidth: 80,
-    alignItems: "center",
   },
-  saveBtnText: { fontWeight: "700", fontSize: 13 },
+  saveBtnText: { fontSize: 14, fontWeight: "700" },
   editTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
   },
   editContent: {
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 24,
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    minHeight: 400,
+    paddingTop: 16,
+    paddingBottom: 8,
+    minHeight: 300,
   },
-  wordBar: { fontSize: 12, paddingHorizontal: 20, paddingBottom: 16 },
-  bigSaveBtn: { marginHorizontal: 16, marginBottom: 32, marginTop: 8, borderRadius: 16, overflow: "hidden" },
-  bigSaveBtnInner: { paddingVertical: 18, alignItems: "center", justifyContent: "center" },
-  bigSaveBtnText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
+  wordBar: { fontSize: 12, paddingHorizontal: 20, paddingBottom: 8 },
+  bigSaveBtn: { margin: 20, borderRadius: 16, overflow: "hidden" },
+  bigSaveBtnInner: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  bigSaveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
 });
