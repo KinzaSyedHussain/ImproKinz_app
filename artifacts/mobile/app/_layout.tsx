@@ -62,13 +62,12 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  // Ionicons is pre-bundled inside Expo Go on native; only load it explicitly on web
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    ...(Platform.OS === "web" ? Ionicons.font : {}),
+    ...Ionicons.font,
   });
 
   useEffect(() => {
