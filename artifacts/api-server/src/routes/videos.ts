@@ -2,10 +2,6 @@ import { Router } from "express";
 
 const router = Router();
 
-// Simple in-memory cache (5 min TTL per channel)
-const cache = new Map<string, { ts: number; data: Video[] }>();
-const CACHE_TTL = 5 * 60 * 1000;
-
 interface Video {
   videoId: string;
   title: string;
@@ -13,111 +9,164 @@ interface Video {
   thumbnail: string;
   url: string;
   published: string;
+  viewCount?: string;
+  duration?: string;
 }
 
-const CHANNELS: Record<string, { id: string; name: string }[]> = {
+const SUBJECT_QUERIES: Record<string, string[]> = {
   all: [
-    { id: "UCsooa4yRKGN_zEE8iknghZA", name: "TED-Ed" },
-    { id: "UCX6b17PVsYBQ0ip5gyeme-Q", name: "CrashCourse" },
+    "study tips education", "learn how to study", "educational lecture",
+    "science explained", "history documentary", "math tutorial",
   ],
   math: [
-    { id: "UCYO_jab_esuFRV4b17AJtAg", name: "3Blue1Brown" },
-    { id: "UCFjd8qu9SkNBMnQ8p2UpTbA", name: "Mathologer" },
+    "mathematics tutorial", "calculus explained", "algebra lesson",
+    "geometry math", "statistics probability", "linear algebra",
   ],
   science: [
-    { id: "UCsXVk37biltHxX1PLCTJT1w", name: "Kurzgesagt" },
-    { id: "UCUHW94eEFW7hkUMVaZz4eDg", name: "MinutePhysics" },
+    "physics lecture", "chemistry explained", "biology tutorial",
+    "science experiment", "quantum physics", "organic chemistry",
   ],
   history: [
-    { id: "UCNjZmd8tfKx3T4QkHqb4YYw", name: "OverSimplified" },
-    { id: "UCX6b17PVsYBQ0ip5gyeme-Q", name: "CrashCourse" },
-  ],
-  language: [
-    { id: "UCAuUUnT6oDeKwE6v1NGQxug", name: "TED" },
-    { id: "UCsooa4yRKGN_zEE8iknghZA", name: "TED-Ed" },
+    "world history documentary", "ancient history explained",
+    "history lesson", "world war history", "civilization history",
   ],
   cs: [
-    { id: "UCsBjURrPoezykLs9EqgamOA", name: "Fireship" },
-    { id: "UC8butISFwT-Wl7EV0hUK0BQ", name: "freeCodeCamp" },
+    "programming tutorial", "computer science lecture", "coding explained",
+    "algorithms data structures", "machine learning tutorial", "web development",
+  ],
+  language: [
+    "english grammar lesson", "language learning tips", "vocabulary lesson",
+    "creative writing tutorial", "literature analysis", "essay writing",
   ],
   general: [
-    { id: "UC6nSFpj9HTCZ5t-N3Rm3-HA", name: "Vsauce" },
-    { id: "UCsooa4yRKGN_zEE8iknghZA", name: "TED-Ed" },
+    "ted education", "kurzgesagt explained", "veritasium", "vsauce science",
+    "crashcourse", "minutephysics",
   ],
 };
 
-function decodeXmlEntities(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
+function parseDuration(iso: string): string {
+  const match = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso);
+  if (!match) return "";
+  const h = parseInt(match[1] ?? "0");
+  const m = parseInt(match[2] ?? "0");
+  const s = parseInt(match[3] ?? "0");
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function parseRSS(xml: string, channelName: string): Video[] {
-  const videos: Video[] = [];
-  const entryRe = /<entry>([\s\S]*?)<\/entry>/g;
-  let m: RegExpExecArray | null;
-  while ((m = entryRe.exec(xml)) !== null) {
-    const entry = m[1];
-    const videoId = /<yt:videoId>(.*?)<\/yt:videoId>/.exec(entry)?.[1]?.trim() ?? "";
-    const title = decodeXmlEntities(
-      /<title>([\s\S]*?)<\/title>/.exec(entry)?.[1]?.trim() ?? ""
-    );
-    const published = /<published>(.*?)<\/published>/.exec(entry)?.[1]?.trim() ?? "";
-    const thumbnail =
-      /media:thumbnail[^/]*url="([^"]+)"/.exec(entry)?.[1] ??
-      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    if (videoId && title) {
-      videos.push({
-        videoId,
-        title,
-        channelName,
-        thumbnail,
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        published,
-      });
-    }
+function formatViews(n: string): string {
+  const v = parseInt(n);
+  if (isNaN(v)) return "";
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M views`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K views`;
+  return `${v} views`;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return videos;
-}
-
-async function fetchChannel(channelId: string, channelName: string): Promise<Video[]> {
-  const key = channelId;
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
-
-  const url = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) return [];
-  const xml = await res.text();
-  const videos = parseRSS(xml, channelName);
-  cache.set(key, { ts: Date.now(), data: videos });
-  return videos;
+  return a;
 }
 
 router.get("/videos", async (req, res) => {
-  const subject = ((req.query["subject"] as string) || "all").toLowerCase().replace(/\s+/g, "");
-  const key = subject === "computerscience" ? "cs" : subject;
-  const channels = CHANNELS[key] ?? CHANNELS["all"];
+  const apiKey = process.env["YOUTUBE_API_KEY"];
+  if (!apiKey) {
+    res.status(503).json({ error: "YouTube API key not configured" });
+    return;
+  }
+
+  const rawSubject = ((req.query["subject"] as string) || "all").toLowerCase().replace(/\s+/g, "");
+  const key = rawSubject === "computerscience" ? "cs" : rawSubject;
+  const queries = SUBJECT_QUERIES[key] ?? SUBJECT_QUERIES["all"];
+
+  // Pick 2 random queries per request so every refresh gives different results
+  const selected = shuffle(queries).slice(0, 2);
 
   try {
-    const results = await Promise.all(
-      channels.map((ch) => fetchChannel(ch.id, ch.name))
+    const videoIds: string[] = [];
+    const searchMeta: Record<string, { channelName: string; published: string }> = {};
+
+    // Run both search queries in parallel
+    await Promise.all(
+      selected.map(async (q) => {
+        const url = new URL("https://www.googleapis.com/youtube/v3/search");
+        url.searchParams.set("part", "snippet");
+        url.searchParams.set("q", q);
+        url.searchParams.set("type", "video");
+        url.searchParams.set("videoEmbeddable", "true");
+        url.searchParams.set("videoSyndicated", "true");
+        url.searchParams.set("safeSearch", "strict");
+        url.searchParams.set("relevanceLanguage", "en");
+        url.searchParams.set("maxResults", "15");
+        url.searchParams.set("order", "relevance");
+        url.searchParams.set("key", apiKey);
+
+        const r = await fetch(url.toString(), { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        const data = await r.json() as {
+          items?: Array<{
+            id: { videoId: string };
+            snippet: { title: string; channelTitle: string; publishedAt: string; thumbnails: { high?: { url: string }; medium?: { url: string } } };
+          }>
+        };
+        for (const item of data.items ?? []) {
+          const vid = item.id.videoId;
+          if (!vid || videoIds.includes(vid)) continue;
+          videoIds.push(vid);
+          searchMeta[vid] = {
+            channelName: item.snippet.channelTitle,
+            published: item.snippet.publishedAt,
+          };
+        }
+      })
     );
-    // Interleave results from multiple channels so feed stays varied
-    const merged: Video[] = [];
-    const maxLen = Math.max(...results.map((r) => r.length));
-    for (let i = 0; i < maxLen; i++) {
-      for (const ch of results) {
-        if (ch[i]) merged.push(ch[i]);
-      }
+
+    if (!videoIds.length) {
+      res.json({ videos: [] });
+      return;
     }
-    res.json({ videos: merged.slice(0, 30) });
+
+    // Fetch video details (duration + view count) in one batch
+    const detailsUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+    detailsUrl.searchParams.set("part", "contentDetails,statistics,snippet");
+    detailsUrl.searchParams.set("id", videoIds.join(","));
+    detailsUrl.searchParams.set("key", apiKey);
+
+    const detailsRes = await fetch(detailsUrl.toString(), { signal: AbortSignal.timeout(8000) });
+    const detailsData = await detailsRes.json() as {
+      items?: Array<{
+        id: string;
+        snippet: { title: string; channelTitle: string; publishedAt: string; thumbnails: { high?: { url: string }; medium?: { url: string } } };
+        contentDetails: { duration: string };
+        statistics: { viewCount: string };
+      }>
+    };
+
+    const videos: Video[] = (detailsData.items ?? []).map((item) => {
+      const meta = searchMeta[item.id] ?? {};
+      const thumb =
+        item.snippet.thumbnails.high?.url ??
+        item.snippet.thumbnails.medium?.url ??
+        `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`;
+      return {
+        videoId: item.id,
+        title: item.snippet.title,
+        channelName: item.snippet.channelTitle || meta.channelName || "",
+        thumbnail: thumb,
+        url: `https://www.youtube.com/watch?v=${item.id}`,
+        published: item.snippet.publishedAt || meta.published || "",
+        viewCount: formatViews(item.statistics?.viewCount ?? ""),
+        duration: parseDuration(item.contentDetails?.duration ?? ""),
+      };
+    });
+
+    // Shuffle so every refresh shows a fresh order
+    res.json({ videos: shuffle(videos) });
   } catch (err) {
-    req.log.error({ err }, "Videos fetch failed");
+    req.log.error({ err }, "YouTube API fetch failed");
     res.status(500).json({ error: "Failed to fetch videos" });
   }
 });

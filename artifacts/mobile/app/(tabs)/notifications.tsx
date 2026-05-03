@@ -8,6 +8,7 @@ import {
   Image,
   Linking,
   Platform,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,6 +24,8 @@ interface Video {
   thumbnail: string;
   url: string;
   published: string;
+  viewCount?: string;
+  duration?: string;
 }
 
 const SUBJECTS = [
@@ -54,33 +57,36 @@ function VideoCard({ video }: { video: Video }) {
       activeOpacity={0.85}
     >
       <View style={styles.thumbWrap}>
-        <Image
-          source={{ uri: video.thumbnail }}
-          style={styles.thumb}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: video.thumbnail }} style={styles.thumb} resizeMode="cover" />
         <View style={styles.playOverlay}>
           <View style={styles.playBtn}>
             <Text style={styles.playIcon}>▶</Text>
           </View>
         </View>
-        <View style={styles.ytBadge}>
-          <Text style={styles.ytBadgeText}>YouTube</Text>
-        </View>
+        {!!video.duration && (
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{video.duration}</Text>
+          </View>
+        )}
       </View>
       <View style={styles.cardInfo}>
         <Text style={[styles.cardTitle, { color: colors.foreground }]} numberOfLines={2}>
           {video.title}
         </Text>
+        <View style={[styles.channelPill, { backgroundColor: colors.secondary }]}>
+          <Text style={[styles.channelText, { color: colors.primary }]}>
+            {video.channelName}
+          </Text>
+        </View>
         <View style={styles.cardMeta}>
-          <View style={[styles.channelPill, { backgroundColor: colors.secondary }]}>
-            <Text style={[styles.channelText, { color: colors.primary }]}>
-              {video.channelName}
+          {!!video.viewCount && (
+            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+              {video.viewCount}
             </Text>
-          </View>
+          )}
           {!!video.published && (
-            <Text style={[styles.timeText, { color: colors.mutedForeground }]}>
-              {timeLabel(video.published)}
+            <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+              · {timeLabel(video.published)}
             </Text>
           )}
         </View>
@@ -95,17 +101,19 @@ export default function StudyVideosScreen() {
   const [activeSubject, setActiveSubject] = useState("all");
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = 70 + insets.bottom;
 
-  const loadVideos = useCallback(async (subject: string) => {
-    setLoading(true);
+  const loadVideos = useCallback(async (subject: string, isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     setError(false);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-      const res = await fetch(`https://${domain}/api/videos?subject=${subject}`);
+      // Add cache-bust param so every refresh picks a different query on the server
+      const res = await fetch(`https://${domain}/api/videos?subject=${subject}&t=${Date.now()}`);
       if (!res.ok) throw new Error("fetch failed");
       const data = await res.json() as { videos: Video[] };
       setVideos(data.videos ?? []);
@@ -113,6 +121,7 @@ export default function StudyVideosScreen() {
       setError(true);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -125,6 +134,11 @@ export default function StudyVideosScreen() {
   const changeSubject = (key: string) => {
     setActiveSubject(key);
     loadVideos(key);
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadVideos(activeSubject, true);
   };
 
   return (
@@ -208,11 +222,19 @@ export default function StudyVideosScreen() {
           keyExtractor={(item) => item.videoId}
           contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: botPad }}
           renderItem={({ item }) => <VideoCard video={item} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
           ListHeaderComponent={
             <View style={[styles.channelNote, { backgroundColor: colors.secondary }]}>
-              <Icon name="info" size={13} color={colors.primary} />
+              <Icon name="refresh-cw" size={13} color={colors.primary} />
               <Text style={[styles.channelNoteText, { color: colors.mutedForeground }]}>
-                Tap any video to watch on YouTube
+                Pull down to refresh for a new set of videos
               </Text>
             </View>
           }
@@ -220,6 +242,7 @@ export default function StudyVideosScreen() {
             <View style={styles.center}>
               <Text style={{ fontSize: 40 }}>📺</Text>
               <Text style={[styles.errorTitle, { color: colors.foreground }]}>No videos found</Text>
+              <Text style={[styles.errorSub, { color: colors.mutedForeground }]}>Pull down to try again</Text>
             </View>
           }
         />
@@ -283,6 +306,17 @@ const styles = StyleSheet.create({
   },
   thumbWrap: { position: "relative", width: "100%", height: 190 },
   thumb: { width: "100%", height: "100%" },
+  durationBadge: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  durationText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  metaText: { fontSize: 12 },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
