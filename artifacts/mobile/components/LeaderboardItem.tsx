@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
+import { useUserPhoto } from "@/hooks/useUserPhotoCache";
 import { UserAvatar } from "./UserAvatar";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
   xp: number;
   streak: number;
   isMe: boolean;
+  showStreak?: boolean;
 }
 
 const RANK_COLORS = ["#F59E0B", "#94A3B8", "#CD7C2F"];
@@ -21,8 +23,14 @@ export function LeaderboardItem({
   xp,
   streak,
   isMe,
+  showStreak = false,
 }: Props) {
   const colors = useColors();
+  const livePhoto = useUserPhoto(isMe ? "" : displayName, photoURL);
+
+  const primaryValue = showStreak ? streak : xp;
+  const primaryLabel = showStreak ? "day streak" : "XP";
+  const primaryIcon = showStreak ? "✦" : "★";
 
   return (
     <View
@@ -36,7 +44,7 @@ export function LeaderboardItem({
     >
       <View style={styles.rankWrap}>
         {rank <= 3 ? (
-          <Text style={[styles.medal, { color: RANK_COLORS[rank - 1] }]}>
+          <Text style={[styles.medal]}>
             {rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉"}
           </Text>
         ) : (
@@ -45,21 +53,22 @@ export function LeaderboardItem({
           </Text>
         )}
       </View>
-      <UserAvatar photoURL={photoURL} displayName={displayName} size={40} />
+      <UserAvatar photoURL={livePhoto ?? photoURL} displayName={displayName} size={40} />
       <View style={styles.info}>
         <Text style={[styles.name, { color: colors.foreground }]}>
-          {displayName}
-          {isMe ? " (You)" : ""}
+          {displayName}{isMe ? " (You)" : ""}
         </Text>
         <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-          {streak}d streak
+          {showStreak ? `${xp.toLocaleString()} XP total` : `${streak}d streak`}
         </Text>
       </View>
-      <View style={styles.xpWrap}>
-        <Text style={[styles.xp, { color: colors.xpColor }]}>
-          ★ {xp.toLocaleString()}
+      <View style={styles.scoreWrap}>
+        <Text style={[styles.score, { color: colors.xpColor }]}>
+          {primaryIcon} {primaryValue.toLocaleString()}
         </Text>
-        <Text style={[styles.xpLabel, { color: colors.mutedForeground }]}>XP</Text>
+        <Text style={[styles.scoreLabel, { color: colors.mutedForeground }]}>
+          {primaryLabel}
+        </Text>
       </View>
     </View>
   );
@@ -79,11 +88,11 @@ const styles = StyleSheet.create({
   },
   rankWrap: { width: 32, alignItems: "center" },
   medal: { fontSize: 22 },
-  rankNum: { fontFamily: undefined, fontSize: 15 },
+  rankNum: { fontSize: 15 },
   info: { flex: 1 },
-  name: { fontFamily: undefined, fontSize: 15 },
-  sub: { fontFamily: undefined, fontSize: 12, marginTop: 2 },
-  xpWrap: { alignItems: "flex-end" },
-  xp: { fontFamily: undefined, fontSize: 16 },
-  xpLabel: { fontFamily: undefined, fontSize: 11 },
+  name: { fontSize: 15, fontWeight: "600" },
+  sub: { fontSize: 12, marginTop: 2 },
+  scoreWrap: { alignItems: "flex-end" },
+  score: { fontSize: 16, fontWeight: "700" },
+  scoreLabel: { fontSize: 11 },
 });
