@@ -250,8 +250,8 @@ const styles = StyleSheet.create({
   },
   headerBtn: { padding: 4 },
   logoImg: {
-    width: 38,
-    height: 38,
+    width: 52,
+    height: 52,
   },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
   createBtn: {
