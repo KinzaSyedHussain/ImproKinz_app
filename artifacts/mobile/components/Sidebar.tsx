@@ -4,8 +4,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
-  Dimensions,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -54,6 +54,7 @@ const NAV_ITEMS = [
   { icon: "search", label: "Search", route: "/search" },
   { icon: "award", label: "Leaderboard", route: "/leaderboard" },
   { icon: "bookmark", label: "Saved Posts", route: "/(tabs)/" },
+  { icon: "settings", label: "Settings", route: "/settings" },
 ];
 
 export function Sidebar({ visible, onClose }: Props) {
@@ -115,19 +116,15 @@ export function Sidebar({ visible, onClose }: Props) {
       <Animated.View
         style={[
           styles.sidebar,
-          {
-            backgroundColor: colors.card,
-            transform: [{ translateX }],
-            paddingTop: insets.top + 8,
-            paddingBottom: insets.bottom + 16,
-          },
+          { backgroundColor: colors.card, transform: [{ translateX }] },
         ]}
       >
+        {/* Fixed gradient header */}
         <LinearGradient
           colors={[colors.gradientStart, colors.gradientEnd]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.profileHeader}
+          style={[styles.profileHeader, { paddingTop: insets.top + 16 }]}
         >
           <UserAvatar
             photoURL={profile?.photoURL}
@@ -143,73 +140,76 @@ export function Sidebar({ visible, onClose }: Props) {
           )}
         </LinearGradient>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-            AI STUDY TOOLS
-          </Text>
-          {TOOLS.map((tool) => (
-            <TouchableOpacity
-              key={tool.route}
-              style={[styles.toolItem, { borderColor: colors.border }]}
-              onPress={() => navigate(tool.route)}
-            >
-              <View
-                style={[
-                  styles.toolIcon,
-                  { backgroundColor: tool.color + "18" },
-                ]}
-              >
-                <Icon name={tool.icon as any} size={20} color={tool.color} />
-              </View>
-              <View style={styles.toolInfo}>
-                <Text style={[styles.toolLabel, { color: colors.foreground }]}>
-                  {tool.label}
-                </Text>
-                <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
-                  {tool.desc}
-                </Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-        <View style={styles.section}>
-          {NAV_ITEMS.map((item) => (
-            <TouchableOpacity
-              key={item.route}
-              style={styles.navItem}
-              onPress={() => navigate(item.route)}
-            >
-              <Icon name={item.icon as any} size={20} color={colors.foreground} />
-              <Text style={[styles.navLabel, { color: colors.foreground }]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-        <TouchableOpacity style={styles.navItem} onPress={toggleTheme}>
-          <Icon name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
-          <Text style={[styles.navLabel, { color: colors.primary }]}>
-            {isDark ? "Light Mode" : "Dark Mode"}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={async () => {
-            onClose();
-            await logOut();
-          }}
+        {/* Scrollable content — ensures Light Mode / Sign Out are always reachable */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          <Icon name="log-out" size={20} color="#EF4444" />
-          <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
-        </TouchableOpacity>
+          <View style={styles.section}>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+              AI STUDY TOOLS
+            </Text>
+            {TOOLS.map((tool) => (
+              <TouchableOpacity
+                key={tool.route}
+                style={[styles.toolItem, { borderColor: colors.border }]}
+                onPress={() => navigate(tool.route)}
+              >
+                <View style={[styles.toolIcon, { backgroundColor: tool.color + "18" }]}>
+                  <Icon name={tool.icon as any} size={20} color={tool.color} />
+                </View>
+                <View style={styles.toolInfo}>
+                  <Text style={[styles.toolLabel, { color: colors.foreground }]}>
+                    {tool.label}
+                  </Text>
+                  <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
+                    {tool.desc}
+                  </Text>
+                </View>
+                <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.section}>
+            {NAV_ITEMS.map((item) => (
+              <TouchableOpacity
+                key={item.route}
+                style={styles.navItem}
+                onPress={() => navigate(item.route)}
+              >
+                <Icon name={item.icon as any} size={20} color={colors.foreground} />
+                <Text style={[styles.navLabel, { color: colors.foreground }]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+          <TouchableOpacity style={styles.navItem} onPress={toggleTheme}>
+            <Icon name={isDark ? "sun" : "moon"} size={20} color={colors.primary} />
+            <Text style={[styles.navLabel, { color: colors.primary }]}>
+              {isDark ? "Light Mode" : "Dark Mode"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={async () => {
+              onClose();
+              await logOut();
+            }}
+          >
+            <Icon name="log-out" size={20} color="#EF4444" />
+            <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </Animated.View>
     </View>
   );
