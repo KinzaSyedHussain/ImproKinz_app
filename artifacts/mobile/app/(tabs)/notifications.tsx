@@ -1,12 +1,11 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
-  Linking,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -49,7 +48,18 @@ function timeLabel(iso: string) {
 
 function VideoCard({ video }: { video: Video }) {
   const colors = useColors();
-  const open = () => Linking.openURL(video.url).catch(() => {});
+  const router = useRouter();
+  const open = () =>
+    router.push({
+      pathname: "/video-player",
+      params: {
+        videoId: video.videoId,
+        title: video.title,
+        channelName: video.channelName,
+        viewCount: video.viewCount ?? "",
+        duration: video.duration ?? "",
+      },
+    });
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}

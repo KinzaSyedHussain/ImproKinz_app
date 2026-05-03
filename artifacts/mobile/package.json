@@ -60,6 +60,7 @@
     "expo-document-picker": "^55.0.13",
     "expo-image-manipulator": "^14.0.8",
     "expo-video": "^3.0.16",
-    "firebase": "^12.12.1"
+    "firebase": "^12.12.1",
+    "react-native-webview": "^13.16.1"
   }
 }
