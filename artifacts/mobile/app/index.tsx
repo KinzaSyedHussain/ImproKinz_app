@@ -60,18 +60,26 @@ function TreasureChest({ pulse }: { pulse: Animated.Value }) {
 }
 
 export default function Root() {
-  const { user, loading, configured } = useAuth();
+  const { user, profile, loading, configured } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
     if (!configured) return;
     const t = setTimeout(() => {
-      if (user) router.replace("/(tabs)/");
-      else router.replace("/auth/login");
+      if (user) {
+        // Send new users (no onboardingComplete flag) to the wizard
+        if (profile && !(profile as any).onboardingComplete) {
+          router.replace("/onboarding");
+        } else {
+          router.replace("/(tabs)/");
+        }
+      } else {
+        router.replace("/auth/login");
+      }
     }, 3000);
     return () => clearTimeout(t);
-  }, [user, loading, configured]);
+  }, [user, loading, configured, profile]);
 
   // --- Animated values ---
   const fadeIn = useRef(new Animated.Value(0)).current;
