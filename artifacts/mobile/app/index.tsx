@@ -5,6 +5,7 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Image,
   StyleSheet,
   Text,
   View,
@@ -12,52 +13,29 @@ import {
 import { useAuth } from "@/context/AuthContext";
 
 const { width: W, height: H } = Dimensions.get("window");
-const CX = W / 2;
-const ORBIT_R = 108;
-const CHEST_CY = H * 0.42;
 
-const STARS = Array.from({ length: 42 }, (_, i) => ({
+const STARS = Array.from({ length: 55 }, (_, i) => ({
   key: i,
-  x: ((i * 137.508) % 1) * W + (i % 5) * 18,
-  y: ((i * 79.37) % 1) * (H * 0.72) + (i % 4) * 11,
-  size: i % 3 === 0 ? 3 : 1.8,
-  delay: (i * 213) % 1900,
+  x: ((i * 137.508) % 1) * W + (i % 7) * 14,
+  y: ((i * 79.37) % 1) * H + (i % 5) * 10,
+  size: i % 4 === 0 ? 2.5 : i % 3 === 0 ? 1.8 : 1.2,
+  delay: (i * 197) % 2200,
+  duration: 600 + (i % 5) * 200,
 }));
 
-const ORBIT_ICONS = [
-  { emoji: "🧠", base: 0 },
-  { emoji: "💡", base: 90 },
-  { emoji: "☁️", base: 180 },
-  { emoji: "📚", base: 270 },
+const FEATURES = [
+  { icon: "🧠", label: "AI Study Tools" },
+  { icon: "📚", label: "Smart Notes" },
+  { icon: "🏆", label: "XP & Rewards" },
+  { icon: "🌐", label: "Study Community" },
 ];
 
 const MESSAGES = [
-  "Unlocking the treasure chest",
-  "Loading knowledge maps",
+  "Unlocking knowledge treasures",
   "Preparing AI-powered tools",
-  "Almost there",
+  "Loading your study space",
+  "Almost ready",
 ];
-
-function TreasureChest({ pulse }: { pulse: Animated.Value }) {
-  const sc = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
-  return (
-    <Animated.View style={{ alignItems: "center", transform: [{ scale: sc }] }}>
-      {/* Glow behind chest */}
-      <View style={styles.chestGlow} />
-      {/* Lid */}
-      <View style={styles.lid}>
-        <View style={styles.lidShine} />
-        <View style={styles.lidTrim} />
-        <Text style={styles.booksEmoji}>📚</Text>
-      </View>
-      {/* Body */}
-      <View style={styles.body}>
-        <View style={styles.bodyStripe} />
-        <View style={styles.lock} />
-      </View>
-    </Animated.View>
-  );
-}
 
 export default function Root() {
   const { user, profile, loading, configured } = useAuth();
@@ -66,7 +44,6 @@ export default function Root() {
   useEffect(() => {
     if (loading) return;
     if (!configured) return;
-    // If a user is signed in, wait for their profile to load before deciding where to go
     if (user && !profile) return;
 
     const t = setTimeout(() => {
@@ -79,44 +56,45 @@ export default function Root() {
       } else {
         router.replace("/auth/login");
       }
-    }, 3000);
+    }, 3200);
     return () => clearTimeout(t);
   }, [user, loading, configured, profile]);
 
-  // --- Animated values ---
   const fadeIn = useRef(new Animated.Value(0)).current;
-  const chestPulse = useRef(new Animated.Value(0)).current;
-  const starAnims = useRef(STARS.map(() => new Animated.Value(0.15))).current;
+  const logoScale = useRef(new Animated.Value(0.7)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const titleFade = useRef(new Animated.Value(0)).current;
+  const taglineFade = useRef(new Animated.Value(0)).current;
+  const featuresFade = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.6)).current;
+  const starAnims = useRef(STARS.map(() => new Animated.Value(0.1))).current;
 
-  // Orbit driven by JS timer so we can use Math.cos/sin
-  const [orbitDeg, setOrbitDeg] = useState(0);
-  const orbitRef = useRef(0);
-
-  const [dotIndex, setDotIndex] = useState(0);
-  const [msgIndex, setMsgIndex] = useState(0);
   const [pct, setPct] = useState(0);
+  const [msgIndex, setMsgIndex] = useState(0);
 
   useEffect(() => {
-    Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }).start();
+    // Staggered entrance animations
+    Animated.sequence([
+      Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.spring(logoScale, { toValue: 1, friction: 7, tension: 60, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+      Animated.timing(titleFade, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(taglineFade, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.timing(featuresFade, { toValue: 1, duration: 350, useNativeDriver: true }),
+    ]).start();
 
+    // Glow pulse on logo
     Animated.loop(
       Animated.sequence([
-        Animated.timing(chestPulse, { toValue: 1, duration: 850, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(chestPulse, { toValue: 0, duration: 850, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.5, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     ).start();
 
-    starAnims.forEach((anim, i) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(STARS[i].delay),
-          Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.1, duration: 900, useNativeDriver: true }),
-        ])
-      ).start();
-    });
-
+    // Progress bar
     Animated.timing(progressAnim, {
       toValue: 100,
       duration: 3200,
@@ -125,35 +103,41 @@ export default function Root() {
     }).start();
     const id = progressAnim.addListener(({ value }) => setPct(Math.round(value)));
 
-    // Orbit at ~40fps
-    const orbitTimer = setInterval(() => {
-      orbitRef.current = (orbitRef.current + 0.9) % 360;
-      setOrbitDeg(orbitRef.current);
-    }, 25);
+    // Stars
+    starAnims.forEach((anim, i) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(STARS[i].delay),
+          Animated.timing(anim, { toValue: 0.9, duration: STARS[i].duration, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.05, duration: STARS[i].duration * 1.4, useNativeDriver: true }),
+        ])
+      ).start();
+    });
 
-    const dotTimer = setInterval(() => setDotIndex((d) => (d + 1) % 4), 500);
-    const msgTimer = setInterval(() => setMsgIndex((m) => (m + 1) % MESSAGES.length), 1100);
-
+    const msgTimer = setInterval(() => setMsgIndex((m) => (m + 1) % MESSAGES.length), 900);
     return () => {
       progressAnim.removeListener(id);
-      clearInterval(orbitTimer);
-      clearInterval(dotTimer);
       clearInterval(msgTimer);
     };
   }, []);
 
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+  });
+
   return (
     <Animated.View style={[styles.root, { opacity: fadeIn }]}>
       <LinearGradient
-        colors={["#1C0B52", "#0D0B2B", "#140A38"]}
-        locations={[0, 0.55, 1]}
+        colors={["#110932", "#0D0B2B", "#1A0945", "#0D0B2B"]}
+        locations={[0, 0.35, 0.7, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Nebula blobs */}
-      <View style={[styles.blob, { top: H * 0.05, left: -70, backgroundColor: "#7C3AED1A", width: 200, height: 200 }]} />
-      <View style={[styles.blob, { top: H * 0.25, right: -60, backgroundColor: "#4C1D951A", width: 240, height: 240 }]} />
-      <View style={[styles.blob, { bottom: H * 0.1, left: W * 0.15, backgroundColor: "#7C3AED14", width: 160, height: 160 }]} />
+      {/* Ambient glow orbs */}
+      <View style={[styles.orb, { top: -80, left: -80, width: 280, height: 280, backgroundColor: "#7C3AED18" }]} />
+      <View style={[styles.orb, { top: H * 0.3, right: -100, width: 320, height: 320, backgroundColor: "#4C1D9510" }]} />
+      <View style={[styles.orb, { bottom: 0, left: W * 0.1, width: 250, height: 250, backgroundColor: "#F59E0B08" }]} />
 
       {/* Stars */}
       {STARS.map((s, i) => (
@@ -161,240 +145,236 @@ export default function Root() {
           key={s.key}
           style={[
             styles.star,
-            { left: s.x, top: s.y, width: s.size, height: s.size, borderRadius: s.size / 2, opacity: starAnims[i] },
+            { left: s.x, top: s.y, width: s.size, height: s.size, borderRadius: s.size, opacity: starAnims[i] },
           ]}
         />
       ))}
 
-      {/* Logo */}
-      <View style={styles.logoRow}>
-        <Text style={styles.logoStar}>✦</Text>
-        <Text style={styles.logoText}>
-          <Text style={{ color: "#FFFFFF" }}>Impro</Text>
-          <Text style={{ color: "#F59E0B" }}>Kinz</Text>
+      {/* Main content */}
+      <View style={styles.content}>
+
+        {/* Logo with glow */}
+        <Animated.View style={[styles.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+          <Animated.View style={[styles.logoGlow, { opacity: glowAnim }]} />
+          <View style={styles.logoBg}>
+            <Image
+              source={require("../assets/images/logo_nobg.png")}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
+          </View>
+        </Animated.View>
+
+        {/* App name */}
+        <Animated.View style={[styles.titleWrap, { opacity: titleFade }]}>
+          <Text style={styles.titleImpro}>Impro</Text>
+          <Text style={styles.titleKinz}>Kinz</Text>
+        </Animated.View>
+
+        {/* Tagline */}
+        <Animated.Text style={[styles.tagline, { opacity: taglineFade }]}>
+          Your AI-Powered Study Companion
+        </Animated.Text>
+
+        {/* Feature pills */}
+        <Animated.View style={[styles.featuresRow, { opacity: featuresFade }]}>
+          {FEATURES.map((f) => (
+            <View key={f.label} style={styles.featurePill}>
+              <Text style={styles.featureIcon}>{f.icon}</Text>
+              <Text style={styles.featureLabel}>{f.label}</Text>
+            </View>
+          ))}
+        </Animated.View>
+
+        {/* Divider */}
+        <View style={styles.divider} />
+
+        {/* Progress */}
+        <View style={styles.progressWrap}>
+          <View style={styles.progressTrack}>
+            <Animated.View style={[styles.progressBar, { width: progressWidth }]}>
+              <LinearGradient
+                colors={["#F59E0B", "#D97706", "#F59E0B"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.progressShine} />
+            </Animated.View>
+          </View>
+          <Text style={styles.progressPct}>{pct}%</Text>
+        </View>
+
+        <Text style={styles.loadingMsg} numberOfLines={1}>
+          {MESSAGES[msgIndex]}…
         </Text>
       </View>
 
-      {/* Orbit + Chest area — positioned absolutely so star count is correct */}
-      <View style={[styles.orbitArea, { marginTop: 24 }]}>
-        {/* Orbit ring */}
-        <View
-          style={[
-            styles.orbitRing,
-            {
-              left: CX - ORBIT_R - 16,
-              top: ORBIT_R - 16,
-              width: (ORBIT_R + 16) * 2,
-              height: (ORBIT_R + 16) * 2,
-              borderRadius: ORBIT_R + 16,
-            },
-          ]}
-        />
-
-        {/* Chest centred */}
-        <View style={[styles.chestAnchor, { left: CX - 52, top: ORBIT_R - 52 }]}>
-          <TreasureChest pulse={chestPulse} />
-        </View>
-
-        {/* Orbiting icons */}
-        {ORBIT_ICONS.map((icon) => {
-          const rad = ((orbitDeg + icon.base) * Math.PI) / 180;
-          const ix = CX + Math.cos(rad) * ORBIT_R - 18;
-          const iy = ORBIT_R + Math.sin(rad) * ORBIT_R - 18;
-          return (
-            <View key={icon.base} style={[styles.iconWrap, { left: ix, top: iy }]}>
-              <Text style={styles.orbitEmoji}>{icon.emoji}</Text>
-            </View>
-          );
-        })}
-
-        {/* Ring accent dots */}
-        {[30, 80, 150, 210, 290, 340].map((deg, i) => {
-          const rad = (deg * Math.PI) / 180;
-          const dx = CX + Math.cos(rad) * (ORBIT_R + 14) - 5;
-          const dy = ORBIT_R + Math.sin(rad) * (ORBIT_R + 14) - 5;
-          return <View key={i} style={[styles.ringDot, { left: dx, top: dy }]} />;
-        })}
+      {/* Bottom badge */}
+      <View style={styles.badge}>
+        <Text style={styles.badgeText}>✦  Study Smart. Level Up.</Text>
       </View>
-
-      {/* Text section */}
-      <Text style={styles.title}>Loading your knowledge{"\n"}treasures...</Text>
-
-      <View style={styles.dotsRow}>
-        {[0, 1, 2, 3].map((d) => (
-          <View key={d} style={[styles.dot, d === dotIndex && styles.dotActive]} />
-        ))}
-      </View>
-
-      <Text style={styles.subText}>
-        {MESSAGES[msgIndex]} ({pct}%)...
-      </Text>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  blob: { position: "absolute", borderRadius: 120 },
+  orb: { position: "absolute", borderRadius: 200 },
   star: { position: "absolute", backgroundColor: "#FFFFFF" },
 
-  logoRow: {
-    flexDirection: "row",
+  content: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: H * 0.09,
-    gap: 7,
+    paddingHorizontal: 32,
+    paddingTop: H * 0.05,
+    gap: 0,
   },
-  logoStar: { fontSize: 20, color: "#F59E0B" },
-  logoText: { fontSize: 30, fontWeight: "800", fontFamily: undefined },
 
-  orbitArea: {
-    width: W,
-    height: (ORBIT_R + 20) * 2 + 36,
+  // Logo
+  logoWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  logoGlow: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "#F59E0B22",
+  },
+  logoBg: {
+    width: 160,
+    height: 160,
+    borderRadius: 40,
+    backgroundColor: "#1E1050",
+    borderWidth: 1.5,
+    borderColor: "#F59E0B33",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 12,
+    overflow: "hidden",
+  },
+  logoImg: {
+    width: 140,
+    height: 140,
+  },
+
+  // Title
+  titleWrap: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  titleImpro: {
+    fontSize: 40,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: -0.5,
+  },
+  titleKinz: {
+    fontSize: 40,
+    fontWeight: "800",
+    color: "#F59E0B",
+    letterSpacing: -0.5,
+  },
+
+  tagline: {
+    fontSize: 15,
+    color: "#A78BFA",
+    textAlign: "center",
+    letterSpacing: 0.3,
+    marginBottom: 28,
+  },
+
+  // Feature pills
+  featuresRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    justifyContent: "center",
+    marginBottom: 28,
+  },
+  featurePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FFFFFF0D",
+    borderWidth: 1,
+    borderColor: "#FFFFFF15",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  featureIcon: { fontSize: 13 },
+  featureLabel: { fontSize: 12, color: "#C4B5FD", fontWeight: "500" },
+
+  divider: {
+    width: 60,
+    height: 1,
+    backgroundColor: "#F59E0B33",
+    marginBottom: 24,
+  },
+
+  // Progress
+  progressWrap: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 5,
+    backgroundColor: "#FFFFFF12",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBar: {
+    height: "100%",
+    borderRadius: 4,
+    overflow: "hidden",
     position: "relative",
   },
-  orbitRing: {
+  progressShine: {
     position: "absolute",
-    borderWidth: 1.5,
-    borderColor: "#A78BFA55",
-  },
-  chestAnchor: {
-    position: "absolute",
-    width: 104,
-    height: 104,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconWrap: {
-    position: "absolute",
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  orbitEmoji: { fontSize: 22 },
-  ringDot: {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#C4B5FD77",
-  },
-
-  // Chest
-  chestGlow: {
-    position: "absolute",
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#7C3AED2A",
-    top: -4,
-  },
-  lid: {
-    width: 88,
-    height: 36,
-    backgroundColor: "#92400E",
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderWidth: 2,
-    borderColor: "#D97706",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    overflow: "visible",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  lidShine: {
-    position: "absolute",
-    top: 5,
-    left: 8,
-    right: 8,
-    height: 9,
-    backgroundColor: "#FCD34D44",
-    borderRadius: 6,
-  },
-  lidTrim: {
-    position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 5,
-    backgroundColor: "#D97706",
+    height: 2,
+    backgroundColor: "#FFFFFF44",
+    borderRadius: 2,
   },
-  booksEmoji: {
-    position: "absolute",
-    top: -30,
-    fontSize: 28,
-  },
-  body: {
-    width: 88,
-    height: 50,
-    backgroundColor: "#92400E",
-    borderBottomLeftRadius: 10,
-    borderBottomRightRadius: 10,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderColor: "#D97706",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  bodyStripe: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 13,
-    height: 5,
-    backgroundColor: "#D97706",
-    opacity: 0.55,
-  },
-  lock: {
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: "#D97706",
-    borderWidth: 2,
-    borderColor: "#FCD34D",
-  },
-
-  title: {
-    color: "#FFFFFF",
-    fontSize: 22,
+  progressPct: {
+    fontSize: 12,
     fontWeight: "700",
-    textAlign: "center",
-    marginTop: 24,
-    lineHeight: 32,
-    fontFamily: undefined,
+    color: "#F59E0B",
+    minWidth: 34,
+    textAlign: "right",
   },
-  dotsRow: {
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "center",
-    marginTop: 18,
+  loadingMsg: {
+    fontSize: 13,
+    color: "#7C6FAA",
+    textAlign: "center",
+    letterSpacing: 0.2,
+  },
+
+  // Bottom badge
+  badge: {
+    paddingBottom: 36,
     alignItems: "center",
   },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: "#A78BFA44",
-  },
-  dotActive: {
-    backgroundColor: "#C4B5FD",
-    width: 11,
-    height: 11,
-  },
-  subText: {
-    color: "#A78BFA",
+  badgeText: {
     fontSize: 13,
-    textAlign: "center",
-    marginTop: 10,
-    fontFamily: undefined,
-    opacity: 0.9,
+    color: "#FFFFFF22",
+    letterSpacing: 1,
+    fontWeight: "600",
   },
 });

@@ -155,12 +155,14 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerBtn}>
           <Icon name="menu" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <Image
-          source={require("../../assets/images/logo_nobg.png")}
-          style={styles.logoImg}
-          resizeMode="contain"
-        />
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>ImproKinz</Text>
+        <View style={styles.logoBrand}>
+          <Image
+            source={require("../../assets/images/logo_nobg.png")}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>ImproKinz</Text>
+        </View>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
           onPress={() => router.push("/search")}
@@ -249,11 +251,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: { padding: 4 },
-  logoImg: {
-    width: 52,
-    height: 52,
+  logoBrand: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
   },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
+  logoImg: {
+    width: 56,
+    height: 56,
+  },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 19 },
   createBtn: {
     width: 34,
     height: 34,
