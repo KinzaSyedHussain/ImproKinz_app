@@ -156,7 +156,7 @@ export default function HomeScreen() {
           <Icon name="menu" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Image
-          source={require("../../assets/images/logo.jpg")}
+          source={require("../../assets/images/logo_nobg.png")}
           style={styles.logoImg}
           resizeMode="contain"
         />
@@ -250,9 +250,8 @@ const styles = StyleSheet.create({
   },
   headerBtn: { padding: 4 },
   logoImg: {
-    width: 34,
-    height: 34,
-    borderRadius: 6,
+    width: 38,
+    height: 38,
   },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
   createBtn: {
