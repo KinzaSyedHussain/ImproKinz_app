@@ -1,11 +1,12 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Image,
+  Linking,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -49,18 +50,7 @@ function timeLabel(iso: string) {
 
 function VideoCard({ video }: { video: Video }) {
   const colors = useColors();
-  const router = useRouter();
-  const open = () =>
-    router.push({
-      pathname: "/video-player",
-      params: {
-        videoId: video.videoId,
-        title: video.title,
-        channelName: video.channelName,
-        viewCount: video.viewCount ?? "",
-        duration: video.duration ?? "",
-      },
-    });
+  const open = () => Linking.openURL(video.url).catch(() => {});
   return (
     <TouchableOpacity
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -297,8 +287,8 @@ export default function StudyVideosScreen() {
               <Icon name="refresh-cw" size={13} color={colors.primary} />
               <Text style={[styles.channelNoteText, { color: colors.mutedForeground }]}>
                 {isSearchMode
-                  ? `${videos.length} result${videos.length !== 1 ? "s" : ""} · Pull down to refresh`
-                  : "Pull down to refresh for a new set of videos"}
+                  ? `${videos.length} result${videos.length !== 1 ? "s" : ""} · Tap to open in YouTube · Pull to refresh`
+                  : "Tap any video to watch on YouTube · Pull to refresh"}
               </Text>
             </View>
           }
