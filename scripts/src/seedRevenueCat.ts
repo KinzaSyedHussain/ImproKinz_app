@@ -26,7 +26,7 @@ import {
   type CreateProductData,
 } from "@replit/revenuecat-sdk";
 
-const PROJECT_NAME = "ImproKinz";
+const PROJECT_NAME = "Improkinz";
 
 const PRODUCT_IDENTIFIER = "improkinz_premium_monthly";
 const PLAY_STORE_PRODUCT_IDENTIFIER = "improkinz_premium_monthly:monthly";
