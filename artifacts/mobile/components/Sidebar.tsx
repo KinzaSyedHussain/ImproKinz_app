@@ -52,7 +52,6 @@ const TOOLS = [
 
 const NAV_ITEMS = [
   { icon: "search", label: "Search", route: "/search" },
-  { icon: "award", label: "Leaderboard", route: "/leaderboard" },
   { icon: "bookmark", label: "Saved Posts", route: "/(tabs)/" },
   { icon: "settings", label: "Settings", route: "/settings" },
 ];
