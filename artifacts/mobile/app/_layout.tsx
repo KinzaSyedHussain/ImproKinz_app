@@ -1,6 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  useFonts,
+} from "@expo-google-fonts/inter";
 import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -24,16 +31,14 @@ function RootLayoutNav() {
         name="create-post"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
-      <Stack.Screen
-        name="post/[id]"
-        options={{ presentation: "modal" }}
-      />
+      <Stack.Screen name="post/[id]" options={{ presentation: "modal" }} />
       <Stack.Screen name="user/[id]" />
       <Stack.Screen name="search" />
       <Stack.Screen name="leaderboard" />
       <Stack.Screen name="flashcards" />
       <Stack.Screen name="summarizer" />
       <Stack.Screen name="quiz" />
+      <Stack.Screen name="notes" />
     </Stack>
   );
 }
@@ -55,9 +60,20 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+  });
+
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
