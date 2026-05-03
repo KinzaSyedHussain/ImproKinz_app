@@ -67,7 +67,7 @@ export function Sidebar({ visible, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, logOut } = useAuth();
+  const { user, profile, logOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
 
@@ -194,21 +194,33 @@ export function Sidebar({ visible, onClose }: Props) {
               </Text>
             </TouchableOpacity>
 
-            {/* Sign out */}
-            <TouchableOpacity
-              style={[styles.navItem, styles.signOutItem]}
-              onPress={async () => {
-                onClose();
-                try {
-                  await logOut();
-                } catch {}
-                router.replace("/auth/login");
-              }}
-              activeOpacity={0.7}
-            >
-              <Icon name="log-out" size={20} color="#EF4444" />
-              <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
-            </TouchableOpacity>
+            {/* Sign In / Sign Out — toggles based on auth state */}
+            {user ? (
+              <TouchableOpacity
+                style={[styles.navItem, styles.signOutItem]}
+                onPress={async () => {
+                  onClose();
+                  try { await logOut(); } catch {}
+                  router.replace("/auth/login");
+                }}
+                activeOpacity={0.7}
+              >
+                <Icon name="log-out" size={20} color="#EF4444" />
+                <Text style={[styles.navLabel, { color: "#EF4444" }]}>Sign Out</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.navItem, styles.signOutItem]}
+                onPress={() => {
+                  onClose();
+                  router.replace("/auth/login");
+                }}
+                activeOpacity={0.7}
+              >
+                <Icon name="log-in" size={20} color="#A78BFA" />
+                <Text style={[styles.navLabel, { color: "#A78BFA" }]}>Sign In</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         </Animated.View>
       </View>
