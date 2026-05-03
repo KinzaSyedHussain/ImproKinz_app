@@ -2,6 +2,7 @@ import { Icon } from "@/components/Icon";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import {
   collection,
   getDocs,
@@ -9,19 +10,15 @@ import {
   where,
 } from "firebase/firestore";
 import { doc, setDoc } from "firebase/firestore";
-import { useTheme } from "@/context/ThemeContext";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -32,17 +29,6 @@ import { useColors } from "@/hooks/useColors";
 import { Post, PostCard } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 import { XPStreakBadge } from "@/components/XPStreakBadge";
-
-const ALL_SUBJECTS = [
-  "Math", "Science", "History", "English", "Physics",
-  "Chemistry", "Biology", "Computer Science", "Economics", "Art",
-  "Literature", "Geography", "Psychology", "Music", "Other",
-];
-
-const STUDY_GOALS = [
-  "Ace my exams", "Build a habit", "Learn a new skill",
-  "Improve grades", "Prep for college", "Personal growth",
-];
 
 async function pickAndConvertToBase64(
   options: ImagePicker.ImagePickerOptions,
@@ -63,8 +49,8 @@ async function pickAndConvertToBase64(
 export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { profile, user, refreshProfile } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
 
   const [posts, setPosts] = useState<Post[]>([]);
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
@@ -73,27 +59,6 @@ export default function ProfileScreen() {
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
-
-  // Inline edit state
-  const [editingBio, setEditingBio] = useState(false);
-  const [bioText, setBioText] = useState("");
-  const [editingName, setEditingName] = useState(false);
-  const [nameText, setNameText] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  // Subject & goal selection
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [selectedGoal, setSelectedGoal] = useState("");
-  const [subjectsChanged, setSubjectsChanged] = useState(false);
-
-  useEffect(() => {
-    if (profile) {
-      setBioText(profile.bio || "");
-      setNameText(profile.displayName || "");
-      setSelectedSubjects(profile.subjects || []);
-      setSelectedGoal((profile as any).studyGoal || "");
-    }
-  }, [profile?.uid]);
 
   useEffect(() => {
     if (!user) return;
@@ -158,44 +123,15 @@ export default function ProfileScreen() {
     }
   };
 
-  const saveProfileField = async (fields: Record<string, any>) => {
-    if (!user) return;
-    setSavingProfile(true);
-    try {
-      await setDoc(doc(db, "users", user.uid), fields, { merge: true });
-      await refreshProfile();
-    } catch (e: any) {
-      Alert.alert("Save failed", e?.message || "Could not save. Try again.");
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  const toggleSubject = async (s: string) => {
-    const next = selectedSubjects.includes(s)
-      ? selectedSubjects.filter((x) => x !== s)
-      : [...selectedSubjects, s];
-    setSelectedSubjects(next);
-    setSubjectsChanged(true);
-    await saveProfileField({ subjects: next });
-  };
-
-  const selectGoal = async (g: string) => {
-    const next = selectedGoal === g ? "" : g;
-    setSelectedGoal(next);
-    await saveProfileField({ studyGoal: next });
-  };
-
   const topPad = insets.top;
   const botPad = 70 + insets.bottom;
   const BANNER_HEIGHT = 160;
   const displayPosts = tab === "posts" ? posts : savedPosts;
+  const subjects: string[] = (profile as any)?.subjects || [];
+  const goal: string = (profile as any)?.studyGoal || "";
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
         data={displayPosts}
         keyExtractor={(item) => item.id}
@@ -220,12 +156,12 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              {/* Theme toggle — top right */}
+              {/* Settings button — top right */}
               <TouchableOpacity
                 style={[styles.cornerBtn, { top: topPad + 10, right: 12 }]}
-                onPress={toggleTheme}
+                onPress={() => router.push("/settings")}
               >
-                <Icon name={isDark ? "sun" : "moon"} size={16} color="#fff" />
+                <Icon name="settings" size={16} color="#fff" />
               </TouchableOpacity>
 
               {/* Banner camera — bottom right of banner */}
@@ -268,124 +204,61 @@ export default function ProfileScreen() {
 
             {/* ── Info block ── */}
             <View style={[styles.infoBlock, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-              {/* Name row */}
               <View style={styles.nameRow}>
-                {editingName ? (
-                  <TextInput
-                    style={[styles.nameInput, { color: colors.foreground, borderBottomColor: colors.primary }]}
-                    value={nameText}
-                    onChangeText={setNameText}
-                    autoFocus
-                    returnKeyType="done"
-                    onBlur={async () => {
-                      setEditingName(false);
-                      if (nameText.trim() && nameText !== profile?.displayName) {
-                        await saveProfileField({ displayName: nameText.trim() });
-                      }
-                    }}
-                    onSubmitEditing={async () => {
-                      setEditingName(false);
-                      if (nameText.trim() && nameText !== profile?.displayName) {
-                        await saveProfileField({ displayName: nameText.trim() });
-                      }
-                    }}
-                  />
-                ) : (
-                  <TouchableOpacity onPress={() => setEditingName(true)} style={styles.nameTouch}>
-                    <Text style={[styles.name, { color: colors.foreground }]}>
-                      {profile?.displayName || "Tap to set name"}
-                    </Text>
-                    <Icon name="edit-2" size={13} color={colors.mutedForeground} style={{ marginLeft: 6 }} />
-                  </TouchableOpacity>
-                )}
+                <Text style={[styles.name, { color: colors.foreground }]}>
+                  {profile?.displayName || "Study User"}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.editBtn, { borderColor: colors.border }]}
+                  onPress={() => router.push("/settings")}
+                >
+                  <Icon name="edit-2" size={12} color={colors.mutedForeground} />
+                  <Text style={[styles.editBtnText, { color: colors.mutedForeground }]}>Edit</Text>
+                </TouchableOpacity>
               </View>
               <Text style={[styles.email, { color: colors.mutedForeground }]}>{profile?.email || ""}</Text>
-
-              {/* Bio */}
-              {editingBio ? (
-                <View style={[styles.bioEditWrap, { borderColor: colors.primary, backgroundColor: colors.muted }]}>
-                  <TextInput
-                    style={[styles.bioInput, { color: colors.foreground }]}
-                    value={bioText}
-                    onChangeText={setBioText}
-                    multiline
-                    autoFocus
-                    placeholder="Write your bio..."
-                    placeholderTextColor={colors.mutedForeground}
-                    maxLength={160}
-                  />
-                  <View style={styles.bioActions}>
-                    <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{bioText.length}/160</Text>
-                    <TouchableOpacity
-                      style={[styles.saveBioBtn, { backgroundColor: colors.primary }]}
-                      onPress={async () => {
-                        setEditingBio(false);
-                        await saveProfileField({ bio: bioText.trim() });
-                      }}
-                    >
-                      {savingProfile
-                        ? <ActivityIndicator size="small" color="#fff" />
-                        : <Text style={styles.saveBioText}>Save</Text>}
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              {profile?.bio ? (
+                <Text style={[styles.bio, { color: colors.foreground }]}>{profile.bio}</Text>
               ) : (
-                <TouchableOpacity onPress={() => setEditingBio(true)} style={styles.bioTouch}>
-                  <Text style={[styles.bioDisplay, { color: profile?.bio ? colors.foreground : colors.mutedForeground }]}>
-                    {profile?.bio || "Tap to add a bio..."}
+                <TouchableOpacity onPress={() => router.push("/settings")}>
+                  <Text style={[styles.bio, { color: colors.mutedForeground }]}>
+                    Tap Edit to add a bio...
                   </Text>
-                  <Icon name="edit-2" size={11} color={colors.mutedForeground} style={{ marginLeft: 4, marginTop: 2 }} />
                 </TouchableOpacity>
               )}
+
+              {/* Subjects summary — read-only, tappable to edit */}
+              {subjects.length > 0 && (
+                <TouchableOpacity style={styles.tagsRow} onPress={() => router.push("/settings")}>
+                  {subjects.slice(0, 4).map((s) => (
+                    <View key={s} style={[styles.tag, { backgroundColor: colors.muted }]}>
+                      <Text style={[styles.tagText, { color: colors.mutedForeground }]}>{s}</Text>
+                    </View>
+                  ))}
+                  {subjects.length > 4 && (
+                    <View style={[styles.tag, { backgroundColor: colors.muted }]}>
+                      <Text style={[styles.tagText, { color: colors.mutedForeground }]}>
+                        +{subjects.length - 4}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {/* Goal summary */}
+              {goal ? (
+                <TouchableOpacity onPress={() => router.push("/settings")}>
+                  <View style={[styles.goalBadge, { backgroundColor: colors.accent + "22", borderColor: colors.accent }]}>
+                    <Icon name="target" size={12} color={colors.accent} />
+                    <Text style={[styles.goalText, { color: colors.accent }]}>{goal}</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {/* ── XP / Streak ── */}
             <View style={{ paddingVertical: 12 }}>
               {profile && <XPStreakBadge xp={profile.xp} streak={profile.streak} />}
-            </View>
-
-            {/* ── My Subjects ── */}
-            <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.sectionHeader}>
-                <Icon name="book-open" size={15} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>My Subjects</Text>
-              </View>
-              <View style={styles.chipWrap}>
-                {ALL_SUBJECTS.map((s) => {
-                  const active = selectedSubjects.includes(s);
-                  return (
-                    <TouchableOpacity
-                      key={s}
-                      style={[styles.chip, { backgroundColor: active ? colors.primary : colors.muted, borderColor: active ? colors.primary : colors.border }]}
-                      onPress={() => toggleSubject(s)}
-                    >
-                      <Text style={[styles.chipText, { color: active ? "#fff" : colors.mutedForeground }]}>{s}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* ── Study Goal ── */}
-            <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.sectionHeader}>
-                <Icon name="target" size={15} color={colors.primary} />
-                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Study Goal</Text>
-              </View>
-              <View style={styles.chipWrap}>
-                {STUDY_GOALS.map((g) => {
-                  const active = selectedGoal === g;
-                  return (
-                    <TouchableOpacity
-                      key={g}
-                      style={[styles.chip, { backgroundColor: active ? colors.accent : colors.muted, borderColor: active ? colors.accent : colors.border }]}
-                      onPress={() => selectGoal(g)}
-                    >
-                      <Text style={[styles.chipText, { color: active ? "#fff" : colors.mutedForeground }]}>{g}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
             </View>
 
             {/* ── Posts / Saved tabs ── */}
@@ -422,7 +295,7 @@ export default function ProfileScreen() {
           ) : null
         }
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -456,41 +329,38 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     borderBottomWidth: 1,
   },
-  nameRow: { flexDirection: "row", alignItems: "center", marginBottom: 2 },
-  nameTouch: { flexDirection: "row", alignItems: "center" },
-  name: { fontSize: 20, fontWeight: "700", fontFamily: undefined },
-  nameInput: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: undefined,
-    flex: 1,
-    borderBottomWidth: 1.5,
-    paddingVertical: 2,
-  },
-  email: { fontSize: 12, fontFamily: undefined, marginBottom: 8, opacity: 0.7 },
-  bioTouch: { flexDirection: "row", alignItems: "flex-start" },
-  bioDisplay: { fontSize: 14, lineHeight: 20, fontFamily: undefined, flex: 1 },
-  bioEditWrap: { borderWidth: 1.5, borderRadius: 10, padding: 10, marginTop: 4 },
-  bioInput: { fontSize: 14, lineHeight: 20, fontFamily: undefined, minHeight: 60 },
-  bioActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  charCount: { fontSize: 11, fontFamily: undefined },
-  saveBioBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 14 },
-  saveBioText: { color: "#fff", fontSize: 13, fontFamily: undefined, fontWeight: "600" },
-  section: {
-    marginHorizontal: 12,
-    marginBottom: 10,
-    borderRadius: 14,
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 2 },
+  name: { fontSize: 20, fontWeight: "700" },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    padding: 14,
   },
-  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  sectionTitle: { fontSize: 14, fontWeight: "600", fontFamily: undefined },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  chipText: { fontSize: 12, fontFamily: undefined },
+  editBtnText: { fontSize: 12 },
+  email: { fontSize: 12, marginBottom: 8, opacity: 0.7 },
+  bio: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 },
+  tag: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  tagText: { fontSize: 12 },
+  goalBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 2,
+  },
+  goalText: { fontSize: 12, fontWeight: "500" },
   tabBar: { flexDirection: "row", borderBottomWidth: 1, marginHorizontal: 16, marginTop: 8, marginBottom: 4 },
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 12 },
-  tabLabel: { fontFamily: undefined, fontSize: 14 },
+  tabLabel: { fontSize: 14 },
   empty: { alignItems: "center", paddingTop: 40, gap: 10 },
-  emptyText: { fontFamily: undefined, fontSize: 14 },
+  emptyText: { fontSize: 14 },
 });

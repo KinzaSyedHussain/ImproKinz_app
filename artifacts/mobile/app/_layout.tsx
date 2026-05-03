@@ -40,6 +40,7 @@ function RootLayoutNav() {
       <Stack.Screen name="quiz" />
       <Stack.Screen name="notes" />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
+      <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }
