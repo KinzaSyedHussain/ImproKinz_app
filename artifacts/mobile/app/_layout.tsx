@@ -61,21 +61,23 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  // Ionicons is pre-bundled inside Expo Go on native; only load it explicitly on web
+  const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    ...Ionicons.font,
+    ...(Platform.OS === "web" ? Ionicons.font : {}),
   });
 
   useEffect(() => {
-    if (fontsLoaded) {
+    if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded) return null;
+  // Never block the app on a font error — render anyway
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
