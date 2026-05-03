@@ -248,25 +248,29 @@ export default function PostDetailScreen() {
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
 
   const renderItem = ({ item }: { item: CommentItem }) => {
-    // ── "View / hide replies" row ─────────────────────────────────────────
+    // ── "View / hide replies" row — Facebook style ────────────────────────
     if (item.kind === "view-replies") {
       const hide = item.count === -1;
       return (
         <TouchableOpacity
           style={styles.viewRepliesRow}
           onPress={() => toggleReplies(item.parentId)}
+          activeOpacity={0.7}
         >
-          <View style={styles.replyLineWrap}>
-            <View style={[styles.vertLine, { backgroundColor: colors.border }]} />
+          {/* Left connector: avatar column indent + horizontal dash */}
+          <View style={styles.replyConnectorWrap}>
+            <View style={[styles.replyConnectorLine, { backgroundColor: colors.border }]} />
           </View>
-          <Icon
-            name={hide ? "chevron-up" : "chevron-down"}
-            size={13}
-            color={colors.primary}
-          />
-          <Text style={[styles.viewRepliesText, { color: colors.primary }]}>
-            {hide ? "Hide replies" : `View ${item.count} ${item.count === 1 ? "reply" : "replies"}`}
-          </Text>
+          <View style={[styles.viewRepliesPill, { borderColor: colors.primary + "44", backgroundColor: colors.primary + "14" }]}>
+            <Icon
+              name={hide ? "chevron-up" : "chevron-down"}
+              size={13}
+              color={colors.primary}
+            />
+            <Text style={[styles.viewRepliesText, { color: colors.primary }]}>
+              {hide ? "Hide replies" : `View ${item.count} ${item.count === 1 ? "reply" : "replies"}`}
+            </Text>
+          </View>
         </TouchableOpacity>
       );
     }
@@ -282,18 +286,17 @@ export default function PostDetailScreen() {
 
     return (
       <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
-        {/* ↳ arrow for replies */}
+        {/* Left vertical thread line for replies */}
         {isReply && (
-          <View style={styles.arrowWrap}>
-            <View style={[styles.vertLineReply, { backgroundColor: colors.border }]} />
-            <View style={[styles.horizLine, { backgroundColor: colors.border }]} />
+          <View style={styles.replyThreadCol}>
+            <View style={[styles.replyThreadLine, { backgroundColor: colors.border }]} />
           </View>
         )}
 
         <UserAvatar photoURL={comment.authorPhoto} displayName={comment.authorName} size={isReply ? 28 : 34} />
 
         <View style={{ flex: 1 }}>
-          <View style={[styles.bubble, { backgroundColor: isReply ? colors.background : colors.muted, borderColor: colors.border, borderWidth: isReply ? 1 : 0 }]}>
+          <View style={[styles.bubble, { backgroundColor: isReply ? colors.muted + "88" : colors.muted, borderColor: colors.border, borderWidth: isReply ? 1 : 0 }]}>
             <View style={styles.bubbleTop}>
               <Text style={[styles.commentAuthor, { color: colors.foreground }]}>{comment.authorName}</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -479,36 +482,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 2,
     alignItems: "flex-start",
   },
   commentRowReply: {
-    paddingLeft: 36,
+    paddingLeft: 28,
     paddingTop: 4,
   },
 
-  // ── ↳ arrow ───────────────────────────────────────────────────────────────
-  arrowWrap: {
-    width: 20,
-    alignItems: "flex-end",
-    marginRight: 4,
-    marginTop: 4,
-    height: 28,
+  // ── left thread line for replies ──────────────────────────────────────────
+  replyThreadCol: {
+    width: 18,
+    alignItems: "center",
+    alignSelf: "stretch",
+    paddingTop: 2,
   },
-  vertLineReply: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    width: 1.5,
-    height: 14,
-  },
-  horizLine: {
-    position: "absolute",
-    top: 14,
-    right: 0,
-    height: 1.5,
-    width: 12,
+  replyThreadLine: {
+    width: 2,
+    flex: 1,
+    borderRadius: 2,
+    minHeight: 28,
   },
 
   bubble: { flex: 1, borderRadius: 14, padding: 10 },
@@ -522,22 +516,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 4,
-    paddingTop: 4,
+    paddingTop: 6,
     paddingBottom: 2,
   },
   replyBtnText: { fontSize: 12 },
 
-  // ── "View X replies" ──────────────────────────────────────────────────────
+  // ── "View X replies" — Facebook style ────────────────────────────────────
   viewRepliesRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingLeft: 60,
+    gap: 10,
+    paddingLeft: 28,
     paddingRight: 16,
     paddingVertical: 6,
+    marginBottom: 2,
   },
-  replyLineWrap: { width: 16, alignItems: "center" },
-  vertLine: { width: 1.5, height: 16 },
+  replyConnectorWrap: {
+    width: 34,
+    height: 1.5,
+  },
+  replyConnectorLine: {
+    flex: 1,
+    height: 1.5,
+    borderRadius: 2,
+  },
+  viewRepliesPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
   viewRepliesText: { fontSize: 13, fontWeight: "600" },
 
   // ── reply banner + input ──────────────────────────────────────────────────

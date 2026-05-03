@@ -16,6 +16,7 @@ import React, { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -154,14 +155,11 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerBtn}>
           <Icon name="menu" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.logoGradient}
-        >
-          <Text style={styles.logoText}>✦</Text>
-        </LinearGradient>
+        <Image
+          source={require("../../assets/images/logo.jpg")}
+          style={styles.logoImg}
+          resizeMode="contain"
+        />
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>ImproKinz</Text>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
@@ -251,14 +249,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerBtn: { padding: 4 },
-  logoGradient: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+  logoImg: {
+    width: 34,
+    height: 34,
+    borderRadius: 6,
   },
-  logoText: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16 },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
   createBtn: {
     width: 34,
