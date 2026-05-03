@@ -78,12 +78,15 @@ router.get("/videos", async (req, res) => {
     return;
   }
 
+  // Free-text search takes priority over subject
+  const freeQuery = (req.query["q"] as string | undefined)?.trim();
+
   const rawSubject = ((req.query["subject"] as string) || "all").toLowerCase().replace(/\s+/g, "");
   const key = rawSubject === "computerscience" ? "cs" : rawSubject;
   const queries = SUBJECT_QUERIES[key] ?? SUBJECT_QUERIES["all"];
 
-  // Pick 2 random queries per request so every refresh gives different results
-  const selected = shuffle(queries).slice(0, 2);
+  // If free-text search, use that directly; otherwise pick 2 random subject queries
+  const selected: string[] = freeQuery ? [freeQuery] : shuffle(queries).slice(0, 2);
 
   try {
     const videoIds: string[] = [];
