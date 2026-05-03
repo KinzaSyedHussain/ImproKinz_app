@@ -66,10 +66,12 @@ export default function Root() {
   useEffect(() => {
     if (loading) return;
     if (!configured) return;
+    // If a user is signed in, wait for their profile to load before deciding where to go
+    if (user && !profile) return;
+
     const t = setTimeout(() => {
       if (user) {
-        // Send new users (no onboardingComplete flag) to the wizard
-        if (profile && !(profile as any).onboardingComplete) {
+        if (!(profile as any)?.onboardingComplete) {
           router.replace("/onboarding");
         } else {
           router.replace("/(tabs)/");
