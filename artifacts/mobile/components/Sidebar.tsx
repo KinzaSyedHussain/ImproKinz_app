@@ -106,11 +106,17 @@ export function Sidebar({ visible, onClose }: Props) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? "auto" : "none"}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View
-          style={[styles.overlay, { backgroundColor: colors.overlay, opacity }]}
-        />
-      </TouchableWithoutFeedback>
+      {/* Dim overlay — row layout: left gap (sidebar area) + right tappable area */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="box-none">
+        <View style={{ flex: 1, flexDirection: "row" }} pointerEvents="box-none">
+          {/* Left gap: same width as sidebar, no touch interception */}
+          <View style={{ width: SIDEBAR_WIDTH }} pointerEvents="none" />
+          {/* Right: tap-to-close dark area */}
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={[styles.overlayRight, { backgroundColor: colors.overlay }]} />
+          </TouchableWithoutFeedback>
+        </View>
+      </Animated.View>
 
       <Animated.View
         style={[
@@ -215,10 +221,9 @@ export function Sidebar({ visible, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 999,
-    elevation: 999,
+  overlayRight: {
+    flex: 1,
+    height: "100%",
   },
   sidebar: {
     position: "absolute",
