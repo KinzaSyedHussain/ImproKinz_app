@@ -51,29 +51,37 @@ async function uploadVideoToCloudinary(
   uri: string,
   onProgress?: (pct: number) => void
 ): Promise<string> {
-  const formData = new FormData();
   const filename = uri.split("/").pop() ?? "video.mp4";
-  formData.append("file", { uri, name: filename, type: "video/mp4" } as any);
-  formData.append("upload_preset", UPLOAD_PRESET);
-  formData.append("resource_type", "video");
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
+  const mimeType = ext === "mov" ? "video/quicktime" : ext === "avi" ? "video/avi" : "video/mp4";
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status === 200) {
-        const res = JSON.parse(xhr.responseText);
-        resolve(res.secure_url as string);
-      } else {
-        reject(new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.send(formData);
-  });
+  const formData = new FormData();
+  formData.append("file", { uri, name: filename, type: mimeType } as any);
+  formData.append("upload_preset", UPLOAD_PRESET);
+
+  // Simulate progress since fetch doesn't expose upload progress
+  let fakeProgress = 0;
+  const progressInterval = setInterval(() => {
+    fakeProgress = Math.min(fakeProgress + 8, 85);
+    onProgress?.(fakeProgress);
+  }, 600);
+
+  try {
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
+      { method: "POST", body: formData }
+    );
+    clearInterval(progressInterval);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.status} ${JSON.stringify(data)}`);
+    }
+    onProgress?.(100);
+    return data.secure_url as string;
+  } catch (e) {
+    clearInterval(progressInterval);
+    throw e;
+  }
 }
 
 type MediaMode = "none" | "image" | "video";
