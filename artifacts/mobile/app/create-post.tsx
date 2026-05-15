@@ -65,7 +65,7 @@ async function uploadVideoToCloudinary(
       uri,
       {
         httpMethod: "POST",
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        uploadType: 1, // MULTIPART
         fieldName: "file",
         parameters: { upload_preset: UPLOAD_PRESET },
       }
