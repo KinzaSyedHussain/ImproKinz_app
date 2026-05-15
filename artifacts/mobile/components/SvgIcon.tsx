@@ -61,6 +61,7 @@ export type SvgIconName =
   | "youtube"
   | "link-outline"
   | "log-in-outline"
+  | "videocam-outline"
   | "open-outline"
   | "document-text-outline"
   | "layers-outline"
@@ -586,6 +587,14 @@ export function SvgIcon({ name, size = 24, color = "#888", style }: Props) {
         return (
           <Svg width={s} height={s} viewBox={v} style={style}>
             <Path fill={color} d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z" />
+          </Svg>
+        );
+
+      // ── Videocam ──────────────────────────────────
+      case "videocam-outline":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
           </Svg>
         );
 
