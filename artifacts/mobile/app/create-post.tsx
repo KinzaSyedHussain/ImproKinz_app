@@ -184,7 +184,14 @@ export default function CreatePostScreen() {
       } catch (e: any) {
         setProcessing(false);
         setSubmitting(false);
-        setError("Video upload failed: " + (e?.message ?? "unknown error"));
+        const msg = e?.message ?? "";
+        if (msg.includes("cloud_name is disabled")) {
+          setError("Your Cloudinary account isn't activated yet. Please log in to cloudinary.com and complete any pending verification steps, then try again.");
+        } else if (msg.includes("401")) {
+          setError("Cloudinary authentication failed. Check your cloud name and upload preset are correct.");
+        } else {
+          setError("Video upload failed: " + msg);
+        }
         return;
       }
       setProcessing(false);
