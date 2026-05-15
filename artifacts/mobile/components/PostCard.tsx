@@ -2,7 +2,7 @@ import { Icon } from "@/components/Icon";
 import { PressableScale } from "@/components/PressableScale";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { VideoView, useVideoPlayer } from "expo-video";
+import * as Linking from "expo-linking";
 import {
   arrayRemove,
   arrayUnion,
@@ -83,10 +83,37 @@ function timeAgo(ts: number) {
   return `${Math.floor(diff / 86400000)}d`;
 }
 
-function VideoPlayer({ uri, width, height }: { uri: string; width: number; height: number }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+function extractYouTubeId(url: string): string | null {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function YouTubeThumbnail({ url, width, height }: { url: string; width: number; height: number }) {
+  const ytId = extractYouTubeId(url);
+  const thumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
   return (
-    <VideoView player={player} style={{ width, height }} nativeControls contentFit="contain" />
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => Linking.openURL(url)}
+      style={{ width, height }}
+    >
+      {thumb ? (
+        <Image source={{ uri: thumb }} style={{ width, height }} resizeMode="cover" />
+      ) : (
+        <View style={{ width, height, backgroundColor: "#1a1a2e", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="youtube" size={40} color="#EF4444" />
+        </View>
+      )}
+      <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.28)" }]}>
+        <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(239,68,68,0.9)", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="play" size={22} color="#fff" />
+        </View>
+      </View>
+      <View style={{ position: "absolute", bottom: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(239,68,68,0.85)", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+        <Icon name="youtube" size={11} color="#fff" />
+        <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>YouTube</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -240,9 +267,9 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         />
       )}
 
-      {/* Video */}
+      {/* Video — YouTube thumbnail that opens in YouTube app/browser */}
       {!!videoSource && !imageSource && (
-        <VideoPlayer uri={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
+        <YouTubeThumbnail url={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
       )}
 
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
