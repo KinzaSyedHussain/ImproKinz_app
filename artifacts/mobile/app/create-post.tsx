@@ -33,7 +33,6 @@ const SUBJECTS = [
   "Chemistry", "Biology", "Computer Science", "Economics", "Other",
 ];
 
-// Compress image and return base64 data URL — no Firebase Storage needed
 async function imageToBase64(uri: string): Promise<string> {
   const manipulated = await ImageManipulator.manipulateAsync(
     uri,
@@ -43,6 +42,19 @@ async function imageToBase64(uri: string): Promise<string> {
   if (!manipulated.base64) throw new Error("Image conversion failed.");
   return `data:image/jpeg;base64,${manipulated.base64}`;
 }
+
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+type MediaMode = "none" | "image" | "video";
 
 export default function CreatePostScreen() {
   const colors = useColors();
@@ -56,7 +68,13 @@ export default function CreatePostScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+
+  const [mediaMode, setMediaMode] = useState<MediaMode>("none");
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [videoLink, setVideoLink] = useState("");
+
+  const ytId = extractYouTubeId(videoLink);
+  const ytThumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
 
   const pickImage = async () => {
     try {
@@ -74,15 +92,25 @@ export default function CreatePostScreen() {
     }
   };
 
+  const clearMedia = () => {
+    setMediaMode("none");
+    setImageUri(null);
+    setVideoLink("");
+  };
+
   const handlePost = async () => {
     setError("");
     if (!user) { setError("You must be signed in to post."); return; }
     if (!content.trim()) { setError("Please write something first."); return; }
+    if (mediaMode === "video" && videoLink && !ytId) {
+      setError("Please enter a valid YouTube URL."); return;
+    }
 
     setSubmitting(true);
     let imageUrl: string | null = null;
+    let videoUrl: string | null = null;
 
-    if (imageUri) {
+    if (mediaMode === "image" && imageUri) {
       setProcessing(true);
       try {
         imageUrl = await imageToBase64(imageUri);
@@ -93,6 +121,10 @@ export default function CreatePostScreen() {
         return;
       }
       setProcessing(false);
+    }
+
+    if (mediaMode === "video" && ytId) {
+      videoUrl = `https://www.youtube.com/watch?v=${ytId}`;
     }
 
     try {
@@ -110,8 +142,9 @@ export default function CreatePostScreen() {
         type,
         subject: subject || null,
         imageUrl,
+        videoUrl,
         mediaUrl: null,
-        mediaType: imageUrl ? "image" : null,
+        mediaType: imageUrl ? "image" : videoUrl ? "video" : null,
         likes: [],
         savedBy: [],
         commentCount: 0,
@@ -195,20 +228,29 @@ export default function CreatePostScreen() {
           autoFocus
         />
 
-        {/* Add photo button */}
-        {!imageUri && (
-          <TouchableOpacity
-            style={[styles.photoBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
-            onPress={pickImage}
-          >
-            <Icon name="image" size={20} color={colors.primary} />
-            <Text style={[styles.photoBtnText, { color: colors.foreground }]}>Add Photo</Text>
-            <Text style={[styles.photoBtnSub, { color: colors.mutedForeground }]}>Stored directly — no Storage needed</Text>
-          </TouchableOpacity>
+        {/* Media type selector — shown when no media chosen yet */}
+        {mediaMode === "none" && (
+          <View style={styles.mediaRow}>
+            <TouchableOpacity
+              style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
+              onPress={() => { setMediaMode("image"); pickImage(); }}
+            >
+              <Icon name="image" size={20} color={colors.primary} />
+              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Add Photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: "#EF4444" + "55" }]}
+              onPress={() => setMediaMode("video")}
+            >
+              <Icon name="youtube" size={20} color="#EF4444" />
+              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Add Video</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Image preview */}
-        {!!imageUri && (
+        {mediaMode === "image" && (
           <View style={styles.previewWrap}>
             {processing && (
               <View style={styles.processingOverlay}>
@@ -216,10 +258,66 @@ export default function CreatePostScreen() {
                 <Text style={styles.processingText}>Compressing image...</Text>
               </View>
             )}
-            <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
-            <TouchableOpacity style={styles.removeMedia} onPress={() => setImageUri(null)}>
+            {imageUri && (
+              <Image source={{ uri: imageUri }} style={styles.mediaPreview} resizeMode="cover" />
+            )}
+            <TouchableOpacity style={styles.removeMedia} onPress={clearMedia}>
               <Icon name="x-circle" size={26} color="#EF4444" />
             </TouchableOpacity>
+            {!imageUri && !processing && (
+              <TouchableOpacity style={styles.rePickBtn} onPress={pickImage}>
+                <Icon name="image" size={18} color={colors.primary} />
+                <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Choose Image</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* YouTube video input */}
+        {mediaMode === "video" && (
+          <View style={[styles.videoInputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.videoInputHeader}>
+              <Icon name="youtube" size={18} color="#EF4444" />
+              <Text style={[styles.videoInputTitle, { color: colors.foreground }]}>YouTube Video</Text>
+              <TouchableOpacity onPress={clearMedia} style={{ marginLeft: "auto" }}>
+                <Icon name="x" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.linkInputWrap, { backgroundColor: colors.muted, borderColor: ytId ? "#10B981" : colors.border }]}>
+              <Icon name="link" size={16} color={colors.mutedForeground} />
+              <TextInput
+                style={[styles.linkInput, { color: colors.foreground }]}
+                placeholder="Paste YouTube URL..."
+                placeholderTextColor={colors.mutedForeground}
+                value={videoLink}
+                onChangeText={setVideoLink}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              {!!ytId && <Icon name="check-circle" size={16} color="#10B981" />}
+            </View>
+
+            {/* Thumbnail preview */}
+            {ytThumb && (
+              <View style={styles.thumbWrap}>
+                <Image source={{ uri: ytThumb }} style={styles.ytThumb} resizeMode="cover" />
+                <View style={styles.playOverlay}>
+                  <View style={styles.playBtn}>
+                    <Icon name="play" size={22} color="#fff" />
+                  </View>
+                </View>
+                <View style={[styles.ytBadge, { backgroundColor: "#EF444488" }]}>
+                  <Icon name="youtube" size={12} color="#fff" />
+                  <Text style={styles.ytBadgeText}>YouTube</Text>
+                </View>
+              </View>
+            )}
+
+            {!!videoLink && !ytId && (
+              <Text style={styles.ytHint}>Enter a valid YouTube link (youtube.com or youtu.be)</Text>
+            )}
           </View>
         )}
 
@@ -261,14 +359,32 @@ const styles = StyleSheet.create({
   typeChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1 },
   typeChipText: { fontSize: 13 },
   contentInput: { borderRadius: 16, borderWidth: 1, padding: 16, minHeight: 140, fontSize: 16, lineHeight: 24 },
-  photoBtn: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14, borderWidth: 1, borderStyle: "dashed" },
-  photoBtnText: { fontSize: 15, fontWeight: "600", flex: 1 },
-  photoBtnSub: { fontSize: 11 },
-  previewWrap: { borderRadius: 14, overflow: "hidden", minHeight: 180 },
-  imagePreview: { width: "100%", height: 220 },
+
+  mediaRow: { flexDirection: "row", gap: 12 },
+  mediaBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 14, borderWidth: 1, borderStyle: "dashed" },
+  mediaBtnText: { fontSize: 14, fontWeight: "600" },
+
+  previewWrap: { borderRadius: 14, overflow: "hidden", minHeight: 180, backgroundColor: "#00000022", alignItems: "center", justifyContent: "center" },
+  mediaPreview: { width: "100%", height: 220 },
   processingOverlay: { position: "absolute", inset: 0, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
   processingText: { color: "#F59E0B", fontWeight: "600", fontSize: 14 },
-  removeMedia: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 14 },
+  removeMedia: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 14, zIndex: 20 },
+  rePickBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 20 },
+
+  videoInputCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
+  videoInputHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  videoInputTitle: { fontSize: 15, fontWeight: "600" },
+  linkInputWrap: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 11 },
+  linkInput: { flex: 1, fontSize: 14 },
+
+  thumbWrap: { borderRadius: 12, overflow: "hidden", height: 180 },
+  ytThumb: { width: "100%", height: "100%" },
+  playOverlay: { position: "absolute", inset: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
+  playBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(239,68,68,0.88)", alignItems: "center", justifyContent: "center" },
+  ytBadge: { position: "absolute", bottom: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  ytBadgeText: { color: "#fff", fontSize: 11, fontWeight: "600" },
+  ytHint: { color: "#EF4444", fontSize: 12 },
+
   subjectChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   subjectText: { fontSize: 13 },
   xpNote: { padding: 12, borderRadius: 10, alignItems: "center" },

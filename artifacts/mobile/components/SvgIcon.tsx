@@ -57,6 +57,10 @@ export type SvgIconName =
   | "hand-right-outline"
   | "gift-outline"
   | "ellipsis-horizontal-circle-outline"
+  | "play-solid"
+  | "youtube"
+  | "link-outline"
+  | "log-in-outline"
   | "open-outline"
   | "document-text-outline"
   | "layers-outline"
@@ -582,6 +586,38 @@ export function SvgIcon({ name, size = 24, color = "#888", style }: Props) {
         return (
           <Svg width={s} height={s} viewBox={v} style={style}>
             <Path fill={color} d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z" />
+          </Svg>
+        );
+
+      // ── Play solid (triangle) ─────────────────────
+      case "play-solid":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill={color} d="M8 5v14l11-7z" />
+          </Svg>
+        );
+
+      // ── YouTube ───────────────────────────────────
+      case "youtube":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill={color} d="M21.8 8s-.2-1.4-.8-2c-.8-.8-1.7-.8-2.1-.9C16.2 5 12 5 12 5s-4.2 0-6.9.1c-.4.1-1.3.1-2.1.9-.6.6-.8 2-.8 2S2 9.6 2 11.2v1.5c0 1.6.2 3.2.2 3.2s.2 1.4.8 2c.8.8 1.8.7 2.3.8C6.8 18.8 12 19 12 19s4.2 0 6.9-.2c.4-.1 1.3-.1 2.1-.9.6-.6.8-2 .8-2s.2-1.6.2-3.2v-1.5C22 9.6 21.8 8 21.8 8zM10 15V9l5.5 3-5.5 3z" />
+          </Svg>
+        );
+
+      // ── Link ──────────────────────────────────────
+      case "link-outline":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </Svg>
+        );
+
+      // ── Log in ────────────────────────────────────
+      case "log-in-outline":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
           </Svg>
         );
 
