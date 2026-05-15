@@ -52,7 +52,9 @@ async function uploadVideoToCloudinary(
   uri: string,
   onProgress?: (pct: number) => void
 ): Promise<string> {
-  // Simulate progress (FileSystem.uploadAsync doesn't expose upload progress)
+  const endpoint = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`;
+
+  // Simulate progress
   let fakeProgress = 0;
   const progressInterval = setInterval(() => {
     fakeProgress = Math.min(fakeProgress + 6, 88);
@@ -60,23 +62,35 @@ async function uploadVideoToCloudinary(
   }, 700);
 
   try {
-    const result = await FileSystem.uploadAsync(
-      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
-      uri,
-      {
+    if (Platform.OS === "web") {
+      // On web: fetch the file as a blob, then upload via fetch with FormData
+      const blobRes = await fetch(uri);
+      const blob = await blobRes.blob();
+      const formData = new FormData();
+      formData.append("file", blob, "video.mp4");
+      formData.append("upload_preset", UPLOAD_PRESET);
+      const res = await fetch(endpoint, { method: "POST", body: formData });
+      const data = await res.json();
+      clearInterval(progressInterval);
+      if (!res.ok) throw new Error(`Upload failed: ${res.status} ${JSON.stringify(data)}`);
+      onProgress?.(100);
+      return data.secure_url as string;
+    } else {
+      // On native: use FileSystem.uploadAsync (properly reads file from device)
+      const result = await FileSystem.uploadAsync(endpoint, uri, {
         httpMethod: "POST",
         uploadType: 1, // MULTIPART
         fieldName: "file",
         parameters: { upload_preset: UPLOAD_PRESET },
+      });
+      clearInterval(progressInterval);
+      const data = JSON.parse(result.body);
+      if (result.status !== 200) {
+        throw new Error(`Upload failed: ${result.status} ${result.body}`);
       }
-    );
-    clearInterval(progressInterval);
-    const data = JSON.parse(result.body);
-    if (result.status !== 200) {
-      throw new Error(`Upload failed: ${result.status} ${result.body}`);
+      onProgress?.(100);
+      return data.secure_url as string;
     }
-    onProgress?.(100);
-    return data.secure_url as string;
   } catch (e) {
     clearInterval(progressInterval);
     throw e;
