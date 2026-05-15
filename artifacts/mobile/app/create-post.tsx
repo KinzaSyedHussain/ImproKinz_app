@@ -1,4 +1,5 @@
 import { Icon } from "@/components/Icon";
+import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
@@ -51,30 +52,28 @@ async function uploadVideoToCloudinary(
   uri: string,
   onProgress?: (pct: number) => void
 ): Promise<string> {
-  const filename = uri.split("/").pop() ?? "video.mp4";
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "mp4";
-  const mimeType = ext === "mov" ? "video/quicktime" : ext === "avi" ? "video/avi" : "video/mp4";
-
-  const formData = new FormData();
-  formData.append("file", { uri, name: filename, type: mimeType } as any);
-  formData.append("upload_preset", UPLOAD_PRESET);
-
-  // Simulate progress since fetch doesn't expose upload progress
+  // Simulate progress (FileSystem.uploadAsync doesn't expose upload progress)
   let fakeProgress = 0;
   const progressInterval = setInterval(() => {
-    fakeProgress = Math.min(fakeProgress + 8, 85);
+    fakeProgress = Math.min(fakeProgress + 6, 88);
     onProgress?.(fakeProgress);
-  }, 600);
+  }, 700);
 
   try {
-    const response = await fetch(
+    const result = await FileSystem.uploadAsync(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
-      { method: "POST", body: formData }
+      uri,
+      {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        parameters: { upload_preset: UPLOAD_PRESET },
+      }
     );
     clearInterval(progressInterval);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${JSON.stringify(data)}`);
+    const data = JSON.parse(result.body);
+    if (result.status !== 200) {
+      throw new Error(`Upload failed: ${result.status} ${result.body}`);
     }
     onProgress?.(100);
     return data.secure_url as string;
