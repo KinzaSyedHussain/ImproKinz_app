@@ -7,6 +7,7 @@ import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -33,6 +34,9 @@ const SUBJECTS = [
   "Chemistry", "Biology", "Computer Science", "Economics", "Other",
 ];
 
+const CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+const UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
+
 async function imageToBase64(uri: string): Promise<string> {
   const manipulated = await ImageManipulator.manipulateAsync(
     uri,
@@ -43,15 +47,33 @@ async function imageToBase64(uri: string): Promise<string> {
   return `data:image/jpeg;base64,${manipulated.base64}`;
 }
 
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
+async function uploadVideoToCloudinary(
+  uri: string,
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  const formData = new FormData();
+  const filename = uri.split("/").pop() ?? "video.mp4";
+  formData.append("file", { uri, name: filename, type: "video/mp4" } as any);
+  formData.append("upload_preset", UPLOAD_PRESET);
+  formData.append("resource_type", "video");
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const res = JSON.parse(xhr.responseText);
+        resolve(res.secure_url as string);
+      } else {
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.send(formData);
+  });
 }
 
 type MediaMode = "none" | "image" | "video";
@@ -67,14 +89,13 @@ export default function CreatePostScreen() {
   const [subject, setSubject] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
 
   const [mediaMode, setMediaMode] = useState<MediaMode>("none");
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [videoLink, setVideoLink] = useState("");
-
-  const ytId = extractYouTubeId(videoLink);
-  const ytThumb = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : null;
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [videoThumb, setVideoThumb] = useState<string | null>(null);
 
   const pickImage = async () => {
     try {
@@ -85,26 +106,58 @@ export default function CreatePostScreen() {
       });
       if (!result.canceled && result.assets[0]) {
         setImageUri(result.assets[0].uri);
+        setMediaMode("image");
         setError("");
+      } else {
+        setMediaMode("none");
       }
     } catch {
       setError("Could not open image picker.");
+      setMediaMode("none");
+    }
+  };
+
+  const pickVideo = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Please allow access to your media library.");
+        setMediaMode("none");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        quality: 0.8,
+        videoMaxDuration: 60,
+        allowsEditing: true,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setVideoUri(asset.uri);
+        setVideoThumb(asset.uri);
+        setMediaMode("video");
+        setError("");
+      } else {
+        setMediaMode("none");
+      }
+    } catch {
+      setError("Could not open video picker.");
+      setMediaMode("none");
     }
   };
 
   const clearMedia = () => {
     setMediaMode("none");
     setImageUri(null);
-    setVideoLink("");
+    setVideoUri(null);
+    setVideoThumb(null);
+    setUploadProgress(0);
   };
 
   const handlePost = async () => {
     setError("");
     if (!user) { setError("You must be signed in to post."); return; }
     if (!content.trim()) { setError("Please write something first."); return; }
-    if (mediaMode === "video" && videoLink && !ytId) {
-      setError("Please enter a valid YouTube URL."); return;
-    }
 
     setSubmitting(true);
     let imageUrl: string | null = null;
@@ -123,8 +176,18 @@ export default function CreatePostScreen() {
       setProcessing(false);
     }
 
-    if (mediaMode === "video" && ytId) {
-      videoUrl = `https://www.youtube.com/watch?v=${ytId}`;
+    if (mediaMode === "video" && videoUri) {
+      setProcessing(true);
+      setUploadProgress(0);
+      try {
+        videoUrl = await uploadVideoToCloudinary(videoUri, (pct) => setUploadProgress(pct));
+      } catch (e: any) {
+        setProcessing(false);
+        setSubmitting(false);
+        setError("Video upload failed: " + (e?.message ?? "unknown error"));
+        return;
+      }
+      setProcessing(false);
     }
 
     try {
@@ -228,23 +291,24 @@ export default function CreatePostScreen() {
           autoFocus
         />
 
-        {/* Media type selector — shown when no media chosen yet */}
+        {/* Media picker buttons — only when no media selected */}
         {mediaMode === "none" && (
           <View style={styles.mediaRow}>
             <TouchableOpacity
               style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
-              onPress={() => { setMediaMode("image"); pickImage(); }}
+              onPress={pickImage}
             >
               <Icon name="image" size={20} color={colors.primary} />
-              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Add Photo</Text>
+              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Photo</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: "#EF4444" + "55" }]}
-              onPress={() => setMediaMode("video")}
+              style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: "#A855F755" }]}
+              onPress={() => { setMediaMode("video"); pickVideo(); }}
             >
-              <Icon name="youtube" size={20} color="#EF4444" />
-              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Add Video</Text>
+              <Icon name="video-camera" size={20} color="#A855F7" />
+              <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Video</Text>
+              <Text style={[styles.mediaBtnSub, { color: colors.mutedForeground }]}>up to 60s</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -264,59 +328,49 @@ export default function CreatePostScreen() {
             <TouchableOpacity style={styles.removeMedia} onPress={clearMedia}>
               <Icon name="x-circle" size={26} color="#EF4444" />
             </TouchableOpacity>
-            {!imageUri && !processing && (
-              <TouchableOpacity style={styles.rePickBtn} onPress={pickImage}>
-                <Icon name="image" size={18} color={colors.primary} />
-                <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Choose Image</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
-        {/* YouTube video input */}
+        {/* Video preview */}
         {mediaMode === "video" && (
-          <View style={[styles.videoInputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.videoInputHeader}>
-              <Icon name="youtube" size={18} color="#EF4444" />
-              <Text style={[styles.videoInputTitle, { color: colors.foreground }]}>YouTube Video</Text>
-              <TouchableOpacity onPress={clearMedia} style={{ marginLeft: "auto" }}>
-                <Icon name="x" size={18} color={colors.mutedForeground} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.linkInputWrap, { backgroundColor: colors.muted, borderColor: ytId ? "#10B981" : colors.border }]}>
-              <Icon name="link" size={16} color={colors.mutedForeground} />
-              <TextInput
-                style={[styles.linkInput, { color: colors.foreground }]}
-                placeholder="Paste YouTube URL..."
-                placeholderTextColor={colors.mutedForeground}
-                value={videoLink}
-                onChangeText={setVideoLink}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-              />
-              {!!ytId && <Icon name="check-circle" size={16} color="#10B981" />}
-            </View>
-
-            {/* Thumbnail preview */}
-            {ytThumb && (
-              <View style={styles.thumbWrap}>
-                <Image source={{ uri: ytThumb }} style={styles.ytThumb} resizeMode="cover" />
-                <View style={styles.playOverlay}>
-                  <View style={styles.playBtn}>
-                    <Icon name="play" size={22} color="#fff" />
+          <View style={styles.previewWrap}>
+            {processing ? (
+              <View style={styles.videoUploadOverlay}>
+                <ActivityIndicator color="#A855F7" size="large" />
+                <Text style={styles.processingText}>
+                  {uploadProgress > 0 ? `Uploading... ${uploadProgress}%` : "Preparing video..."}
+                </Text>
+                {uploadProgress > 0 && (
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${uploadProgress}%` as any, backgroundColor: "#A855F7" }]} />
+                  </View>
+                )}
+              </View>
+            ) : videoUri ? (
+              <>
+                {/* Show first-frame thumbnail — Video element for native preview */}
+                <View style={styles.videoThumbWrap}>
+                  <Image
+                    source={{ uri: videoUri }}
+                    style={styles.mediaPreview}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.videoPlayBadge}>
+                    <Icon name="play" size={20} color="#fff" />
+                    <Text style={styles.videoReadyText}>Video ready</Text>
                   </View>
                 </View>
-                <View style={[styles.ytBadge, { backgroundColor: "#EF444488" }]}>
-                  <Icon name="youtube" size={12} color="#fff" />
-                  <Text style={styles.ytBadgeText}>YouTube</Text>
-                </View>
-              </View>
+              </>
+            ) : (
+              <TouchableOpacity style={styles.rePickBtn} onPress={pickVideo}>
+                <Icon name="video-camera" size={22} color="#A855F7" />
+                <Text style={[styles.mediaBtnText, { color: colors.foreground }]}>Choose Video</Text>
+              </TouchableOpacity>
             )}
-
-            {!!videoLink && !ytId && (
-              <Text style={styles.ytHint}>Enter a valid YouTube link (youtube.com or youtu.be)</Text>
+            {!processing && (
+              <TouchableOpacity style={styles.removeMedia} onPress={clearMedia}>
+                <Icon name="x-circle" size={26} color="#EF4444" />
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -363,27 +417,20 @@ const styles = StyleSheet.create({
   mediaRow: { flexDirection: "row", gap: 12 },
   mediaBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 14, borderRadius: 14, borderWidth: 1, borderStyle: "dashed" },
   mediaBtnText: { fontSize: 14, fontWeight: "600" },
+  mediaBtnSub: { fontSize: 11 },
 
-  previewWrap: { borderRadius: 14, overflow: "hidden", minHeight: 180, backgroundColor: "#00000022", alignItems: "center", justifyContent: "center" },
+  previewWrap: { borderRadius: 14, overflow: "hidden", minHeight: 200, backgroundColor: "#00000022", alignItems: "center", justifyContent: "center" },
   mediaPreview: { width: "100%", height: 220 },
-  processingOverlay: { position: "absolute", inset: 0, zIndex: 10, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", gap: 10 },
+  videoThumbWrap: { width: "100%", height: 220 },
+  processingOverlay: { padding: 32, alignItems: "center", gap: 12, width: "100%" },
+  videoUploadOverlay: { padding: 32, alignItems: "center", gap: 12, width: "100%" },
   processingText: { color: "#F59E0B", fontWeight: "600", fontSize: 14 },
+  progressBar: { width: "80%", height: 6, backgroundColor: "#2D2080", borderRadius: 3, overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3 },
+  videoPlayBadge: { position: "absolute", bottom: 10, left: 12, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(168,85,247,0.85)", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  videoReadyText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   removeMedia: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 14, zIndex: 20 },
-  rePickBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 20 },
-
-  videoInputCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
-  videoInputHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  videoInputTitle: { fontSize: 15, fontWeight: "600" },
-  linkInputWrap: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 11 },
-  linkInput: { flex: 1, fontSize: 14 },
-
-  thumbWrap: { borderRadius: 12, overflow: "hidden", height: 180 },
-  ytThumb: { width: "100%", height: "100%" },
-  playOverlay: { position: "absolute", inset: 0, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
-  playBtn: { width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(239,68,68,0.88)", alignItems: "center", justifyContent: "center" },
-  ytBadge: { position: "absolute", bottom: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  ytBadgeText: { color: "#fff", fontSize: 11, fontWeight: "600" },
-  ytHint: { color: "#EF4444", fontSize: 12 },
+  rePickBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 24 },
 
   subjectChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   subjectText: { fontSize: 13 },
