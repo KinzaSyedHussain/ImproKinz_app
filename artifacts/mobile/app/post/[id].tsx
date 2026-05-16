@@ -1,5 +1,4 @@
 import { Icon } from "@/components/Icon";
-import { VideoView, useVideoPlayer } from "expo-video";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
@@ -28,18 +27,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { Post, PostCard, PostComment } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
-
-function VideoPlayer({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
-  return (
-    <VideoView
-      player={player}
-      style={styles.video}
-      nativeControls
-      contentFit="contain"
-    />
-  );
-}
 
 function timeAgo(ts: number) {
   const diff = Date.now() - ts;
@@ -245,8 +232,6 @@ export default function PostDetailScreen() {
     );
   }
 
-  const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
-
   const renderItem = ({ item }: { item: CommentItem }) => {
     // ── "View / hide replies" row — Facebook style ────────────────────────
     if (item.kind === "view-replies") {
@@ -361,12 +346,6 @@ export default function PostDetailScreen() {
         ListHeaderComponent={
           <View>
             <PostCard post={post} onDelete={() => router.back()} />
-
-            {!!videoSource && (
-              <View style={[styles.videoWrap, { backgroundColor: "#000" }]}>
-                <VideoPlayer uri={videoSource} />
-              </View>
-            )}
 
             {!!error && (
               <View style={styles.errorBox}>
