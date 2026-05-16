@@ -14,6 +14,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   Platform,
@@ -55,8 +56,11 @@ export default function ProfileScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
-  const [tab, setTab] = useState<"posts" | "saved">("posts");
+  const [tab, setTab] = useState<"posts" | "photos" | "videos" | "saved">("posts");
   const [followerCount, setFollowerCount] = useState(0);
+  const SCREEN_WIDTH = Dimensions.get("window").width;
+  const GRID_COL = 3;
+  const GRID_ITEM = (SCREEN_WIDTH - 4) / GRID_COL;
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -130,14 +134,26 @@ export default function ProfileScreen() {
   const topPad = insets.top;
   const botPad = 70 + insets.bottom;
   const BANNER_HEIGHT = 160;
-  const displayPosts = tab === "posts" ? posts : savedPosts;
+  const photoPosts = posts.filter((p) => p.imageUrl || p.mediaType === "image");
+  const videoPosts = posts.filter((p) => p.videoUrl || p.mediaType === "video");
+  const isGrid = tab === "photos" || tab === "videos";
+  const gridItems = tab === "photos" ? photoPosts : videoPosts;
+  const displayPosts = tab === "saved" ? savedPosts : posts;
   const subjects: string[] = (profile as any)?.subjects || [];
   const goal: string = (profile as any)?.studyGoal || "";
+
+  const TAB_CONFIG = [
+    { key: "posts",  icon: "grid",       label: "Posts"  },
+    { key: "photos", icon: "image",      label: "Photos" },
+    { key: "videos", icon: "play-circle", label: "Videos" },
+    { key: "saved",  icon: "bookmark",   label: "Saved"  },
+  ] as const;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={displayPosts}
+        key={isGrid ? "grid" : "list"}
+        data={isGrid ? [] : displayPosts}
         keyExtractor={(item) => item.id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: botPad }}
@@ -291,27 +307,82 @@ export default function ProfileScreen() {
               {profile && <XPStreakBadge xp={profile.xp} streak={profile.streak} />}
             </View>
 
-            {/* ── Posts / Saved tabs ── */}
-            <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
-              {(["posts", "saved"] as const).map((t) => (
+            {/* ── 4-tab bar: Posts | Photos | Videos | Saved ── */}
+            <View style={[styles.tabBar, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+              {TAB_CONFIG.map((t) => (
                 <TouchableOpacity
-                  key={t}
-                  style={[styles.tabBtn, tab === t && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-                  onPress={() => setTab(t)}
+                  key={t.key}
+                  style={[styles.tabBtn, tab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2.5 }]}
+                  onPress={() => setTab(t.key)}
                 >
-                  <Text style={[styles.tabLabel, { color: tab === t ? colors.primary : colors.mutedForeground }]}>
-                    {t === "posts" ? "My Posts" : "Saved"}
+                  <Icon name={t.icon} size={18} color={tab === t.key ? colors.primary : colors.mutedForeground} />
+                  <Text style={[styles.tabLabel, { color: tab === t.key ? colors.primary : colors.mutedForeground }]}>
+                    {t.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {loadingPosts && <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />}
+
+            {/* ── Photo / Video grid ── */}
+            {!loadingPosts && isGrid && (
+              gridItems.length === 0 ? (
+                <View style={styles.empty}>
+                  <Icon
+                    name={tab === "photos" ? "image" : "play-circle"}
+                    size={40}
+                    color={colors.mutedForeground}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                    {tab === "photos" ? "No photos yet" : "No videos yet"}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.grid}>
+                  {gridItems.map((post, i) => {
+                    const imgSrc = post.imageUrl || post.mediaUrl;
+                    const vidSrc = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
+                    // For Cloudinary videos, derive thumbnail by swapping extension
+                    const thumbSrc = tab === "videos" && vidSrc
+                      ? vidSrc.replace(/\.(mp4|mov|webm)(\?.*)?$/, ".jpg")
+                      : imgSrc;
+                    return (
+                      <TouchableOpacity
+                        key={post.id}
+                        onPress={() => router.push(`/post/${post.id}`)}
+                        style={[styles.gridCell, {
+                          width: GRID_ITEM,
+                          height: GRID_ITEM,
+                          marginRight: i % GRID_COL === GRID_COL - 1 ? 0 : 2,
+                          marginBottom: 2,
+                          backgroundColor: colors.muted,
+                        }]}
+                        activeOpacity={0.85}
+                      >
+                        {thumbSrc ? (
+                          <Image source={{ uri: thumbSrc }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        ) : (
+                          <View style={[StyleSheet.absoluteFill, styles.gridPlaceholder]}>
+                            <Icon name={tab === "videos" ? "play-circle" : "image"} size={28} color={colors.mutedForeground} />
+                          </View>
+                        )}
+                        {tab === "videos" && (
+                          <View style={styles.videoOverlay}>
+                            <Icon name="play-solid" size={20} color="#fff" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
+            )}
           </View>
         }
         renderItem={({ item }) => <PostCard post={item} />}
         ListEmptyComponent={
-          !loadingPosts ? (
+          !loadingPosts && !isGrid ? (
             <View style={styles.empty}>
               <Icon
                 name={tab === "posts" ? "file-text" : "bookmark"}
@@ -393,9 +464,23 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 17, fontWeight: "700" },
   statLabel: { fontSize: 12, marginTop: 1 },
   statDivider: { width: 1, height: 28, marginHorizontal: 4 },
-  tabBar: { flexDirection: "row", borderBottomWidth: 1, marginHorizontal: 16, marginTop: 8, marginBottom: 4 },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 12 },
-  tabLabel: { fontSize: 14 },
+  tabBar: { flexDirection: "row", borderBottomWidth: 1, marginTop: 8, marginBottom: 0 },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 3, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
+  tabLabel: { fontSize: 11 },
   empty: { alignItems: "center", paddingTop: 40, gap: 10 },
   emptyText: { fontSize: 14 },
+  grid: { flexDirection: "row", flexWrap: "wrap", paddingTop: 2 },
+  gridCell: { overflow: "hidden", position: "relative" },
+  gridPlaceholder: { alignItems: "center", justifyContent: "center" },
+  videoOverlay: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
