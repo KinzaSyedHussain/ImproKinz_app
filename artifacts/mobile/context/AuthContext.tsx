@@ -37,6 +37,8 @@ export interface UserProfile {
   streak: number;
   lastActiveDate: string;
   createdAt: number;
+  followers?: string[];
+  following?: string[];
 }
 
 interface AuthContextType {

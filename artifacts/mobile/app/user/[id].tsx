@@ -2,12 +2,14 @@ import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   getDoc,
   getDocs,
-  orderBy,
   query,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
@@ -23,7 +25,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { UserProfile } from "@/context/AuthContext";
+import { UserProfile, useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
 import { Post, PostCard } from "@/components/PostCard";
@@ -35,18 +37,25 @@ export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user, refreshProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  const targetId = Array.isArray(id) ? id[0] : id ?? "";
+  const isOwnProfile = user?.uid === targetId;
+  const isFollowing = !!(user && profile?.followers?.includes(user.uid));
+  const followerCount = profile?.followers?.length ?? 0;
+  const followingCount = profile?.following?.length ?? 0;
 
   useEffect(() => {
-    if (!id) return;
+    if (!targetId) return;
     const fetchData = async () => {
       try {
         const [userSnap, postsSnap] = await Promise.all([
-          getDoc(doc(db, "users", id)),
-          // Simple where query — sort client-side to avoid composite index requirement
-          getDocs(query(collection(db, "community_posts"), where("authorId", "==", id))),
+          getDoc(doc(db, "users", targetId)),
+          getDocs(query(collection(db, "community_posts"), where("authorId", "==", targetId))),
         ]);
         if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
         const mapped = postsSnap.docs.map((d) => ({
@@ -62,7 +71,34 @@ export default function UserProfileScreen() {
       }
     };
     fetchData();
-  }, [id]);
+  }, [targetId]);
+
+  const handleFollow = async () => {
+    if (!user || !targetId || followLoading) return;
+    setFollowLoading(true);
+    try {
+      const targetRef = doc(db, "users", targetId);
+      const myRef = doc(db, "users", user.uid);
+      if (isFollowing) {
+        await Promise.all([
+          updateDoc(targetRef, { followers: arrayRemove(user.uid) }),
+          updateDoc(myRef, { following: arrayRemove(targetId) }),
+        ]);
+        setProfile((p) => p ? { ...p, followers: (p.followers ?? []).filter((f) => f !== user.uid) } : p);
+      } else {
+        await Promise.all([
+          updateDoc(targetRef, { followers: arrayUnion(user.uid) }),
+          updateDoc(myRef, { following: arrayUnion(targetId) }),
+        ]);
+        setProfile((p) => p ? { ...p, followers: [...(p.followers ?? []), user.uid] } : p);
+      }
+      refreshProfile().catch(() => {});
+    } catch (e) {
+      console.warn("follow error:", e);
+    } finally {
+      setFollowLoading(false);
+    }
+  };
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 16);
@@ -113,13 +149,51 @@ export default function UserProfileScreen() {
                     size={76}
                   />
                 </View>
+                {/* Follow button — only for other users */}
+                {!isOwnProfile && user && (
+                  <TouchableOpacity
+                    onPress={handleFollow}
+                    disabled={followLoading}
+                    style={[
+                      styles.followBtn,
+                      isFollowing
+                        ? { backgroundColor: "transparent", borderWidth: 1.5, borderColor: colors.border }
+                        : { backgroundColor: colors.primary },
+                    ]}
+                  >
+                    {followLoading
+                      ? <ActivityIndicator size="small" color={isFollowing ? colors.mutedForeground : "#fff"} />
+                      : <Text style={[styles.followBtnText, { color: isFollowing ? colors.mutedForeground : "#fff" }]}>
+                          {isFollowing ? "Following" : "Follow"}
+                        </Text>}
+                  </TouchableOpacity>
+                )}
               </View>
+
               <Text style={[styles.name, { color: colors.foreground }]}>
                 {profile?.displayName || "User"}
               </Text>
               {profile?.bio ? (
                 <Text style={[styles.bio, { color: colors.mutedForeground }]}>{profile.bio}</Text>
               ) : null}
+
+              {/* Followers / Following / Posts stats */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>{followerCount}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>{followingCount}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Following</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>{posts.length}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Posts</Text>
+                </View>
+              </View>
             </View>
 
             <View style={{ paddingVertical: 16 }}>
@@ -161,10 +235,17 @@ const styles = StyleSheet.create({
   bannerWrap: { height: 160, position: "relative", overflow: "hidden" },
   backBtn: { position: "absolute", left: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" },
   infoCard: { paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1 },
-  avatarRow: { marginTop: -38, marginBottom: 8 },
+  avatarRow: { marginTop: -38, marginBottom: 10, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   avatarRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, overflow: "hidden" },
+  followBtn: { paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, minWidth: 100, alignItems: "center", justifyContent: "center" },
+  followBtnText: { fontSize: 14, fontWeight: "600" },
   name: { fontFamily: undefined, fontSize: 20, fontWeight: "700", marginBottom: 2 },
-  bio: { fontFamily: undefined, fontSize: 14, lineHeight: 20 },
+  bio: { fontFamily: undefined, fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  statsRow: { flexDirection: "row", alignItems: "center", marginTop: 14, gap: 0 },
+  statItem: { flex: 1, alignItems: "center" },
+  statNum: { fontSize: 17, fontWeight: "700" },
+  statLabel: { fontSize: 12, marginTop: 1 },
+  statDivider: { width: 1, height: 28, marginHorizontal: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   chipText: { fontFamily: undefined, fontSize: 13 },
   sectionHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, marginBottom: 4 },
