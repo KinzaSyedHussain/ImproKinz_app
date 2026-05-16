@@ -58,6 +58,7 @@ export type SvgIconName =
   | "gift-outline"
   | "ellipsis-horizontal-circle-outline"
   | "play-solid"
+  | "grid-outline"
   | "youtube"
   | "link-outline"
   | "log-in-outline"
@@ -619,6 +620,15 @@ export function SvgIcon({ name, size = 24, color = "#888", style }: Props) {
         return (
           <Svg width={s} height={s} viewBox={v} style={style}>
             <Path fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </Svg>
+        );
+
+      // ── Grid (2×2 squares) ────────────────────────
+      case "grid-outline":
+        return (
+          <Svg width={s} height={s} viewBox={v} style={style}>
+            <Path fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
           </Svg>
         );
 

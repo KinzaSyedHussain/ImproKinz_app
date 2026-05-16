@@ -54,6 +54,7 @@ const MAP: Record<string, string> = {
   "user":                       "person-outline",
   "user-plus":                  "person-add-outline",
   "users":                      "people-outline",
+  "grid":                       "grid-outline",
   "play":                       "play-solid",
   "video-camera":               "videocam-outline",
   "video":                      "play-circle-outline",

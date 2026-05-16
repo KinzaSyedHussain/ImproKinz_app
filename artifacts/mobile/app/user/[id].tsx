@@ -16,6 +16,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   Platform,
@@ -44,6 +45,16 @@ export default function UserProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+  const [tab, setTab] = useState<"posts" | "photos" | "videos">("posts");
+  const SCREEN_WIDTH = Dimensions.get("window").width;
+  const GRID_COL = 3;
+  const GRID_ITEM = (SCREEN_WIDTH - 4) / GRID_COL;
+
+  const TAB_CONFIG = [
+    { key: "posts",  icon: "grid",        label: "Posts"  },
+    { key: "photos", icon: "image",       label: "Photos" },
+    { key: "videos", icon: "play-circle", label: "Videos" },
+  ] as const;
   // Local optimistic state — null means "use myProfile as source of truth"
   const [localFollowing, setLocalFollowing] = useState<boolean | null>(null);
 
@@ -113,6 +124,10 @@ export default function UserProfileScreen() {
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 16);
+  const photoPosts = posts.filter((p) => p.imageUrl || p.mediaType === "image");
+  const videoPosts = posts.filter((p) => p.videoUrl || p.mediaType === "video");
+  const isGrid = tab === "photos" || tab === "videos";
+  const gridItems = tab === "photos" ? photoPosts : videoPosts;
 
   if (loading) {
     return (
@@ -125,7 +140,8 @@ export default function UserProfileScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={posts}
+        key={isGrid ? "grid" : "list"}
+        data={isGrid ? [] : posts}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: botPad }}
         ListHeaderComponent={
@@ -221,19 +237,84 @@ export default function UserProfileScreen() {
               </ScrollView>
             ) : null}
 
-            <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-                Posts ({posts.length})
-              </Text>
+            {/* ── 3-tab bar: Posts | Photos | Videos ── */}
+            <View style={[styles.tabBar, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
+              {TAB_CONFIG.map((t) => (
+                <TouchableOpacity
+                  key={t.key}
+                  style={[styles.tabBtn, tab === t.key && { borderBottomColor: colors.primary, borderBottomWidth: 2.5 }]}
+                  onPress={() => setTab(t.key)}
+                >
+                  <Icon name={t.icon} size={18} color={tab === t.key ? colors.primary : colors.mutedForeground} />
+                  <Text style={[styles.tabLabel, { color: tab === t.key ? colors.primary : colors.mutedForeground }]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
+
+            {/* ── Photo / Video grid ── */}
+            {isGrid && (
+              gridItems.length === 0 ? (
+                <View style={styles.empty}>
+                  <Icon
+                    name={tab === "photos" ? "image" : "play-circle"}
+                    size={40}
+                    color={colors.mutedForeground}
+                  />
+                  <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                    {tab === "photos" ? "No photos yet" : "No videos yet"}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.grid}>
+                  {gridItems.map((post, i) => {
+                    const imgSrc = post.imageUrl || post.mediaUrl;
+                    const vidSrc = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
+                    const thumbSrc = tab === "videos" && vidSrc
+                      ? vidSrc.replace(/\.(mp4|mov|webm)(\?.*)?$/, ".jpg")
+                      : imgSrc;
+                    return (
+                      <TouchableOpacity
+                        key={post.id}
+                        onPress={() => router.push(`/post/${post.id}`)}
+                        style={[styles.gridCell, {
+                          width: GRID_ITEM,
+                          height: GRID_ITEM,
+                          marginRight: i % GRID_COL === GRID_COL - 1 ? 0 : 2,
+                          marginBottom: 2,
+                          backgroundColor: colors.muted,
+                        }]}
+                        activeOpacity={0.85}
+                      >
+                        {thumbSrc ? (
+                          <Image source={{ uri: thumbSrc }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        ) : (
+                          <View style={[StyleSheet.absoluteFill, styles.gridPlaceholder]}>
+                            <Icon name={tab === "videos" ? "play-circle" : "image"} size={28} color={colors.mutedForeground} />
+                          </View>
+                        )}
+                        {tab === "videos" && (
+                          <View style={styles.videoOverlay}>
+                            <Icon name="play-solid" size={20} color="#fff" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )
+            )}
           </View>
         }
         renderItem={({ item }) => <PostCard post={item} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Icon name="file-text" size={36} color={colors.mutedForeground} />
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No posts yet</Text>
-          </View>
+          !isGrid ? (
+            <View style={styles.empty}>
+              <Icon name="file-text" size={36} color={colors.mutedForeground} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No posts yet</Text>
+            </View>
+          ) : null
         }
       />
     </View>
@@ -259,8 +340,23 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, height: 28, marginHorizontal: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   chipText: { fontFamily: undefined, fontSize: 13 },
-  sectionHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, marginBottom: 4 },
-  sectionTitle: { fontFamily: undefined, fontSize: 16 },
   empty: { alignItems: "center", paddingTop: 40, gap: 10 },
   emptyText: { fontFamily: undefined, fontSize: 14 },
+  tabBar: { flexDirection: "row", borderBottomWidth: 1, marginTop: 0, marginBottom: 0 },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 10, gap: 3, borderBottomWidth: 2.5, borderBottomColor: "transparent" },
+  tabLabel: { fontSize: 11 },
+  grid: { flexDirection: "row", flexWrap: "wrap", paddingTop: 2 },
+  gridCell: { overflow: "hidden", position: "relative" },
+  gridPlaceholder: { alignItems: "center", justifyContent: "center" },
+  videoOverlay: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
