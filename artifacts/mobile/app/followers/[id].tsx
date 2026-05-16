@@ -61,23 +61,33 @@ export default function FollowersScreen() {
       const owner = { uid: ownerSnap.id, ...ownerSnap.data() } as UserItem;
       setOwnerProfile(owner);
 
-      const uids: string[] = tab === "followers"
-        ? (owner.followers ?? [])
-        : (owner.following ?? []);
+      let list: UserItem[] = [];
 
-      if (uids.length === 0) { setUsers([]); setLoading(false); return; }
+      if (tab === "followers") {
+        // Query all users who have targetId in their own following array
+        const followerSnap = await getDocs(
+          query(collection(db, "users"), where("following", "array-contains", targetId))
+        );
+        list = followerSnap.docs.map((s) => ({ uid: s.id, ...s.data() } as UserItem));
+        // Update owner's follower count from query result
+        setOwnerProfile((p) => p ? { ...p, followers: list.map((u) => u.uid) } : p);
+      } else {
+        // Following: read the owner's own following array, then fetch each user doc
+        const uids: string[] = owner.following ?? [];
+        if (uids.length > 0) {
+          const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, "users", uid))));
+          list = snaps.filter((s) => s.exists()).map((s) => ({ uid: s.id, ...s.data() } as UserItem));
+        }
+      }
 
-      const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, "users", uid))));
-      const list: UserItem[] = snaps
-        .filter((s) => s.exists())
-        .map((s) => ({ uid: s.id, ...s.data() } as UserItem));
       setUsers(list);
 
+      // isFollowing for each item = check MY own following array
       if (user) {
+        const mySnap = await getDoc(doc(db, "users", user.uid));
+        const myFollowing: string[] = mySnap.exists() ? (mySnap.data()["following"] ?? []) : [];
         const state: Record<string, boolean> = {};
-        list.forEach((u) => {
-          state[u.uid] = !!(u.followers?.includes(user.uid));
-        });
+        list.forEach((u) => { state[u.uid] = myFollowing.includes(u.uid); });
         setFollowingState(state);
       }
     } catch (e) {
@@ -93,37 +103,31 @@ export default function FollowersScreen() {
     if (!user) return;
     const isFollowing = followingState[item.uid];
 
+    const doUnfollow = async () => {
+      setLoadingUids((prev) => new Set(prev).add(item.uid));
+      try {
+        // Only write to OWN document
+        await updateDoc(doc(db, "users", user.uid), { following: arrayRemove(item.uid) });
+        setFollowingState((prev) => ({ ...prev, [item.uid]: false }));
+        refreshProfile().catch(() => {});
+      } catch (e) { console.warn("unfollow error:", e); }
+      finally { setLoadingUids((prev) => { const n = new Set(prev); n.delete(item.uid); return n; }); }
+    };
+
     if (isFollowing) {
       Alert.alert(
         `Unfollow ${item.displayName}?`,
         "You will no longer see their posts in your feed.",
         [
           { text: "Cancel", style: "cancel" },
-          {
-            text: "Unfollow",
-            style: "destructive",
-            onPress: async () => {
-              setLoadingUids((prev) => new Set(prev).add(item.uid));
-              try {
-                await Promise.all([
-                  updateDoc(doc(db, "users", item.uid), { followers: arrayRemove(user.uid) }),
-                  updateDoc(doc(db, "users", user.uid), { following: arrayRemove(item.uid) }),
-                ]);
-                setFollowingState((prev) => ({ ...prev, [item.uid]: false }));
-                refreshProfile().catch(() => {});
-              } catch (e) { console.warn("unfollow error:", e); }
-              finally { setLoadingUids((prev) => { const n = new Set(prev); n.delete(item.uid); return n; }); }
-            },
-          },
+          { text: "Unfollow", style: "destructive", onPress: doUnfollow },
         ]
       );
     } else {
       setLoadingUids((prev) => new Set(prev).add(item.uid));
       try {
-        await Promise.all([
-          updateDoc(doc(db, "users", item.uid), { followers: arrayUnion(user.uid) }),
-          updateDoc(doc(db, "users", user.uid), { following: arrayUnion(item.uid) }),
-        ]);
+        // Only write to OWN document
+        await updateDoc(doc(db, "users", user.uid), { following: arrayUnion(item.uid) });
         setFollowingState((prev) => ({ ...prev, [item.uid]: true }));
         refreshProfile().catch(() => {});
       } catch (e) { console.warn("follow error:", e); }

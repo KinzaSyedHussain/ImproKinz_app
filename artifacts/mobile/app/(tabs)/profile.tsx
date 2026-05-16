@@ -56,6 +56,7 @@ export default function ProfileScreen() {
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [tab, setTab] = useState<"posts" | "saved">("posts");
+  const [followerCount, setFollowerCount] = useState(0);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
@@ -70,12 +71,15 @@ export default function ProfileScreen() {
           createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
         });
         const sort = (arr: Post[]) => arr.sort((a, b) => b.createdAt - a.createdAt);
-        const [snap, savedSnap] = await Promise.all([
+        const [snap, savedSnap, followerSnap] = await Promise.all([
           getDocs(query(collection(db, "community_posts"), where("authorId", "==", user.uid))),
           getDocs(query(collection(db, "community_posts"), where("savedBy", "array-contains", user.uid))),
+          // Count my followers by querying users who have my uid in their following array
+          getDocs(query(collection(db, "users"), where("following", "array-contains", user.uid))),
         ]);
         setPosts(sort(snap.docs.map(toPost)));
         setSavedPosts(sort(savedSnap.docs.map(toPost)));
+        setFollowerCount(followerSnap.size);
       } catch (e) {
         console.warn("fetchPosts error:", e);
       } finally {
@@ -261,9 +265,7 @@ export default function ProfileScreen() {
                   style={styles.statItem}
                   onPress={() => user && router.push(`/followers/${user.uid}?tab=followers`)}
                 >
-                  <Text style={[styles.statNum, { color: colors.foreground }]}>
-                    {(profile as any)?.followers?.length ?? 0}
-                  </Text>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>{followerCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
                 </TouchableOpacity>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />

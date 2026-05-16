@@ -38,27 +38,31 @@ export default function UserProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile: myProfile, refreshProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
 
   const targetId = Array.isArray(id) ? id[0] : id ?? "";
   const isOwnProfile = user?.uid === targetId;
-  const isFollowing = !!(user && profile?.followers?.includes(user.uid));
-  const followerCount = profile?.followers?.length ?? 0;
+  // isFollowing comes from MY profile's following array — avoids reading other user's doc
+  const isFollowing = !!(myProfile?.following?.includes(targetId));
   const followingCount = profile?.following?.length ?? 0;
 
   useEffect(() => {
     if (!targetId) return;
     const fetchData = async () => {
       try {
-        const [userSnap, postsSnap] = await Promise.all([
+        const [userSnap, postsSnap, followerSnap] = await Promise.all([
           getDoc(doc(db, "users", targetId)),
           getDocs(query(collection(db, "community_posts"), where("authorId", "==", targetId))),
+          // Count followers by querying users who have targetId in their following array
+          getDocs(query(collection(db, "users"), where("following", "array-contains", targetId))),
         ]);
         if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
+        setFollowerCount(followerSnap.size);
         const mapped = postsSnap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as Omit<Post, "id">),
@@ -89,12 +93,10 @@ export default function UserProfileScreen() {
             onPress: async () => {
               setFollowLoading(true);
               try {
-                await Promise.all([
-                  updateDoc(doc(db, "users", targetId), { followers: arrayRemove(user.uid) }),
-                  updateDoc(doc(db, "users", user.uid), { following: arrayRemove(targetId) }),
-                ]);
-                setProfile((p) => p ? { ...p, followers: (p.followers ?? []).filter((f) => f !== user.uid) } : p);
-                refreshProfile().catch(() => {});
+                // Only write to OWN document — avoids permission errors
+                await updateDoc(doc(db, "users", user.uid), { following: arrayRemove(targetId) });
+                setFollowerCount((c) => Math.max(0, c - 1));
+                await refreshProfile();
               } catch (e) { console.warn("unfollow error:", e); }
               finally { setFollowLoading(false); }
             },
@@ -106,12 +108,10 @@ export default function UserProfileScreen() {
 
     setFollowLoading(true);
     try {
-      await Promise.all([
-        updateDoc(doc(db, "users", targetId), { followers: arrayUnion(user.uid) }),
-        updateDoc(doc(db, "users", user.uid), { following: arrayUnion(targetId) }),
-      ]);
-      setProfile((p) => p ? { ...p, followers: [...(p.followers ?? []), user.uid] } : p);
-      refreshProfile().catch(() => {});
+      // Only write to OWN document — avoids permission errors
+      await updateDoc(doc(db, "users", user.uid), { following: arrayUnion(targetId) });
+      setFollowerCount((c) => c + 1);
+      await refreshProfile();
     } catch (e) { console.warn("follow error:", e); }
     finally { setFollowLoading(false); }
   };
