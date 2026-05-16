@@ -44,12 +44,23 @@ export default function UserProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
+  // Local optimistic state — null means "use myProfile as source of truth"
+  const [localFollowing, setLocalFollowing] = useState<boolean | null>(null);
 
   const targetId = Array.isArray(id) ? id[0] : id ?? "";
   const isOwnProfile = user?.uid === targetId;
-  // isFollowing comes from MY profile's following array — avoids reading other user's doc
-  const isFollowing = !!(myProfile?.following?.includes(targetId));
+  // Use local override when set (optimistic), otherwise fall back to server profile
+  const isFollowing = localFollowing !== null
+    ? localFollowing
+    : !!(myProfile?.following?.includes(targetId));
   const followingCount = profile?.following?.length ?? 0;
+
+  // Sync localFollowing when myProfile loads (first mount only)
+  React.useEffect(() => {
+    if (myProfile && localFollowing === null) {
+      setLocalFollowing(!!(myProfile.following?.includes(targetId)));
+    }
+  }, [myProfile, targetId]);
 
   useEffect(() => {
     if (!targetId) return;
@@ -91,13 +102,19 @@ export default function UserProfileScreen() {
             text: "Unfollow",
             style: "destructive",
             onPress: async () => {
+              // Optimistic update
+              setLocalFollowing(false);
+              setFollowerCount((c) => Math.max(0, c - 1));
               setFollowLoading(true);
               try {
-                // Only write to OWN document — avoids permission errors
                 await updateDoc(doc(db, "users", user.uid), { following: arrayRemove(targetId) });
-                setFollowerCount((c) => Math.max(0, c - 1));
-                await refreshProfile();
-              } catch (e) { console.warn("unfollow error:", e); }
+                refreshProfile().catch(() => {});
+              } catch (e) {
+                // Revert on failure
+                setLocalFollowing(true);
+                setFollowerCount((c) => c + 1);
+                console.warn("unfollow error:", e);
+              }
               finally { setFollowLoading(false); }
             },
           },
@@ -106,13 +123,19 @@ export default function UserProfileScreen() {
       return;
     }
 
+    // Optimistic update — flip button immediately
+    setLocalFollowing(true);
+    setFollowerCount((c) => c + 1);
     setFollowLoading(true);
     try {
-      // Only write to OWN document — avoids permission errors
       await updateDoc(doc(db, "users", user.uid), { following: arrayUnion(targetId) });
-      setFollowerCount((c) => c + 1);
-      await refreshProfile();
-    } catch (e) { console.warn("follow error:", e); }
+      refreshProfile().catch(() => {});
+    } catch (e) {
+      // Revert on failure
+      setLocalFollowing(false);
+      setFollowerCount((c) => Math.max(0, c - 1));
+      console.warn("follow error:", e);
+    }
     finally { setFollowLoading(false); }
   };
 
