@@ -254,6 +254,28 @@ export default function ProfileScreen() {
                   </View>
                 </TouchableOpacity>
               ) : null}
+
+              {/* Followers / Following / Posts stats */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>
+                    {(profile as any)?.followers?.length ?? 0}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>
+                    {(profile as any)?.following?.length ?? 0}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Following</Text>
+                </View>
+                <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: colors.foreground }]}>{posts.length}</Text>
+                  <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Posts</Text>
+                </View>
+              </View>
             </View>
 
             {/* ── XP / Streak ── */}
@@ -358,6 +380,11 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   goalText: { fontSize: 12, fontWeight: "500" },
+  statsRow: { flexDirection: "row", alignItems: "center", marginTop: 14, gap: 0 },
+  statItem: { flex: 1, alignItems: "center" },
+  statNum: { fontSize: 17, fontWeight: "700" },
+  statLabel: { fontSize: 12, marginTop: 1 },
+  statDivider: { width: 1, height: 28, marginHorizontal: 4 },
   tabBar: { flexDirection: "row", borderBottomWidth: 1, marginHorizontal: 16, marginTop: 8, marginBottom: 4 },
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 12 },
   tabLabel: { fontSize: 14 },
