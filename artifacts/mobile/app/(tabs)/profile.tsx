@@ -257,19 +257,25 @@ export default function ProfileScreen() {
 
               {/* Followers / Following / Posts stats */}
               <View style={styles.statsRow}>
-                <View style={styles.statItem}>
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => user && router.push(`/followers/${user.uid}?tab=followers`)}
+                >
                   <Text style={[styles.statNum, { color: colors.foreground }]}>
                     {(profile as any)?.followers?.length ?? 0}
                   </Text>
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.statItem}>
+                <TouchableOpacity
+                  style={styles.statItem}
+                  onPress={() => user && router.push(`/followers/${user.uid}?tab=following`)}
+                >
                   <Text style={[styles.statNum, { color: colors.foreground }]}>
                     {(profile as any)?.following?.length ?? 0}
                   </Text>
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Following</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statNum, { color: colors.foreground }]}>{posts.length}</Text>

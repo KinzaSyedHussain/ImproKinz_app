@@ -15,6 +15,7 @@ import {
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Platform,
@@ -75,29 +76,44 @@ export default function UserProfileScreen() {
 
   const handleFollow = async () => {
     if (!user || !targetId || followLoading) return;
+
+    if (isFollowing) {
+      Alert.alert(
+        `Unfollow ${profile?.displayName ?? "this user"}?`,
+        "You will no longer see their posts.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unfollow",
+            style: "destructive",
+            onPress: async () => {
+              setFollowLoading(true);
+              try {
+                await Promise.all([
+                  updateDoc(doc(db, "users", targetId), { followers: arrayRemove(user.uid) }),
+                  updateDoc(doc(db, "users", user.uid), { following: arrayRemove(targetId) }),
+                ]);
+                setProfile((p) => p ? { ...p, followers: (p.followers ?? []).filter((f) => f !== user.uid) } : p);
+                refreshProfile().catch(() => {});
+              } catch (e) { console.warn("unfollow error:", e); }
+              finally { setFollowLoading(false); }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setFollowLoading(true);
     try {
-      const targetRef = doc(db, "users", targetId);
-      const myRef = doc(db, "users", user.uid);
-      if (isFollowing) {
-        await Promise.all([
-          updateDoc(targetRef, { followers: arrayRemove(user.uid) }),
-          updateDoc(myRef, { following: arrayRemove(targetId) }),
-        ]);
-        setProfile((p) => p ? { ...p, followers: (p.followers ?? []).filter((f) => f !== user.uid) } : p);
-      } else {
-        await Promise.all([
-          updateDoc(targetRef, { followers: arrayUnion(user.uid) }),
-          updateDoc(myRef, { following: arrayUnion(targetId) }),
-        ]);
-        setProfile((p) => p ? { ...p, followers: [...(p.followers ?? []), user.uid] } : p);
-      }
+      await Promise.all([
+        updateDoc(doc(db, "users", targetId), { followers: arrayUnion(user.uid) }),
+        updateDoc(doc(db, "users", user.uid), { following: arrayUnion(targetId) }),
+      ]);
+      setProfile((p) => p ? { ...p, followers: [...(p.followers ?? []), user.uid] } : p);
       refreshProfile().catch(() => {});
-    } catch (e) {
-      console.warn("follow error:", e);
-    } finally {
-      setFollowLoading(false);
-    }
+    } catch (e) { console.warn("follow error:", e); }
+    finally { setFollowLoading(false); }
   };
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -179,15 +195,15 @@ export default function UserProfileScreen() {
 
               {/* Followers / Following / Posts stats */}
               <View style={styles.statsRow}>
-                <View style={styles.statItem}>
+                <TouchableOpacity style={styles.statItem} onPress={() => router.push(`/followers/${targetId}?tab=followers`)}>
                   <Text style={[styles.statNum, { color: colors.foreground }]}>{followerCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Followers</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-                <View style={styles.statItem}>
+                <TouchableOpacity style={styles.statItem} onPress={() => router.push(`/followers/${targetId}?tab=following`)}>
                   <Text style={[styles.statNum, { color: colors.foreground }]}>{followingCount}</Text>
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Following</Text>
-                </View>
+                </TouchableOpacity>
                 <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                 <View style={styles.statItem}>
                   <Text style={[styles.statNum, { color: colors.foreground }]}>{posts.length}</Text>
