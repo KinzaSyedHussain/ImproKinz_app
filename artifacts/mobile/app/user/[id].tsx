@@ -92,49 +92,21 @@ export default function UserProfileScreen() {
   const handleFollow = async () => {
     if (!user || !targetId || followLoading) return;
 
-    if (isFollowing) {
-      Alert.alert(
-        `Unfollow ${profile?.displayName ?? "this user"}?`,
-        "You will no longer see their posts.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Unfollow",
-            style: "destructive",
-            onPress: async () => {
-              // Optimistic update
-              setLocalFollowing(false);
-              setFollowerCount((c) => Math.max(0, c - 1));
-              setFollowLoading(true);
-              try {
-                await updateDoc(doc(db, "users", user.uid), { following: arrayRemove(targetId) });
-                refreshProfile().catch(() => {});
-              } catch (e) {
-                // Revert on failure
-                setLocalFollowing(true);
-                setFollowerCount((c) => c + 1);
-                console.warn("unfollow error:", e);
-              }
-              finally { setFollowLoading(false); }
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    // Optimistic update — flip button immediately
-    setLocalFollowing(true);
-    setFollowerCount((c) => c + 1);
+    // Optimistic update first — button flips immediately
+    const newState = !isFollowing;
+    setLocalFollowing(newState);
+    setFollowerCount((c) => newState ? c + 1 : Math.max(0, c - 1));
     setFollowLoading(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), { following: arrayUnion(targetId) });
+      await updateDoc(doc(db, "users", user.uid), {
+        following: newState ? arrayUnion(targetId) : arrayRemove(targetId),
+      });
       refreshProfile().catch(() => {});
     } catch (e) {
       // Revert on failure
-      setLocalFollowing(false);
-      setFollowerCount((c) => Math.max(0, c - 1));
-      console.warn("follow error:", e);
+      setLocalFollowing(!newState);
+      setFollowerCount((c) => newState ? Math.max(0, c - 1) : c + 1);
+      console.warn("follow/unfollow error:", e);
     }
     finally { setFollowLoading(false); }
   };
