@@ -8,9 +8,16 @@ const inFlight = new Map<string, Promise<string | null>>();
 export async function fetchUserPhoto(uid: string): Promise<string | null> {
   if (photoCache.has(uid)) return photoCache.get(uid) ?? null;
   if (inFlight.has(uid)) return inFlight.get(uid)!;
-  const p = getDoc(doc(db, "users", uid))
-    .then((snap) => {
-      const photo = (snap.data()?.photoURL as string | undefined) ?? null;
+  const p = Promise.all([
+    getDoc(doc(db, "users",    uid)),
+    getDoc(doc(db, "profiles", uid)),
+  ])
+    .then(([mobileSnap, webSnap]) => {
+      // Prefer the mobile doc, fall back to web doc
+      const photo =
+        (mobileSnap.data()?.photoURL as string | undefined) ||
+        (webSnap.data()?.photoURL   as string | undefined) ||
+        null;
       photoCache.set(uid, photo);
       inFlight.delete(uid);
       return photo;
@@ -26,7 +33,9 @@ export async function fetchUserPhoto(uid: string): Promise<string | null> {
 
 export function useUserPhoto(uid: string, fallback?: string | null) {
   const cached = photoCache.get(uid);
-  const [photo, setPhoto] = useState<string | null>(cached !== undefined ? cached : (fallback ?? null));
+  const [photo, setPhoto] = useState<string | null>(
+    cached !== undefined ? cached : (fallback ?? null)
+  );
 
   useEffect(() => {
     if (cached !== undefined) {

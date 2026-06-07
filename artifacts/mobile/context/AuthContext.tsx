@@ -65,13 +65,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (uid: string, fbUser?: User) => {
     try {
-      const ref = doc(db, "users", uid);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
+      // Try `users/` first (mobile-primary), fall back to `profiles/` (web-primary)
+      const mobileRef = doc(db, "users", uid);
+      const webRef    = doc(db, "profiles", uid);
+      const [mobileSnap, webSnap] = await Promise.all([getDoc(mobileRef), getDoc(webRef)]);
+
+      if (mobileSnap.exists()) {
+        const data = mobileSnap.data() as UserProfile;
+        // If the web has a more recent display name / photo, prefer it
+        if (webSnap.exists()) {
+          const webData = webSnap.data() as Partial<UserProfile>;
+          const merged: UserProfile = {
+            ...data,
+            displayName: data.displayName || webData.displayName || data.displayName,
+            photoURL:    data.photoURL    || webData.photoURL    || data.photoURL,
+            bio:         data.bio         || webData.bio         || data.bio,
+          };
+          setProfile(merged);
+        } else {
+          setProfile(data);
+        }
+      } else if (webSnap.exists()) {
+        // User registered on the website — import their profile into `users/`
+        const webData = webSnap.data() as Partial<UserProfile>;
+        const name  = webData.displayName || fbUser?.displayName || "Study User";
+        const photo = webData.photoURL    || fbUser?.photoURL
+          || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
+        const p: UserProfile = {
+          uid,
+          email:          webData.email   || fbUser?.email || "",
+          displayName:    name,
+          photoURL:       photo,
+          bannerUrl:      webData.bannerUrl,
+          bio:            webData.bio     || "",
+          subjects:       webData.subjects || [],
+          xp:             webData.xp      || 0,
+          streak:         webData.streak  || 1,
+          lastActiveDate: webData.lastActiveDate || new Date().toDateString(),
+          createdAt:      webData.createdAt      || Date.now(),
+          following:      webData.following,
+        };
+        await setDoc(mobileRef, { ...p, createdAt: serverTimestamp() });
+        setProfile(p);
       } else if (fbUser) {
-        // Profile doc missing — create it now so updates work
-        const name = fbUser.displayName || "Study User";
+        // New user — create in both collections so both platforms see them
+        const name  = fbUser.displayName || "Study User";
         const photo = fbUser.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
         const p: UserProfile = {
           uid: fbUser.uid,
@@ -85,7 +123,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           lastActiveDate: new Date().toDateString(),
           createdAt: Date.now(),
         };
-        await setDoc(ref, { ...p, createdAt: serverTimestamp() });
+        const base = { ...p, createdAt: serverTimestamp() };
+        await Promise.all([
+          setDoc(mobileRef, base),
+          setDoc(webRef,    base),
+        ]);
         setProfile(p);
       }
     } catch (e) {
@@ -140,7 +182,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastActiveDate: new Date().toDateString(),
       createdAt: Date.now(),
     };
-    await setDoc(doc(db, "users", fbUser.uid), { ...p, createdAt: serverTimestamp() });
+    const base = { ...p, createdAt: serverTimestamp() };
+    // Write to both collections so mobile users appear on the website too
+    await Promise.all([
+      setDoc(doc(db, "users",    fbUser.uid), base),
+      setDoc(doc(db, "profiles", fbUser.uid), base),
+    ]);
     setProfile(p);
   };
 
