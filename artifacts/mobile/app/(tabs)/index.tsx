@@ -26,7 +26,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sidebar } from "@/components/Sidebar";
-import { Post, PostCard } from "@/components/PostCard";
+import { Post, PostCard, normalizePost } from "@/components/PostCard";
 import { useColors } from "@/hooks/useColors";
 import { db } from "@/lib/firebase";
 
@@ -65,11 +65,7 @@ export default function HomeScreen() {
       );
       const snap = await getDocs(q);
       lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
-      const all: Post[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Post, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      }));
+      const all: Post[] = snap.docs.map((d) => normalizePost(d.id, d.data()));
       const shuffled = shuffle(all);
       const firstPage = shuffled.slice(0, PAGE_SIZE);
       poolRef.current = shuffled.slice(PAGE_SIZE);
@@ -104,11 +100,7 @@ export default function HomeScreen() {
       const snap = await getDocs(q);
       if (!snap.docs.length) { setHasMore(false); return; }
       lastDocRef.current = snap.docs[snap.docs.length - 1];
-      const more: Post[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<Post, "id">),
-        createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-      }));
+      const more: Post[] = snap.docs.map((d) => normalizePost(d.id, d.data()));
       const shuffled = shuffle(more);
       const next = shuffled.slice(0, PAGE_SIZE);
       poolRef.current = shuffled.slice(PAGE_SIZE);
