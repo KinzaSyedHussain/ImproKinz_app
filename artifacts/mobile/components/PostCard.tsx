@@ -30,7 +30,7 @@ import Animated, {
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
-import { useUserPhoto } from "@/hooks/useUserPhotoCache";
+import { useUserPhoto, useUserDisplayName } from "@/hooks/useUserPhotoCache";
 import { UserAvatar } from "./UserAvatar";
 
 export interface PostComment {
@@ -195,6 +195,18 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
   const liveOtherPhoto = useUserPhoto(post.authorId, post.authorPhoto);
   const displayPhoto = isOwnPost ? (profile?.photoURL ?? post.authorPhoto) : liveOtherPhoto;
 
+  // For web posts that don't store authorName, fetch it live from Firestore
+  const needsLiveName = !post.authorName || post.authorName === "Anonymous" || post.authorName === "Community member";
+  const liveOtherName = useUserDisplayName(
+    needsLiveName && !isOwnPost ? post.authorId : "",
+    post.authorName
+  );
+  const displayName = isOwnPost
+    ? (profile?.displayName ?? post.authorName)
+    : needsLiveName
+    ? (liveOtherName ?? post.authorName)
+    : post.authorName;
+
   const likes = Array.isArray(post.likes) ? post.likes : [];
   const savedBy = Array.isArray(post.savedBy) ? post.savedBy : [];
   const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
@@ -288,10 +300,10 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           onPress={() => router.push(`/user/${post.authorId}` as any)}
           style={styles.authorRow}
         >
-          <UserAvatar photoURL={displayPhoto} displayName={post.authorName} size={38} />
+          <UserAvatar photoURL={displayPhoto} displayName={displayName || post.authorName} size={38} />
           <View style={styles.authorInfo}>
             <Text style={[styles.authorName, { color: colors.foreground }]}>
-              {post.authorName}
+              {displayName || post.authorName}
             </Text>
             <Text style={[styles.time, { color: colors.mutedForeground }]}>
               {timeAgo(post.createdAt)}

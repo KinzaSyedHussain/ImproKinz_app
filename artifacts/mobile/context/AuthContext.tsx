@@ -72,8 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (mobileSnap.exists()) {
         const data = mobileSnap.data() as UserProfile;
-        // If the web has a more recent display name / photo, prefer it
         if (webSnap.exists()) {
+          // Both exist — merge, prefer non-empty values
           const webData = webSnap.data() as Partial<UserProfile>;
           const merged: UserProfile = {
             ...data,
@@ -83,6 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           setProfile(merged);
         } else {
+          // Mobile user has no profiles/ doc — create it now so website can see them
+          setDoc(webRef, { ...data, createdAt: serverTimestamp() }).catch(() => {});
           setProfile(data);
         }
       } else if (webSnap.exists()) {
