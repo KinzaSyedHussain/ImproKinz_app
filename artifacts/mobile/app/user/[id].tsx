@@ -30,7 +30,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UserProfile, useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
-import { Post, PostCard } from "@/components/PostCard";
+import { Post, PostCard, normalizePost } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 import { XPStreakBadge } from "@/components/XPStreakBadge";
 
@@ -85,11 +85,7 @@ export default function UserProfileScreen() {
         ]);
         if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
         setFollowerCount(followerSnap.size);
-        const mapped = postsSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Post, "id">),
-          createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-        }));
+        const mapped = postsSnap.docs.map((d) => normalizePost(d.id, d.data()));
         setPosts(mapped.sort((a, b) => b.createdAt - a.createdAt));
       } catch (e) {
         console.warn("fetchData error:", e);

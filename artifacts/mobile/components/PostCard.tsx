@@ -63,6 +63,69 @@ export interface Post {
   videoUrl?: string;
 }
 
+/**
+ * Normalize a raw Firestore post document into the mobile Post shape.
+ * Handles field-name variations that may come from the web app or other
+ * clients so both platforms read each other's posts correctly.
+ */
+export function normalizePost(id: string, data: Record<string, any>): Post {
+  // ── timestamp ──────────────────────────────────────────────────────
+  let createdAt: number = Date.now();
+  const rawTs = data.createdAt ?? data.timestamp ?? data.date ?? data.postedAt;
+  if (rawTs && typeof rawTs.toMillis === "function") createdAt = rawTs.toMillis();
+  else if (typeof rawTs === "number") createdAt = rawTs;
+
+  // ── media ──────────────────────────────────────────────────────────
+  const imageUrl: string | null =
+    data.imageUrl ?? data.imageURL ?? data.image ?? data.photo ?? data.photoUrl ?? null;
+  const videoUrl: string | null =
+    data.videoUrl ?? data.videoURL ?? data.video ?? null;
+  const rawMediaType: string | null = data.mediaType ?? null;
+  const mediaType: "image" | "video" | undefined =
+    rawMediaType === "image" || rawMediaType === "video"
+      ? rawMediaType
+      : imageUrl
+      ? "image"
+      : videoUrl
+      ? "video"
+      : undefined;
+
+  // ── post type ──────────────────────────────────────────────────────
+  const rawType = data.type ?? data.postType ?? data.kind ?? "";
+  const type: "note" | "question" | "tip" =
+    rawType === "note" || rawType === "question" || rawType === "tip"
+      ? rawType
+      : "note";
+
+  return {
+    id,
+    authorId:    data.authorId    ?? data.userId  ?? data.uid      ?? data.author?.id ?? "",
+    authorName:  data.authorName  ?? data.userName ?? data.displayName ?? data.name   ?? data.author?.name ?? "Anonymous",
+    authorPhoto: data.authorPhoto ?? data.photoURL ?? data.avatar   ?? data.authorAvatar ?? data.author?.photo ?? "",
+    content:     data.content     ?? data.text     ?? data.body     ?? data.message   ?? data.description ?? "",
+    type,
+    subject:     data.subject     ?? data.category ?? data.tag      ?? data.topic     ?? undefined,
+    imageUrl:    imageUrl         ?? undefined,
+    videoUrl:    videoUrl         ?? undefined,
+    mediaUrl:    data.mediaUrl    ?? imageUrl ?? videoUrl ?? undefined,
+    mediaType,
+    likes:       Array.isArray(data.likes)   ? data.likes   : [],
+    savedBy:     Array.isArray(data.savedBy) ? data.savedBy : [],
+    commentCount: typeof data.commentCount === "number"
+      ? data.commentCount
+      : typeof data.comments === "number"
+      ? data.comments
+      : 0,
+    commentsList: Array.isArray(data.commentsList)
+      ? data.commentsList.map((c: any) => ({
+          ...c,
+          createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
+        }))
+      : undefined,
+    createdAt,
+  };
+}
+
 interface Props {
   post: Post;
   onRefresh?: () => void;

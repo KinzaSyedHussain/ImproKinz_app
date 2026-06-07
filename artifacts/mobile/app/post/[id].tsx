@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
-import { Post, PostCard, PostComment } from "@/components/PostCard";
+import { Post, PostCard, PostComment, normalizePost } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 
 function timeAgo(ts: number) {
@@ -69,16 +69,7 @@ export default function PostDetailScreen() {
       doc(db, "community_posts", postId),
       (snap) => {
         if (snap.exists()) {
-          const data = snap.data();
-          setPost({
-            id: snap.id,
-            ...(data as Omit<Post, "id">),
-            createdAt: data["createdAt"]?.toMillis?.() ?? Date.now(),
-            commentsList: (data["commentsList"] ?? []).map((c: any) => ({
-              ...c,
-              createdAt: typeof c.createdAt === "number" ? c.createdAt : Date.now(),
-            })),
-          });
+          setPost(normalizePost(snap.id, snap.data()));
         }
         setLoading(false);
       },

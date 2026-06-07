@@ -27,7 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
-import { Post, PostCard } from "@/components/PostCard";
+import { Post, PostCard, normalizePost } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 import { XPStreakBadge } from "@/components/XPStreakBadge";
 
@@ -69,11 +69,7 @@ export default function ProfileScreen() {
     if (!user) return;
     const fetchPosts = async () => {
       try {
-        const toPost = (d: any): Post => ({
-          id: d.id,
-          ...(d.data() as Omit<Post, "id">),
-          createdAt: d.data()["createdAt"]?.toMillis?.() ?? Date.now(),
-        });
+        const toPost = (d: any): Post => normalizePost(d.id, d.data());
         const sort = (arr: Post[]) => arr.sort((a, b) => b.createdAt - a.createdAt);
         const [snap, savedSnap, followerSnap] = await Promise.all([
           getDocs(query(collection(db, "community_posts"), where("authorId", "==", user.uid))),
