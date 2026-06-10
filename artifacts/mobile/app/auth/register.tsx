@@ -16,7 +16,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@/context/AuthContext";
+import { useSignUp } from "@clerk/clerk-expo";
 
 const { width: W, height: H } = Dimensions.get("window");
 
@@ -36,11 +36,14 @@ const PERKS = [
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
-  const { signUp } = useAuth();
   const router = useRouter();
+  const { signUp, setActive, isLoaded } = useSignUp();
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [pendingVerification, setPendingVerification] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
@@ -76,20 +79,42 @@ export default function RegisterScreen() {
   }, []);
 
   const handleRegister = async () => {
+    if (!isLoaded) return;
     setError("");
     if (!name.trim() || !email.trim() || !password) { setError("Please fill in all fields"); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
     setLoading(true);
     try {
-      await signUp(email.trim(), password, name.trim());
-      router.replace("/(tabs)/");
+      await signUp.create({
+        emailAddress: email.trim(),
+        password,
+        firstName: name.trim(),
+      });
+      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      setPendingVerification(true);
     } catch (e: any) {
-      const code = e?.code || "";
-      if (code === "auth/email-already-in-use") setError("An account with this email already exists.");
-      else if (code === "auth/invalid-email") setError("Please enter a valid email address.");
-      else if (code === "auth/weak-password") setError("Password is too weak. Use at least 6 characters.");
-      else if (code === "auth/operation-not-allowed") setError("Email/Password sign-in not enabled in Firebase Console.");
-      else setError(e?.message || "Sign up failed. Please try again.");
+      const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || "Sign up failed";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!isLoaded) return;
+    setError("");
+    setLoading(true);
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code });
+      if (result.status === "complete") {
+        await setActive({ session: result.createdSessionId });
+        router.replace("/(tabs)/");
+      } else {
+        setError("Verification incomplete. Please try again.");
+      }
+    } catch (e: any) {
+      const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || "Verification failed";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -97,6 +122,90 @@ export default function RegisterScreen() {
 
   const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.85] });
   const glowScale = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+  const busy = loading;
+
+  if (pendingVerification) {
+    return (
+      <View style={styles.root}>
+        <LinearGradient
+          colors={["#0A0820", "#0D0B2B", "#1C0B52"]}
+          locations={[0, 0.45, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.scroll,
+              { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 60), paddingBottom: insets.bottom + 40 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={{ alignItems: "center", width: "100%" }}>
+              <View style={styles.verifyIconArea}>
+                <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.verifyIconBox}>
+                  <Text style={{ fontSize: 36 }}>📬</Text>
+                </LinearGradient>
+              </View>
+              <Text style={styles.verifyTitle}>Check your email</Text>
+              <Text style={styles.verifySub}>
+                We sent a 6-digit code to{"\n"}
+                <Text style={{ color: "#F59E0B" }}>{email}</Text>
+              </Text>
+
+              {!!error && (
+                <View style={[styles.errorBox, { width: "100%" }]}>
+                  <Icon name="alert-circle" size={14} color="#FCA5A5" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+
+              <View style={[styles.inputWrap, { width: "100%", marginTop: 8 }, focusedField === "code" && styles.inputFocused]}>
+                <Icon name="shield" size={17} color={focusedField === "code" ? "#A78BFA" : "#6B5FA0"} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter 6-digit code"
+                  placeholderTextColor="#6B5FA0"
+                  value={code}
+                  onChangeText={setCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  onFocus={() => setFocusedField("code")}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+
+              <TouchableOpacity
+                onPress={handleVerify}
+                disabled={busy || code.length < 6}
+                style={{ width: "100%", marginTop: 16, opacity: (busy || code.length < 6) ? 0.65 : 1 }}
+              >
+                <LinearGradient
+                  colors={["#F59E0B", "#D97706"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.createBtn}
+                >
+                  <Text style={styles.createBtnText}>{busy ? "Verifying..." : "Verify & Start Learning 🚀"}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => signUp?.prepareEmailAddressVerification({ strategy: "email_code" })}
+                style={{ marginTop: 16 }}
+              >
+                <Text style={styles.resendText}>Didn't receive it? Resend code</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { setPendingVerification(false); setCode(""); setError(""); }} style={{ marginTop: 8 }}>
+                <Text style={[styles.resendText, { color: "#6B5FA0" }]}>← Go back</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -106,7 +215,6 @@ export default function RegisterScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Nebula blobs */}
       <View style={[styles.blob, { top: H * 0.5, right: -70, backgroundColor: "#7C3AED20", width: 260, height: 260 }]} />
       <View style={[styles.blob, { top: H * 0.15, left: -90, backgroundColor: "#4C1D9518", width: 230, height: 230 }]} />
 
@@ -127,13 +235,10 @@ export default function RegisterScreen() {
           showsVerticalScrollIndicator={false}
         >
           <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }], alignItems: "center", width: "100%" }}>
-
-            {/* Back button */}
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
               <Icon name="arrow-left" size={20} color="#A78BFA" />
             </TouchableOpacity>
 
-            {/* Glowing icon */}
             <View style={styles.iconArea}>
               <Animated.View style={[styles.iconGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
               <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.iconBox}>
@@ -149,7 +254,6 @@ export default function RegisterScreen() {
             </Text>
             <Text style={styles.subtitle}>Unlock your personal learning treasury</Text>
 
-            {/* Perks row */}
             <View style={styles.perksRow}>
               {PERKS.map((p, i) => (
                 <View key={i} style={styles.perk}>
@@ -159,7 +263,6 @@ export default function RegisterScreen() {
               ))}
             </View>
 
-            {/* Form card */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Create your account</Text>
 
@@ -203,7 +306,7 @@ export default function RegisterScreen() {
                   <Icon name="lock" size={17} color={focusedField === "pw" ? "#A78BFA" : "#6B5FA0"} />
                   <TextInput
                     style={styles.input}
-                    placeholder="Password (min. 6 characters)"
+                    placeholder="Password (min. 8 characters)"
                     placeholderTextColor="#6B5FA0"
                     value={password}
                     onChangeText={setPassword}
@@ -218,8 +321,8 @@ export default function RegisterScreen() {
 
                 <TouchableOpacity
                   onPress={handleRegister}
-                  disabled={loading}
-                  style={{ opacity: loading ? 0.75 : 1 }}
+                  disabled={busy}
+                  style={{ opacity: busy ? 0.75 : 1 }}
                 >
                   <LinearGradient
                     colors={["#7C3AED", "#5B21B6"]}
@@ -228,8 +331,8 @@ export default function RegisterScreen() {
                     style={styles.createBtn}
                   >
                     <View style={styles.btnInner}>
-                      <Text style={styles.createBtnText}>{loading ? "Creating account..." : "Start Learning"}</Text>
-                      {!loading && <Text style={{ fontSize: 16 }}>🚀</Text>}
+                      <Text style={styles.createBtnText}>{busy ? "Creating account..." : "Start Learning"}</Text>
+                      {!busy && <Text style={{ fontSize: 16 }}>🚀</Text>}
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
@@ -254,115 +357,44 @@ const styles = StyleSheet.create({
   blob: { position: "absolute", borderRadius: 140 },
   star: { position: "absolute", backgroundColor: "#FFFFFF" },
   scroll: { alignItems: "center", paddingHorizontal: 20 },
-  backBtn: {
-    alignSelf: "flex-start",
-    padding: 8,
-    marginBottom: 8,
-    backgroundColor: "#1E1554",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#2D2080",
-  },
+  backBtn: { alignSelf: "flex-start", padding: 8, marginBottom: 8, backgroundColor: "#1E1554", borderRadius: 12, borderWidth: 1, borderColor: "#2D2080" },
 
   iconArea: { width: 96, height: 96, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  iconGlow: {
-    position: "absolute",
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    backgroundColor: "#F59E0B40",
-  },
-  iconBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.6,
-    shadowRadius: 16,
-    elevation: 10,
-  },
+  iconGlow: { position: "absolute", width: 112, height: 112, borderRadius: 56, backgroundColor: "#F59E0B40" },
+  iconBox: { width: 80, height: 80, borderRadius: 22, alignItems: "center", justifyContent: "center", shadowColor: "#F59E0B", shadowOpacity: 0.6, shadowRadius: 16, elevation: 10 },
   iconEmoji: { fontSize: 40 },
   sparkle: { position: "absolute" },
 
-  title: { fontSize: 30, fontWeight: "800", fontFamily: undefined },
-  subtitle: { fontSize: 13, color: "#8B7CC4", marginTop: 4, marginBottom: 16, fontFamily: undefined, textAlign: "center" },
+  title: { fontSize: 30, fontWeight: "800" },
+  subtitle: { fontSize: 13, color: "#8B7CC4", marginTop: 4, marginBottom: 16, textAlign: "center" },
 
-  perksRow: {
-    width: "100%",
-    gap: 8,
-    marginBottom: 20,
-  },
-  perk: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#1E155488",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#2D208044",
-  },
+  perksRow: { width: "100%", gap: 8, marginBottom: 20 },
+  perk: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#1E155488", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "#2D208044" },
   perkIcon: { fontSize: 18 },
-  perkText: { color: "#C4B5FD", fontSize: 13, fontFamily: undefined, flex: 1 },
+  perkText: { color: "#C4B5FD", fontSize: 13, flex: 1 },
 
-  card: {
-    width: "100%",
-    backgroundColor: "#1E1554",
-    borderRadius: 24,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: "#2D208033",
-    shadowColor: "#7C3AED",
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  cardTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", fontFamily: undefined, marginBottom: 14 },
+  card: { width: "100%", backgroundColor: "#1E1554", borderRadius: 24, padding: 22, borderWidth: 1, borderColor: "#2D208033", shadowColor: "#7C3AED", shadowOpacity: 0.18, shadowRadius: 20, elevation: 8 },
+  cardTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", marginBottom: 14 },
 
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    padding: 11,
-    borderRadius: 10,
-    backgroundColor: "#3B1515",
-    borderWidth: 1,
-    borderColor: "#7F1D1D",
-    marginBottom: 12,
-  },
-  errorText: { color: "#FCA5A5", fontSize: 12, flex: 1, lineHeight: 17, fontFamily: undefined },
+  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: 10, backgroundColor: "#3B1515", borderWidth: 1, borderColor: "#7F1D1D", marginBottom: 12 },
+  errorText: { color: "#FCA5A5", fontSize: 12, flex: 1, lineHeight: 17 },
 
   form: { gap: 12 },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#13103A",
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#2D2080",
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
+  inputWrap: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#13103A", borderRadius: 14, borderWidth: 1.5, borderColor: "#2D2080", paddingHorizontal: 14, paddingVertical: 13 },
   inputFocused: { borderColor: "#A78BFA" },
-  input: { flex: 1, color: "#FFFFFF", fontSize: 15, fontFamily: undefined },
+  input: { flex: 1, color: "#FFFFFF", fontSize: 15 },
 
-  createBtn: {
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: "center",
-    shadowColor: "#7C3AED",
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 6,
-  },
+  createBtn: { borderRadius: 14, paddingVertical: 15, alignItems: "center", shadowColor: "#7C3AED", shadowOpacity: 0.45, shadowRadius: 12, elevation: 6 },
   btnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
-  createBtnText: { color: "#fff", fontSize: 16, fontWeight: "700", fontFamily: undefined },
+  createBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
   footer: { flexDirection: "row", alignItems: "center", marginTop: 18 },
-  footerNote: { color: "#6B5FA0", fontSize: 13, fontFamily: undefined },
-  footerLink: { color: "#A78BFA", fontSize: 13, fontWeight: "600", fontFamily: undefined },
+  footerNote: { color: "#6B5FA0", fontSize: 13 },
+  footerLink: { color: "#A78BFA", fontSize: 13, fontWeight: "600" },
+
+  verifyIconArea: { width: 90, height: 90, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  verifyIconBox: { width: 76, height: 76, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  verifyTitle: { fontSize: 26, fontWeight: "800", color: "#FFFFFF", marginBottom: 8, textAlign: "center" },
+  verifySub: { fontSize: 14, color: "#8B7CC4", textAlign: "center", marginBottom: 24, lineHeight: 22 },
+  resendText: { color: "#A78BFA", fontSize: 13, fontWeight: "600" },
 });

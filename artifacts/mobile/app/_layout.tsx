@@ -12,14 +12,18 @@ import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ClerkProvider, ClerkLoaded } from "@clerk/clerk-expo";
+import { tokenCache } from "@clerk/clerk-expo/token-cache";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { ClerkFirebaseBridge } from "@/context/ClerkFirebaseBridge";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
 function RootLayoutNav() {
   return (
@@ -62,7 +66,6 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
-  // Only load Inter fonts — icons now use SVG (no font needed)
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -79,18 +82,23 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-              <InnerProviders>
-                <RootLayoutNav />
-              </InnerProviders>
-            </AuthProvider>
-          </QueryClientProvider>
-        </ErrorBoundary>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <ClerkLoaded>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <ErrorBoundary>
+              <QueryClientProvider client={queryClient}>
+                <AuthProvider>
+                  <ClerkFirebaseBridge />
+                  <InnerProviders>
+                    <RootLayoutNav />
+                  </InnerProviders>
+                </AuthProvider>
+              </QueryClientProvider>
+            </ErrorBoundary>
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </ClerkLoaded>
+    </ClerkProvider>
   );
 }
