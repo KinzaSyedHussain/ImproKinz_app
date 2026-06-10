@@ -1,13 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
-  GoogleAuthProvider,
   User,
-  createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signInWithCredential,
-  signInWithEmailAndPassword,
   signOut,
-  updateProfile,
 } from "firebase/auth";
 import {
   doc,
@@ -21,6 +16,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { auth, db, isFirebaseConfigured } from "@/lib/firebase";
@@ -39,6 +35,7 @@ export interface UserProfile {
   createdAt: number;
   followers?: string[];
   following?: string[];
+  onboardingComplete?: boolean;
 }
 
 interface AuthContextType {
@@ -46,12 +43,11 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   configured: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, displayName: string) => Promise<void>;
-  googleSignIn: (idToken: string) => Promise<void>;
   logOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   addXP: (amount: number) => Promise<void>;
+  /** Called by ClerkFirebaseBridge after Clerk signs in without Firebase bridge */
+  loadProfileByClerkId: (clerkId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -65,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (uid: string, fbUser?: User) => {
     try {
-      // Try `users/` first (mobile-primary), fall back to `profiles/` (web-primary)
       const mobileRef = doc(db, "users", uid);
       const webRef    = doc(db, "profiles", uid);
       const [mobileSnap, webSnap] = await Promise.all([getDoc(mobileRef), getDoc(webRef)]);
@@ -73,7 +68,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (mobileSnap.exists()) {
         const data = mobileSnap.data() as UserProfile;
         if (webSnap.exists()) {
-          // Both exist — merge, prefer non-empty values
           const webData = webSnap.data() as Partial<UserProfile>;
           const merged: UserProfile = {
             ...data,
@@ -83,39 +77,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           setProfile(merged);
         } else {
-          // Mobile user has no profiles/ doc — create it now so website can see them
           setDoc(webRef, { ...data, createdAt: serverTimestamp() }).catch(() => {});
           setProfile(data);
         }
       } else if (webSnap.exists()) {
-        // User registered on the website — import their profile into `users/`
         const webData = webSnap.data() as Partial<UserProfile>;
         const name  = webData.displayName || fbUser?.displayName || "Study User";
         const photo = webData.photoURL    || fbUser?.photoURL
           || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
         const p: UserProfile = {
           uid,
-          email:          webData.email   || fbUser?.email || "",
-          displayName:    name,
-          photoURL:       photo,
-          bannerUrl:      webData.bannerUrl,
-          bio:            webData.bio     || "",
-          subjects:       webData.subjects || [],
-          xp:             webData.xp      || 0,
-          streak:         webData.streak  || 1,
-          lastActiveDate: webData.lastActiveDate || new Date().toDateString(),
-          createdAt:      webData.createdAt      || Date.now(),
-          following:      webData.following,
+          email:           webData.email   || fbUser?.email || "",
+          displayName:     name,
+          photoURL:        photo,
+          bannerUrl:       webData.bannerUrl,
+          bio:             webData.bio     || "",
+          subjects:        webData.subjects || [],
+          xp:              webData.xp      || 0,
+          streak:          webData.streak  || 1,
+          lastActiveDate:  webData.lastActiveDate || new Date().toDateString(),
+          createdAt:       webData.createdAt      || Date.now(),
+          following:       webData.following,
+          onboardingComplete: webData.onboardingComplete,
         };
         await setDoc(mobileRef, { ...p, createdAt: serverTimestamp() });
         setProfile(p);
-      } else if (fbUser) {
-        // New user — create in both collections so both platforms see them
-        const name  = fbUser.displayName || "Study User";
-        const photo = fbUser.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
+      } else {
+        const name  = fbUser?.displayName || "Study User";
+        const photo = fbUser?.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
         const p: UserProfile = {
-          uid: fbUser.uid,
-          email: fbUser.email || "",
+          uid,
+          email: fbUser?.email || "",
           displayName: name,
           photoURL: photo,
           bio: "",
@@ -126,10 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           createdAt: Date.now(),
         };
         const base = { ...p, createdAt: serverTimestamp() };
-        await Promise.all([
-          setDoc(mobileRef, base),
-          setDoc(webRef,    base),
-        ]);
+        await Promise.all([setDoc(mobileRef, base), setDoc(webRef, base)]);
         setProfile(p);
       }
     } catch (e) {
@@ -155,11 +144,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Firebase auth state listener — Bridge updates this after Clerk sign-in
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setUser(fbUser);
       if (fbUser) {
-        await fetchProfile(fbUser.uid, fbUser); // pass fbUser so missing doc is auto-created
+        await fetchProfile(fbUser.uid, fbUser);
         updateStreak(fbUser.uid);
       } else {
         setProfile(null);
@@ -169,52 +159,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, [fetchProfile, updateStreak]);
 
-  const createUserProfile = async (fbUser: User, displayName?: string) => {
-    const name = displayName || fbUser.displayName || "Study User";
-    const photo = fbUser.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
-    const p: UserProfile = {
-      uid: fbUser.uid,
-      email: fbUser.email || "",
-      displayName: name,
-      photoURL: photo,
-      bio: "",
-      subjects: [],
-      xp: 0,
-      streak: 1,
-      lastActiveDate: new Date().toDateString(),
-      createdAt: Date.now(),
-    };
-    const base = { ...p, createdAt: serverTimestamp() };
-    // Write to both collections so mobile users appear on the website too
-    await Promise.all([
-      setDoc(doc(db, "users",    fbUser.uid), base),
-      setDoc(doc(db, "profiles", fbUser.uid), base),
-    ]);
-    setProfile(p);
-  };
-
-  const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
-  const signUp = async (email: string, password: string, displayName: string) => {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(cred.user, { displayName });
-    // Don't await — Firestore write shouldn't block auth success
-    createUserProfile(cred.user, displayName).catch((e) =>
-      console.warn("createUserProfile error:", e)
-    );
-  };
-
-  const googleSignIn = async (idToken: string) => {
-    const credential = GoogleAuthProvider.credential(idToken);
-    const cred = await signInWithCredential(auth, credential);
-    const snap = await getDoc(doc(db, "users", cred.user.uid));
-    if (!snap.exists()) await createUserProfile(cred.user);
-  };
+  /**
+   * Called by ClerkFirebaseBridge when Clerk is signed in but the Firebase
+   * custom token bridge hasn't completed yet (e.g. no service account configured).
+   * Allows the app to still show profile data.
+   */
+  const loadProfileByClerkId = useCallback(async (clerkId: string) => {
+    await fetchProfile(clerkId);
+    setLoading(false);
+  }, [fetchProfile]);
 
   const logOut = async () => {
-    await signOut(auth);
+    await signOut(auth).catch(() => {});
+    setProfile(null);
+    setUser(null);
   };
 
   const refreshProfile = async () => {
@@ -239,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, profile, loading, configured: isFirebaseConfigured,
-      signIn, signUp, googleSignIn, logOut, refreshProfile, addXP,
+      logOut, refreshProfile, addXP, loadProfileByClerkId,
     }}>
       {children}
     </AuthContext.Provider>
