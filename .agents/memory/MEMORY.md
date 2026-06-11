@@ -1,3 +1,4 @@
 - [Clerk+Firebase bridge](clerk-firebase-bridge.md) — Clerk auth on mobile bridges to Firebase via custom token; needs service account or Clerk JWT Template to activate Firestore rules.
 - [Mobile Clerk import path](clerk-import-paths.md) — Use `@clerk/clerk-expo` (not `@clerk/expo`) as the import path; package name vs module alias differs.
 - [Clerk SDK v5 methods](clerk-sdk-methods.md) — correct method names for signIn/signUp in Expo; old invented names cause silent runtime failures.
+- [Web platform shims](web-platform-shims.md) — Metro bundles ALL requires eagerly; use .web.ts/.native.ts files for AsyncStorage, firebase.ts, tokenCache. ClerkLoaded blocks render on web — remove it.

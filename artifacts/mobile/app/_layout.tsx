@@ -12,8 +12,8 @@ import React, { useEffect } from "react";
 import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { ClerkProvider, ClerkLoaded } from "@clerk/clerk-expo";
-import { tokenCache } from "@clerk/clerk-expo/token-cache";
+import { ClerkProvider } from "@clerk/clerk-expo";
+import { tokenCache } from "@/lib/tokenCache";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
@@ -79,26 +79,25 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  if (!fontsLoaded && !fontError) return null;
+  // On web, fonts may load asynchronously — don't block render indefinitely
+  if (!fontsLoaded && !fontError && Platform.OS !== "web") return null;
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <SafeAreaProvider>
-          <ThemeProvider>
-            <ErrorBoundary>
-              <QueryClientProvider client={queryClient}>
-                <AuthProvider>
-                  <ClerkFirebaseBridge />
-                  <InnerProviders>
-                    <RootLayoutNav />
-                  </InnerProviders>
-                </AuthProvider>
-              </QueryClientProvider>
-            </ErrorBoundary>
-          </ThemeProvider>
-        </SafeAreaProvider>
-      </ClerkLoaded>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <ErrorBoundary>
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <ClerkFirebaseBridge />
+                <InnerProviders>
+                  <RootLayoutNav />
+                </InnerProviders>
+              </AuthProvider>
+            </QueryClientProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </SafeAreaProvider>
     </ClerkProvider>
   );
 }
