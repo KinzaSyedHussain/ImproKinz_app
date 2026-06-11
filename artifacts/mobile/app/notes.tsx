@@ -1,7 +1,7 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
