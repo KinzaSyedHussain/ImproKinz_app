@@ -1,6 +1,6 @@
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -27,39 +27,18 @@ interface Props {
   onClose: () => void;
 }
 
-const TOOLS = [
-  {
-    icon: "layers",
-    label: "Flashcard Generator",
-    desc: "Create Q&A flashcards from any text",
-    route: "/flashcards",
-    color: "#4F46E5",
-  },
-  {
-    icon: "align-left",
-    label: "AI Summarizer",
-    desc: "Get instant summaries of study material",
-    route: "/summarizer",
-    color: "#7C3AED",
-  },
-  {
-    icon: "check-square",
-    label: "Quiz Generator",
-    desc: "Practice with AI-generated MCQs",
-    route: "/quiz",
-    color: "#059669",
-  },
-  {
-    icon: "file-text",
-    label: "Notes Maker",
-    desc: "AI-generated study notes",
-    route: "/notes",
-    color: "#D97706",
-  },
+const MAIN_NAV = [
+  { icon: "home", label: "Home", route: "/(tabs)" },
+  { icon: "compass", label: "Explore", route: "/search" },
+  { icon: "users", label: "Community", route: "/(tabs)" },
+  { icon: "bell", label: "Notifications", route: "/(tabs)/notifications" },
+  { icon: "mail", label: "Messages", route: "/(tabs)" },
 ];
 
-const NAV_ITEMS = [
-  { icon: "search", label: "Search", route: "/search" },
+const SECONDARY_NAV = [
+  { icon: "bookmark", label: "Saved Posts", route: "/(tabs)/profile" },
+  { icon: "user", label: "Profile", route: "/(tabs)/profile" },
+  { icon: "grid", label: "Dashboard", route: "/(tabs)/dashboard" },
   { icon: "settings", label: "Settings", route: "/settings" },
 ];
 
@@ -67,6 +46,7 @@ export function Sidebar({ visible, onClose }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, profile, logOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
@@ -82,7 +62,47 @@ export function Sidebar({ visible, onClose }: Props) {
 
   const navigate = (route: string) => {
     onClose();
-    setTimeout(() => router.push(route as any), 220);
+    setTimeout(() => {
+      if (route.startsWith("/(tabs)")) {
+        router.replace(route as any);
+      } else {
+        router.push(route as any);
+      }
+    }, 220);
+  };
+
+  const isActive = (route: string) => {
+    if (route === "/(tabs)" && (pathname === "/" || pathname === "/(tabs)")) return true;
+    return pathname.startsWith(route.replace("/(tabs)", ""));
+  };
+
+  const renderNavItem = (item: typeof MAIN_NAV[0], isMain = true) => {
+    const active = isActive(item.route);
+    return (
+      <TouchableOpacity
+        key={item.label}
+        style={[
+          styles.navItem,
+          active && { backgroundColor: colors.primary + "18" },
+        ]}
+        onPress={() => navigate(item.route)}
+        activeOpacity={0.7}
+      >
+        <Icon
+          name={item.icon as any}
+          size={20}
+          color={active ? colors.primary : colors.foreground}
+        />
+        <Text
+          style={[
+            styles.navLabel,
+            { color: active ? colors.primary : colors.foreground },
+          ]}
+        >
+          {item.label}
+        </Text>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -133,51 +153,16 @@ export function Sidebar({ visible, onClose }: Props) {
             bounces={Platform.OS === "ios"}
             overScrollMode="never"
           >
-            {/* AI Tools */}
+            {/* Main Navigation */}
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                AI STUDY TOOLS
-              </Text>
-              {TOOLS.map((tool) => (
-                <TouchableOpacity
-                  key={tool.route}
-                  style={[styles.toolItem, { borderColor: colors.border }]}
-                  onPress={() => navigate(tool.route)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.toolIcon, { backgroundColor: tool.color + "18" }]}>
-                    <Icon name={tool.icon as any} size={20} color={tool.color} />
-                  </View>
-                  <View style={styles.toolInfo}>
-                    <Text style={[styles.toolLabel, { color: colors.foreground }]}>
-                      {tool.label}
-                    </Text>
-                    <Text style={[styles.toolDesc, { color: colors.mutedForeground }]}>
-                      {tool.desc}
-                    </Text>
-                  </View>
-                  <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
-                </TouchableOpacity>
-              ))}
+              {MAIN_NAV.map((item) => renderNavItem(item, true))}
             </View>
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-            {/* Nav items */}
+            {/* Secondary Navigation */}
             <View style={styles.section}>
-              {NAV_ITEMS.map((item) => (
-                <TouchableOpacity
-                  key={item.route}
-                  style={styles.navItem}
-                  onPress={() => navigate(item.route)}
-                  activeOpacity={0.7}
-                >
-                  <Icon name={item.icon as any} size={20} color={colors.foreground} />
-                  <Text style={[styles.navLabel, { color: colors.foreground }]}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {SECONDARY_NAV.map((item) => renderNavItem(item, false))}
             </View>
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -194,7 +179,7 @@ export function Sidebar({ visible, onClose }: Props) {
               </Text>
             </TouchableOpacity>
 
-            {/* Sign In / Sign Out — toggles based on auth state */}
+            {/* Sign In / Sign Out */}
             {user ? (
               <TouchableOpacity
                 style={[styles.navItem, styles.signOutItem]}
@@ -265,33 +250,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   section: { paddingHorizontal: 12, paddingVertical: 8 },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1,
-    fontWeight: "600",
-    marginLeft: 4,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  toolItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  toolIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  toolInfo: { flex: 1 },
-  toolLabel: { fontSize: 14, fontWeight: "500" },
-  toolDesc: { fontSize: 12, marginTop: 1 },
   divider: { height: 1, marginHorizontal: 16, marginVertical: 4 },
   navItem: {
     flexDirection: "row",

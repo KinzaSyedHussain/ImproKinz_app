@@ -44,13 +44,28 @@ export interface PostComment {
   replyToName?: string;
 }
 
+export interface PollOption {
+  text: string;
+  votes: string[];
+}
+
+export interface PollData {
+  question: string;
+  options: PollOption[];
+}
+
+export interface CodeBlock {
+  language?: string;
+  content: string;
+}
+
 export interface Post {
   id: string;
   authorId: string;
   authorName: string;
   authorPhoto: string;
   content: string;
-  type: "note" | "question" | "tip";
+  type: "note" | "question" | "tip" | "poll" | "code";
   likes: string[];
   savedBy: string[];
   commentCount: number;
@@ -61,6 +76,8 @@ export interface Post {
   mediaType?: "image" | "video";
   imageUrl?: string;
   videoUrl?: string;
+  poll?: PollData;
+  code?: CodeBlock;
 }
 
 /**
@@ -91,16 +108,67 @@ export function normalizePost(id: string, data: Record<string, any>): Post {
       : undefined;
 
   // ── post type ──────────────────────────────────────────────────────
+  // Helper: check if a Firestore value is actually present (not null)
+  const hasValue = (v: any) => v !== null && v !== undefined && !(typeof v === "object" && "nullValue" in v);
   const rawType = data.type ?? data.postType ?? data.kind ?? "";
-  const type: "note" | "question" | "tip" =
-    rawType === "note" || rawType === "question" || rawType === "tip"
-      ? rawType
-      : "note";
+  let type: "note" | "question" | "tip" | "poll" | "code" = "note";
+  if (rawType === "poll" || (hasValue(data.poll) && typeof data.poll === "object" && data.poll.options) || (hasValue(data.pollData) && typeof data.pollData === "object" && data.pollData.options)) type = "poll";
+  else if (rawType === "code" || (hasValue(data.code) && typeof data.code === "object" && data.code.content) || hasValue(data.codeBlock) || hasValue(data.codeSnippet)) type = "code";
+  else if (rawType === "note" || rawType === "question" || rawType === "tip") type = rawType;
+
+  // ── poll ───────────────────────────────────────────────────────────
+  let poll: PollData | undefined;
+  const rawPoll = hasValue(data.poll) ? data.poll : hasValue(data.pollData) ? data.pollData : undefined;
+  if (rawPoll && typeof rawPoll === "object" && !("nullValue" in rawPoll)) {
+    const opts = Array.isArray(rawPoll.options)
+      ? rawPoll.options.map((o: any) => ({
+          text: o.text ?? o.label ?? o.name ?? "Option",
+          votes: Array.isArray(o.votes) ? o.votes : [],
+        }))
+      : [];
+    poll = {
+      question: rawPoll.question ?? rawPoll.title ?? "Poll",
+      options: opts,
+    };
+  } else if (Array.isArray(data.pollOptions) && data.pollOptions.length > 0) {
+    // Some web apps store poll as separate fields
+    poll = {
+      question: data.pollQuestion ?? data.content ?? "Poll",
+      options: data.pollOptions.map((o: any) => ({
+        text: typeof o === "string" ? o : (o.text ?? "Option"),
+        votes: Array.isArray(o.votes) ? o.votes : [],
+      })),
+    };
+  }
+
+  // ── code block ─────────────────────────────────────────────────────
+  let code: CodeBlock | undefined;
+  const rawCode = hasValue(data.code)
+    ? data.code
+    : hasValue(data.codeBlock)
+    ? data.codeBlock
+    : hasValue(data.codeSnippet)
+    ? data.codeSnippet
+    : undefined;
+  if (rawCode && typeof rawCode === "object" && !("nullValue" in rawCode)) {
+    code = {
+      language: rawCode.language ?? rawCode.lang ?? undefined,
+      content: rawCode.content ?? rawCode.code ?? rawCode.text ?? "",
+    };
+  } else if (typeof rawCode === "string" && rawCode.trim().length > 0) {
+    code = { content: rawCode };
+  } else if (typeof data.content === "string" && data.content.startsWith("```")) {
+    // Markdown-style code block in content
+    const match = data.content.match(/```(\w+)?\n?([\s\S]*?)```/);
+    if (match) {
+      code = { language: match[1] || undefined, content: match[2].trim() };
+    }
+  }
 
   return {
     id,
     authorId:    data.authorId    ?? data.userId  ?? data.uid      ?? data.author?.id ?? "",
-    authorName:  data.authorName  ?? data.userName ?? data.displayName ?? data.name   ?? data.author?.name ?? "Anonymous",
+    authorName:  data.authorName  ?? data.userName ?? data.displayName ?? data.name   ?? (typeof data.author === "string" ? data.author : data.author?.name) ?? "Anonymous",
     authorPhoto: data.authorPhoto ?? data.photoURL ?? data.avatar   ?? data.authorAvatar ?? data.author?.photo ?? "",
     content:     data.content     ?? data.text     ?? data.body     ?? data.message   ?? data.description ?? "",
     type,
@@ -123,6 +191,8 @@ export function normalizePost(id: string, data: Record<string, any>): Post {
         }))
       : undefined,
     createdAt,
+    poll,
+    code,
   };
 }
 
@@ -136,6 +206,8 @@ const TYPE_CONFIG = {
   note:     { label: "Note",     color: "#4F46E5" },
   question: { label: "Question", color: "#F59E0B" },
   tip:      { label: "Tip",      color: "#10B981" },
+  poll:     { label: "Poll",     color: "#A855F7" },
+  code:     { label: "Code",     color: "#10B981" },
 };
 
 function timeAgo(ts: number) {
@@ -177,6 +249,122 @@ function InlineVideoPlayer({ uri, width, height }: { uri: string; width: number;
       contentFit="contain"
       onLayout={() => player.play()}
     />
+  );
+}
+
+function PollView({ post, user }: { post: Post; user: any }) {
+  const colors = useColors();
+  const [localPoll, setLocalPoll] = useState(post.poll);
+  const totalVotes = localPoll?.options.reduce((sum, o) => sum + (o.votes?.length || 0), 0) || 0;
+
+  if (!localPoll || !localPoll.options.length) return null;
+
+  const handleVote = async (optionIndex: number) => {
+    if (!user) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const ref = doc(db, "community_posts", post.id);
+    const uid = user.uid;
+
+    // Check if user already voted for any option
+    const alreadyVotedIndex = localPoll.options.findIndex((o) => o.votes?.includes(uid));
+
+    let newOptions = [...localPoll.options];
+
+    if (alreadyVotedIndex === optionIndex) {
+      // Remove vote from this option
+      newOptions[optionIndex] = {
+        ...newOptions[optionIndex],
+        votes: newOptions[optionIndex].votes.filter((v) => v !== uid),
+      };
+    } else {
+      // Remove vote from previous option if any
+      if (alreadyVotedIndex >= 0) {
+        newOptions[alreadyVotedIndex] = {
+          ...newOptions[alreadyVotedIndex],
+          votes: newOptions[alreadyVotedIndex].votes.filter((v) => v !== uid),
+        };
+      }
+      // Add vote to new option
+      newOptions[optionIndex] = {
+        ...newOptions[optionIndex],
+        votes: [...(newOptions[optionIndex].votes || []), uid],
+      };
+    }
+
+    setLocalPoll({ ...localPoll, options: newOptions });
+
+    try {
+      await updateDoc(ref, { poll: { ...localPoll, options: newOptions } });
+    } catch (e) {
+      // Revert on error
+      setLocalPoll(post.poll);
+    }
+  };
+
+  return (
+    <View style={styles.pollContainer}>
+      {post.content && post.content !== localPoll.question && (
+        <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
+      )}
+      <Text style={[styles.pollQuestion, { color: colors.foreground }]}>
+        {localPoll.question}
+      </Text>
+      {localPoll.options.map((option, idx) => {
+        const votes = option.votes?.length || 0;
+        const hasVoted = user ? option.votes?.includes(user.uid) : false;
+        const percent = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
+        return (
+          <TouchableOpacity
+            key={idx}
+            style={[styles.pollOption, { backgroundColor: hasVoted ? colors.primary + "25" : colors.muted + "80", borderColor: hasVoted ? colors.primary : colors.border }]}
+            onPress={() => handleVote(idx)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.pollOptionRow}>
+              <Text style={[styles.pollOptionText, { color: colors.foreground }]}>
+                {option.text}
+              </Text>
+              <Text style={[styles.pollVoteText, { color: colors.mutedForeground }]}>
+                {votes} vote{votes !== 1 ? "s" : ""}
+              </Text>
+            </View>
+            {totalVotes > 0 && (
+              <View style={[styles.pollBar, { backgroundColor: colors.border }]}>
+                <View
+                  style={[
+                    styles.pollBarFill,
+                    {
+                      width: `${percent}%` as any,
+                      backgroundColor: hasVoted ? colors.primary : colors.accent,
+                    },
+                  ]}
+                />
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+      <Text style={[styles.pollTotal, { color: colors.mutedForeground }]}>
+        {totalVotes} total vote{totalVotes !== 1 ? "s" : ""}
+      </Text>
+    </View>
+  );
+}
+
+function CodeBlockView({ code }: { code: CodeBlock }) {
+  const colors = useColors();
+  return (
+    <View style={[styles.codeContainer, { backgroundColor: "#0D0B2B", borderColor: colors.border }]}>
+      {code.language && (
+        <View style={styles.codeLangBadge}>
+          <Text style={styles.codeLangText}>{code.language.toUpperCase()}</Text>
+        </View>
+      )}
+      <Text style={styles.codeText} selectable>
+        {code.content}
+      </Text>
+    </View>
   );
 }
 
@@ -288,11 +476,16 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
 
   if (deleted) return null;
 
+  const isPoll = post.type === "poll" || !!post.poll;
+  const isCode = post.type === "code" || !!post.code;
+
   return (
     <PressableScale
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
       scaleTo={0.985}
-      onPress={() => router.push(`/post/${post.id}` as any)}
+      onPress={() => {
+        if (!isPoll) router.push(`/post/${post.id}` as any);
+      }}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -327,8 +520,20 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         </View>
       </View>
 
-      {/* Text content */}
-      <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
+      {/* Poll */}
+      {isPoll && post.poll && (
+        <PollView post={post} user={user} />
+      )}
+
+      {/* Code block */}
+      {isCode && post.code && (
+        <CodeBlockView code={post.code} />
+      )}
+
+      {/* Text content (only if not purely poll/code) */}
+      {(!isPoll || (post.content && post.content !== post.poll?.question)) && !isCode && (
+        <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
+      )}
       {!!post.subject && (
         <Text style={[styles.subject, { color: colors.primary }]}>#{post.subject}</Text>
       )}
@@ -342,7 +547,7 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         />
       )}
 
-      {/* Video — inline Cloudinary player */}
+      {/* Video */}
       {!!videoSource && !imageSource && (
         <InlineVideoPlayer uri={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
       )}
@@ -375,6 +580,12 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           <Text style={[styles.actionText, { color: colors.mutedForeground }]}>
             {post.commentCount ?? 0}
           </Text>
+        </TouchableOpacity>
+
+        {/* Share */}
+        <TouchableOpacity style={styles.action} activeOpacity={0.7}>
+          <Icon name="share-2" size={20} color={colors.mutedForeground} />
+          <Text style={[styles.actionText, { color: colors.mutedForeground }]}>Share</Text>
         </TouchableOpacity>
 
         {/* Save */}
@@ -443,4 +654,77 @@ const styles = StyleSheet.create({
   },
   action: { flexDirection: "row", alignItems: "center", gap: 6 },
   actionText: { fontFamily: "Inter_500Medium", fontSize: 13 },
+
+  // Poll styles
+  pollContainer: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  pollQuestion: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  pollOption: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  pollOptionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pollOptionText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    flex: 1,
+  },
+  pollVoteText: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  pollBar: {
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  pollBarFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  pollTotal: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  // Code block styles
+  codeContainer: {
+    marginHorizontal: 14,
+    marginVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    paddingTop: 10,
+  },
+  codeLangBadge: {
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  codeLangText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    color: "#F59E0B",
+    letterSpacing: 1,
+  },
+  codeText: {
+    fontFamily: "monospace",
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#4ADE80",
+  },
 });

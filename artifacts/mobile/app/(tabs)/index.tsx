@@ -1,18 +1,12 @@
 import { Icon } from "@/components/Icon";
 import { SkeletonCard } from "@/components/SkeletonCard";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
 } from "firebase/firestore";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -29,6 +23,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Post, PostCard, normalizePost } from "@/components/PostCard";
 import { useColors } from "@/hooks/useColors";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/context/AuthContext";
 
 const POOL_SIZE = 60;
 const PAGE_SIZE = 12;
@@ -52,36 +47,61 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
-  // Shuffled pool — remaining posts not yet shown
   const poolRef = useRef<Post[]>([]);
 
-  const loadPosts = useCallback(async (_refresh = false) => {
-    try {
-      const q = query(
-        collection(db, "community_posts"),
-        orderBy("createdAt", "desc"),
-        limit(POOL_SIZE)
-      );
-      const snap = await getDocs(q);
-      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
-      const all: Post[] = snap.docs.map((d) => normalizePost(d.id, d.data()));
-      const shuffled = shuffle(all);
-      const firstPage = shuffled.slice(0, PAGE_SIZE);
-      poolRef.current = shuffled.slice(PAGE_SIZE);
-      setPosts(firstPage);
-      setHasMore(shuffled.length > PAGE_SIZE || snap.docs.length === POOL_SIZE);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  // Simple feed load: getDocs directly in useEffect
+  const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_BASE}/api/posts`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const raw: any[] = json.posts || [];
+        const all: Post[] = raw.map((p) => {
+          try { return normalizePost(p.id || "", p); } catch { return null; }
+        }).filter((p): p is Post => p !== null);
+        all.sort((a, b) => b.createdAt - a.createdAt);
+        const shuffled = shuffle(all);
+        const firstPage = shuffled.slice(0, PAGE_SIZE);
+        poolRef.current = shuffled.slice(PAGE_SIZE);
+        if (!cancelled) {
+          setPosts(firstPage);
+          setHasMore(shuffled.length > PAGE_SIZE || raw.length === POOL_SIZE);
+          setLoadError(null);
+          setLoading(false);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setLoadError(e?.message || "Failed to load feed");
+          setLoading(false);
+        }
+      }
     }
+
+    load();
+
+    const timer = setTimeout(() => {
+      if (!cancelled) {
+        setLoadError("Feed load timed out.");
+        setLoading(false);
+      }
+    }, 8000);
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
-      // First drain the in-memory shuffled pool
       if (poolRef.current.length > 0) {
         const next = poolRef.current.slice(0, PAGE_SIZE);
         poolRef.current = poolRef.current.slice(PAGE_SIZE);
@@ -89,11 +109,9 @@ export default function HomeScreen() {
         setHasMore(poolRef.current.length > 0 || !!lastDocRef.current);
         return;
       }
-      // Pool exhausted — fetch next batch from Firestore and shuffle
       if (!lastDocRef.current) { setHasMore(false); return; }
       const q = query(
         collection(db, "community_posts"),
-        orderBy("createdAt", "desc"),
         startAfter(lastDocRef.current),
         limit(POOL_SIZE)
       );
@@ -111,21 +129,10 @@ export default function HomeScreen() {
     }
   };
 
-  // Reload feed every time this tab comes into focus (e.g. after creating a post)
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      setHasMore(true);
-      lastDocRef.current = null;
-      loadPosts();
-    }, [loadPosts])
-  );
-
   const handleRefresh = () => {
     setRefreshing(true);
-    setHasMore(true);
-    lastDocRef.current = null;
-    loadPosts(true);
+    // onSnapshot listener auto-refreshes; just briefly show spinner
+    setTimeout(() => setRefreshing(false), 800);
   };
 
   const topPad =
@@ -172,7 +179,22 @@ export default function HomeScreen() {
 
       {loading ? (
         <View style={{ paddingTop: 8 }}>
-          {[1, 2, 3].map((i) => <SkeletonCard key={i} />)}
+          {loadError ? (
+            <View style={{ alignItems: "center", paddingVertical: 40, gap: 12 }}>
+              <Icon name="alert-circle" size={36} color="#EF4444" />
+              <Text style={{ color: colors.foreground, fontSize: 14, textAlign: "center" }}>
+                {loadError}
+              </Text>
+              <TouchableOpacity
+                style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => { setLoading(true); loadPosts(); }}
+              >
+                <Text style={{ color: "#fff" }}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            [1, 2, 3].map((i) => <SkeletonCard key={i} />)
+          )}
         </View>
       ) : (
         <FlatList
@@ -226,7 +248,6 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Sidebar last → renders on top of all content on web */}
       <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
     </View>
   );

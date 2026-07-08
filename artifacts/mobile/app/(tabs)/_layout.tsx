@@ -58,10 +58,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="tools"
+        name="dashboard"
         options={{
-          title: "Tools",
-          tabBarIcon: tabIcon("flash", "flash-outline"),
+          title: "Dashboard",
+          tabBarIcon: tabIcon("grid", "grid-outline"),
         }}
       />
       <Tabs.Screen
