@@ -1,3 +1,4 @@
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -38,6 +39,14 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
+  const { isSignedIn } = useClerkAuth();
+
+  // Already signed in? Go to home
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace("/(tabs)/");
+    }
+  }, [isSignedIn]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
