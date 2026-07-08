@@ -1,3 +1,4 @@
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -39,6 +40,7 @@ const MESSAGES = [
 
 export default function Root() {
   const { user, profile, loading, configured } = useAuth();
+  const { isSignedIn } = useClerkAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -47,7 +49,9 @@ export default function Root() {
     if (user && !profile) return;
 
     const t = setTimeout(() => {
-      if (user) {
+      // Clerk session exists but Firebase hasn't bridged yet — still signed in
+      const isAuthenticated = !!user || !!isSignedIn;
+      if (isAuthenticated) {
         if (!(profile as any)?.onboardingComplete) {
           router.replace("/onboarding");
         } else {
@@ -58,7 +62,7 @@ export default function Root() {
       }
     }, 3200);
     return () => clearTimeout(t);
-  }, [user, loading, configured, profile]);
+  }, [user, loading, configured, profile, isSignedIn]);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(0.7)).current;
