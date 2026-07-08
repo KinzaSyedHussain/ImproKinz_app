@@ -28,6 +28,8 @@ const POST_TYPES = [
   { value: "note", label: "Study Note", icon: "file-text" },
   { value: "question", label: "Question", icon: "help-circle" },
   { value: "tip", label: "Study Tip", icon: "zap" },
+  { value: "poll", label: "Poll", icon: "bar-chart-2" },
+  { value: "code", label: "Code", icon: "code" },
 ] as const;
 
 const SUBJECTS = [
@@ -106,7 +108,7 @@ export default function CreatePostScreen() {
   const { user, profile, addXP } = useAuth();
 
   const [content, setContent] = useState("");
-  const [type, setType] = useState<"note" | "question" | "tip">("note");
+  const [type, setType] = useState<"note" | "question" | "tip" | "poll" | "code">("note");
   const [subject, setSubject] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -117,6 +119,19 @@ export default function CreatePostScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [videoThumb, setVideoThumb] = useState<string | null>(null);
+
+  // Poll state
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+
+  // Code block state
+  const [codeLanguage, setCodeLanguage] = useState("");
+  const [codeContent, setCodeContent] = useState("");
+
+  const CODE_LANGUAGES = [
+    "Python", "JavaScript", "Java", "C++", "C#", "TypeScript",
+    "HTML", "CSS", "SQL", "Go", "Rust", "Swift", "Kotlin", "Other",
+  ];
 
   const pickImage = async () => {
     try {
@@ -178,7 +193,17 @@ export default function CreatePostScreen() {
   const handlePost = async () => {
     setError("");
     if (!user) { setError("You must be signed in to post."); return; }
-    if (!content.trim()) { setError("Please write something first."); return; }
+
+    // Validate based on post type
+    if (type === "poll") {
+      if (!pollQuestion.trim()) { setError("Please enter a poll question."); return; }
+      const validOptions = pollOptions.filter((o) => o.trim());
+      if (validOptions.length < 2) { setError("Please add at least 2 poll options."); return; }
+    } else if (type === "code") {
+      if (!codeContent.trim()) { setError("Please enter your code."); return; }
+    } else {
+      if (!content.trim()) { setError("Please write something first."); return; }
+    }
 
     setSubmitting(true);
     let imageUrl: string | null = null;
@@ -225,11 +250,11 @@ export default function CreatePostScreen() {
         ? `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`
         : rawPhoto || `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
 
-      await addDoc(collection(db, "community_posts"), {
+      const postData: Record<string, any> = {
         authorId: user.uid,
         authorName,
         authorPhoto,
-        content: content.trim(),
+        content: type === "poll" ? pollQuestion.trim() : type === "code" ? (codeContent.trim().slice(0, 50) + "...") : content.trim(),
         type,
         subject: subject || null,
         imageUrl,
@@ -240,7 +265,27 @@ export default function CreatePostScreen() {
         savedBy: [],
         commentCount: 0,
         createdAt: serverTimestamp(),
-      });
+      };
+
+      // Add poll data
+      if (type === "poll") {
+        postData.poll = {
+          question: pollQuestion.trim(),
+          options: pollOptions
+            .filter((o) => o.trim())
+            .map((o) => ({ text: o.trim(), votes: [] })),
+        };
+      }
+
+      // Add code block data
+      if (type === "code") {
+        postData.code = {
+          language: codeLanguage || undefined,
+          content: codeContent.trim(),
+        };
+      }
+
+      await addDoc(collection(db, "community_posts"), postData);
 
       addXP(10).catch(console.warn);
       router.back();
@@ -256,6 +301,28 @@ export default function CreatePostScreen() {
     }
   };
 
+  const addPollOption = () => {
+    if (pollOptions.length < 6) setPollOptions([...pollOptions, ""]);
+  };
+
+  const removePollOption = (idx: number) => {
+    if (pollOptions.length > 2) {
+      setPollOptions(pollOptions.filter((_, i) => i !== idx));
+    }
+  };
+
+  const updatePollOption = (idx: number, value: string) => {
+    const next = [...pollOptions];
+    next[idx] = value;
+    setPollOptions(next);
+  };
+
+  const canPost = () => {
+    if (type === "poll") return pollQuestion.trim() && pollOptions.filter((o) => o.trim()).length >= 2;
+    if (type === "code") return codeContent.trim().length > 0;
+    return content.trim().length > 0;
+  };
+
   const topPad = insets.top + (Platform.OS === "web" ? 12 : 0);
   const isPosting = submitting || processing;
 
@@ -269,11 +336,11 @@ export default function CreatePostScreen() {
           <Icon name="x" size={22} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>New Post</Text>
-        <TouchableOpacity onPress={handlePost} disabled={!content.trim() || isPosting}>
+        <TouchableOpacity onPress={handlePost} disabled={!canPost() || isPosting}>
           <LinearGradient
             colors={[colors.gradientStart, colors.gradientEnd]}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={[styles.postBtn, { opacity: !content.trim() || isPosting ? 0.5 : 1 }]}
+            style={[styles.postBtn, { opacity: !canPost() || isPosting ? 0.5 : 1 }]}
           >
             {isPosting
               ? <ActivityIndicator size="small" color="#0D0B2B" />
@@ -307,20 +374,88 @@ export default function CreatePostScreen() {
           </View>
         </View>
 
-        {/* Content */}
-        <TextInput
-          style={[styles.contentInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
-          placeholder="Share your knowledge treasure..."
-          placeholderTextColor={colors.mutedForeground}
-          value={content}
-          onChangeText={setContent}
-          multiline
-          textAlignVertical="top"
-          autoFocus
-        />
+        {/* Content — only for note/question/tip */}
+        {type !== "poll" && type !== "code" && (
+          <TextInput
+            style={[styles.contentInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+            placeholder="Share your knowledge treasure..."
+            placeholderTextColor={colors.mutedForeground}
+            value={content}
+            onChangeText={setContent}
+            multiline
+            textAlignVertical="top"
+            autoFocus
+          />
+        )}
 
-        {/* Media picker buttons — only when no media selected */}
-        {mediaMode === "none" && (
+        {/* Poll creation UI */}
+        {type === "poll" && (
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>POLL QUESTION</Text>
+            <TextInput
+              style={[styles.contentInput, { minHeight: 56, backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Ask a question..."
+              placeholderTextColor={colors.mutedForeground}
+              value={pollQuestion}
+              onChangeText={setPollQuestion}
+              multiline={false}
+            />
+            <Text style={[styles.label, { color: colors.mutedForeground, marginTop: 8 }]}>OPTIONS</Text>
+            {pollOptions.map((opt, idx) => (
+              <View key={idx} style={styles.pollOptionRow}>
+                <TextInput
+                  style={[styles.pollOptionInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+                  placeholder={`Option ${idx + 1}`}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={opt}
+                  onChangeText={(v) => updatePollOption(idx, v)}
+                />
+                {pollOptions.length > 2 && (
+                  <TouchableOpacity onPress={() => removePollOption(idx)} style={styles.pollRemoveBtn}>
+                    <Icon name="x" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            {pollOptions.length < 6 && (
+              <TouchableOpacity style={styles.addOptionBtn} onPress={addPollOption}>
+                <Icon name="plus" size={16} color={colors.primary} />
+                <Text style={[styles.addOptionText, { color: colors.primary }]}>Add Option</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Code block creation UI */}
+        {type === "code" && (
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>LANGUAGE (optional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+              {CODE_LANGUAGES.map((lang) => (
+                <TouchableOpacity
+                  key={lang}
+                  style={[styles.langChip, { backgroundColor: codeLanguage === lang ? colors.primary : colors.muted, borderColor: codeLanguage === lang ? colors.primary : colors.border }]}
+                  onPress={() => setCodeLanguage(codeLanguage === lang ? "" : lang)}
+                >
+                  <Text style={[styles.langChipText, { color: codeLanguage === lang ? colors.primaryForeground : colors.mutedForeground }]}>{lang}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <Text style={[styles.label, { color: colors.mutedForeground, marginTop: 8 }]}>CODE</Text>
+            <TextInput
+              style={[styles.codeInput, { backgroundColor: "#0D0B2B", color: "#4ADE80", borderColor: colors.border }]}
+              placeholder="Paste or write your code here..."
+              placeholderTextColor="rgba(74,222,128,0.4)"
+              value={codeContent}
+              onChangeText={setCodeContent}
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+        )}
+
+        {/* Media picker buttons — only when no media selected and not poll/code */}
+        {mediaMode === "none" && type !== "poll" && type !== "code" && (
           <View style={styles.mediaRow}>
             <TouchableOpacity
               style={[styles.mediaBtn, { backgroundColor: colors.muted, borderColor: colors.border }]}
@@ -464,4 +599,16 @@ const styles = StyleSheet.create({
   subjectText: { fontSize: 13 },
   xpNote: { padding: 12, borderRadius: 10, alignItems: "center" },
   xpNoteText: { fontSize: 13, fontWeight: "600" },
+
+  // Poll styles
+  pollOptionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  pollOptionInput: { flex: 1, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
+  pollRemoveBtn: { padding: 6 },
+  addOptionBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, alignSelf: "flex-start" },
+  addOptionText: { fontSize: 13, fontWeight: "600" },
+
+  // Code styles
+  langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  langChipText: { fontSize: 12, fontWeight: "500" },
+  codeInput: { borderRadius: 16, borderWidth: 1, padding: 16, minHeight: 200, fontSize: 14, lineHeight: 20, fontFamily: "monospace" },
 });
