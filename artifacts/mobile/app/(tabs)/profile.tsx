@@ -3,12 +3,6 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
 import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
@@ -53,6 +47,10 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { profile, user, refreshProfile } = useAuth();
 
+  const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [savedPosts, setSavedPosts] = useState<Post[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
@@ -67,26 +65,36 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (!user) return;
-    const fetchPosts = async () => {
+    let cancelled = false;
+    async function fetchPosts() {
       try {
-        const toPost = (d: any): Post => normalizePost(d.id, d.data());
-        const sort = (arr: Post[]) => arr.sort((a, b) => b.createdAt - a.createdAt);
-        const [snap, savedSnap, followerSnap] = await Promise.all([
-          getDocs(query(collection(db, "community_posts"), where("authorId", "==", user.uid))),
-          getDocs(query(collection(db, "community_posts"), where("savedBy", "array-contains", user.uid))),
-          // Count my followers by querying users who have my uid in their following array
-          getDocs(query(collection(db, "users"), where("following", "array-contains", user.uid))),
-        ]);
-        setPosts(sort(snap.docs.map(toPost)));
-        setSavedPosts(sort(savedSnap.docs.map(toPost)));
-        setFollowerCount(followerSnap.size);
+        const res = await fetch(`${API_BASE}/api/posts`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const raw: any[] = json.posts || [];
+        const all: Post[] = raw.map((p) => {
+          try { return normalizePost(p.id || "", p); } catch { return null; }
+        }).filter((p): p is Post => p !== null);
+        all.sort((a, b) => b.createdAt - a.createdAt);
+        if (!cancelled) {
+          setPosts(all.filter((p) => p.authorId === user.uid));
+          setSavedPosts(all.filter((p) => (p.saves || []).includes(user.uid)));
+          // Count followers from the same dataset by scanning user following arrays
+          const followers = new Set<string>();
+          raw.forEach((p: any) => {
+            const follows = p.authorFollowing || [];
+            if (follows.includes(user.uid)) followers.add(p.authorId);
+          });
+          setFollowerCount(followers.size);
+        }
       } catch (e) {
         console.warn("fetchPosts error:", e);
       } finally {
-        setLoadingPosts(false);
+        if (!cancelled) setLoadingPosts(false);
       }
-    };
+    }
     fetchPosts();
+    return () => { cancelled = true; };
   }, [user]);
 
   const pickAvatar = async () => {
