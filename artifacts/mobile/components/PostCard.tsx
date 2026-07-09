@@ -90,6 +90,7 @@ export function normalizePost(id: string, data: Record<string, any>): Post {
   let createdAt: number = Date.now();
   const rawTs = data.createdAt ?? data.timestamp ?? data.date ?? data.postedAt;
   if (rawTs && typeof rawTs.toMillis === "function") createdAt = rawTs.toMillis();
+  else if (rawTs && typeof rawTs === "object" && "_seconds" in rawTs) createdAt = rawTs._seconds * 1000;
   else if (typeof rawTs === "number") createdAt = rawTs;
 
   // ── media ──────────────────────────────────────────────────────────
