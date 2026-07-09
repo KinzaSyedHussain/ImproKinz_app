@@ -4,13 +4,15 @@ import { StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
 
 interface Props {
-  xp: number;
-  streak: number;
+  xp?: number;
+  streak?: number;
   compact?: boolean;
 }
 
 export function XPStreakBadge({ xp, streak, compact = false }: Props) {
   const colors = useColors();
+  const safeXp = xp ?? 0;
+  const safeStreak = streak ?? 0;
 
   if (compact) {
     return (
@@ -18,13 +20,13 @@ export function XPStreakBadge({ xp, streak, compact = false }: Props) {
         <View style={[styles.badge, { backgroundColor: colors.secondary }]}>
           <Text style={[styles.badgeIcon, { color: colors.xpColor }]}>★</Text>
           <Text style={[styles.badgeText, { color: colors.xpColor }]}>
-            {xp >= 1000 ? `${(xp / 1000).toFixed(1)}k` : xp}
+            {safeXp >= 1000 ? `${(safeXp / 1000).toFixed(1)}k` : safeXp}
           </Text>
         </View>
         <View style={[styles.badge, { backgroundColor: colors.secondary }]}>
           <Icon name="zap" size={12} color={colors.streakColor} />
           <Text style={[styles.badgeText, { color: colors.streakColor }]}>
-            {streak}d
+            {safeStreak}d
           </Text>
         </View>
       </View>
@@ -36,7 +38,7 @@ export function XPStreakBadge({ xp, streak, compact = false }: Props) {
       <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.statIcon, { color: colors.xpColor }]}>★</Text>
         <Text style={[styles.statValue, { color: colors.foreground }]}>
-          {xp.toLocaleString()}
+          {safeXp.toLocaleString()}
         </Text>
         <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
           XP Points

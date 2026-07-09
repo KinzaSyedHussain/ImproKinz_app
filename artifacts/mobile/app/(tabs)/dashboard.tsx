@@ -24,14 +24,14 @@ const CARD_W = (SCREEN_W - PAD * 2 - GAP * (COLS - 1)) / COLS;
 const TOOLS = [
   { icon: "layers", label: "Flashcards", route: "/flashcards", colors: ["#4F46E5", "#7C3AED"] as [string, string] },
   { icon: "align-left", label: "Summarizer", route: "/summarizer", colors: ["#7C3AED", "#DB2777"] as [string, string] },
-  { icon: "check-circle", label: "Todo", route: "/notes", colors: ["#059669", "#0891B2"] as [string, string] },
+  { icon: "check-circle", label: "Todo", route: "/todo", colors: ["#059669", "#0891B2"] as [string, string] },
   { icon: "check-square", label: "Quiz", route: "/quiz", colors: ["#D97706", "#B45309"] as [string, string] },
-  { icon: "grid", label: "Board", route: "/notes", colors: ["#2563EB", "#06B6D4"] as [string, string] },
+  { icon: "grid", label: "Board", route: "/board", colors: ["#2563EB", "#06B6D4"] as [string, string] },
   { icon: "edit-2", label: "Notes", route: "/notes", colors: ["#DC2626", "#F97316"] as [string, string] },
-  { icon: "message-circle", label: "Chatbot", route: "/flashcards", colors: ["#4F46E5", "#06B6D4"] as [string, string] },
-  { icon: "clock", label: "Pomodoro", route: "/quiz", colors: ["#059669", "#84CC16"] as [string, string] },
-  { icon: "bar-chart-2", label: "Progress", route: "/summarizer", colors: ["#7C3AED", "#EC4899"] as [string, string] },
-  { icon: "cpu", label: "Calculator", route: "/notes", colors: ["#0891B2", "#2563EB"] as [string, string] },
+  { icon: "message-circle", label: "Chatbot", route: "/chatbot", colors: ["#4F46E5", "#06B6D4"] as [string, string] },
+  { icon: "clock", label: "Pomodoro", route: "/pomodoro", colors: ["#059669", "#84CC16"] as [string, string] },
+  { icon: "bar-chart-2", label: "Progress", route: "/progress", colors: ["#7C3AED", "#EC4899"] as [string, string] },
+  { icon: "cpu", label: "Calculator", route: "/calculator", colors: ["#0891B2", "#2563EB"] as [string, string] },
 ];
 
 export default function DashboardScreen() {
