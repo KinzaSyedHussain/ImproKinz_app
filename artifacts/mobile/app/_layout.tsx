@@ -43,6 +43,12 @@ function RootLayoutNav() {
       <Stack.Screen name="summarizer" />
       <Stack.Screen name="quiz" />
       <Stack.Screen name="notes" />
+      <Stack.Screen name="todo" />
+      <Stack.Screen name="board" />
+      <Stack.Screen name="chatbot" />
+      <Stack.Screen name="pomodoro" />
+      <Stack.Screen name="progress" />
+      <Stack.Screen name="calculator" />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
     </Stack>
