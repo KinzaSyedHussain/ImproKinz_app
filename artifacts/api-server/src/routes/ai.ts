@@ -144,4 +144,32 @@ router.post("/ai/notes", async (req, res) => {
   }
 });
 
+router.post("/ai/chat", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const message = typeof body["message"] === "string" ? body["message"].trim() : "";
+  if (!message || message.length > 10000) {
+    res.status(400).json({ error: "Invalid message" });
+    return;
+  }
+  try {
+    const groq = getGroq();
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful study assistant. Answer questions about math, science, history, languages, literature, and general study tips. Be concise, clear, and encouraging. Keep responses under 300 words when possible.",
+        },
+        { role: "user", content: message },
+      ],
+    });
+    const reply = completion.choices[0]?.message?.content ?? "Sorry, I couldn't generate a response.";
+    res.json({ reply });
+  } catch (err) {
+    req.log.error({ err }, "Chat generation failed");
+    res.status(500).json({ error: "AI generation failed" });
+  }
+});
+
 export default router;

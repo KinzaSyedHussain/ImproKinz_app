@@ -71,9 +71,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const webData = webSnap.data() as Partial<UserProfile>;
           const merged: UserProfile = {
             ...data,
-            displayName: data.displayName || webData.displayName || data.displayName,
-            photoURL:    data.photoURL    || webData.photoURL    || data.photoURL,
-            bio:         data.bio         || webData.bio         || data.bio,
+            // Prefer web data for name/bio/photo if web has newer values
+            displayName: webData.displayName || data.displayName || "",
+            photoURL:    webData.photoURL    || data.photoURL    || "",
+            bio:         webData.bio         || data.bio         || "",
+            bannerUrl:   webData.bannerUrl   || data.bannerUrl,
           };
           setProfile(merged);
         } else {

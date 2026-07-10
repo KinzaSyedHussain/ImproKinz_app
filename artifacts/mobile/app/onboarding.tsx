@@ -15,7 +15,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 
@@ -147,13 +147,18 @@ export default function OnboardingScreen() {
     if (!user) return;
     setSaving(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), {
+      const payload = {
         displayName: nickname.trim() || undefined,
         subjects: [field],
         level,
         goal,
         onboardingComplete: true,
-      });
+        updatedAt: serverTimestamp(),
+      };
+      await Promise.all([
+        updateDoc(doc(db, "users", user.uid), payload),
+        setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
+      ]);
       await refreshProfile();
       router.replace("/(tabs)/");
     } catch (e) {
