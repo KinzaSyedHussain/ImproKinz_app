@@ -61,49 +61,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (uid: string, fbUser?: User) => {
     try {
-      const mobileRef = doc(db, "users", uid);
-      const webRef    = doc(db, "profiles", uid);
-      const [mobileSnap, webSnap] = await Promise.all([getDoc(mobileRef), getDoc(webRef)]);
+      // Use 'profiles' collection — same as the web app for sync
+      const ref = doc(db, "profiles", uid);
+      const snap = await getDoc(ref);
 
-      if (mobileSnap.exists()) {
-        const data = mobileSnap.data() as UserProfile;
-        if (webSnap.exists()) {
-          const webData = webSnap.data() as Partial<UserProfile>;
-          const merged: UserProfile = {
-            ...data,
-            // Prefer web data for name/bio/photo if web has newer values
-            displayName: webData.displayName || data.displayName || "",
-            photoURL:    webData.photoURL    || data.photoURL    || "",
-            bio:         webData.bio         || data.bio         || "",
-            bannerUrl:   webData.bannerUrl   || data.bannerUrl,
-          };
-          setProfile(merged);
-        } else {
-          setDoc(webRef, { ...data, createdAt: serverTimestamp() }).catch(() => {});
-          setProfile(data);
-        }
-      } else if (webSnap.exists()) {
-        const webData = webSnap.data() as Partial<UserProfile>;
-        const name  = webData.displayName || fbUser?.displayName || "Study User";
-        const photo = webData.photoURL    || fbUser?.photoURL
-          || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
-        const p: UserProfile = {
-          uid,
-          email:           webData.email   || fbUser?.email || "",
-          displayName:     name,
-          photoURL:        photo,
-          bannerUrl:       webData.bannerUrl,
-          bio:             webData.bio     || "",
-          subjects:        webData.subjects || [],
-          xp:              webData.xp      || 0,
-          streak:          webData.streak  || 1,
-          lastActiveDate:  webData.lastActiveDate || new Date().toDateString(),
-          createdAt:       webData.createdAt      || Date.now(),
-          following:       webData.following,
-          onboardingComplete: webData.onboardingComplete,
-        };
-        await setDoc(mobileRef, { ...p, createdAt: serverTimestamp() });
-        setProfile(p);
+      if (snap.exists()) {
+        const data = snap.data() as UserProfile;
+        setProfile(data);
       } else {
         const name  = fbUser?.displayName || "Study User";
         const photo = fbUser?.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
@@ -119,8 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           lastActiveDate: new Date().toDateString(),
           createdAt: Date.now(),
         };
-        const base = { ...p, createdAt: serverTimestamp() };
-        await Promise.all([setDoc(mobileRef, base), setDoc(webRef, base)]);
+        await setDoc(ref, { ...p, createdAt: serverTimestamp() });
         setProfile(p);
       }
     } catch (e) {
@@ -134,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const stored = await AsyncStorage.getItem(`streak_${uid}`);
       if (stored === today) return;
       const yesterday = new Date(Date.now() - 86400000).toDateString();
-      const ref = doc(db, "users", uid);
+      const ref = doc(db, "profiles", uid);
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
       const data = snap.data() as UserProfile;
@@ -184,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const addXP = async (amount: number) => {
     if (!user) return;
     try {
-      const ref = doc(db, "users", user.uid);
+      const ref = doc(db, "profiles", user.uid);
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
       const data = snap.data() as UserProfile;

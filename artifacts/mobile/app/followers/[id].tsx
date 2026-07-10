@@ -56,7 +56,7 @@ export default function FollowersScreen() {
     if (!targetId) return;
     setLoading(true);
     try {
-      const ownerSnap = await getDoc(doc(db, "users", targetId));
+      const ownerSnap = await getDoc(doc(db, "profiles", targetId));
       if (!ownerSnap.exists()) { setLoading(false); return; }
       const owner = { uid: ownerSnap.id, ...ownerSnap.data() } as UserItem;
       setOwnerProfile(owner);
@@ -66,7 +66,7 @@ export default function FollowersScreen() {
       if (tab === "followers") {
         // Query all users who have targetId in their own following array
         const followerSnap = await getDocs(
-          query(collection(db, "users"), where("following", "array-contains", targetId))
+          query(collection(db, "profiles"), where("following", "array-contains", targetId))
         );
         list = followerSnap.docs.map((s) => ({ uid: s.id, ...s.data() } as UserItem));
         // Update owner's follower count from query result
@@ -75,7 +75,7 @@ export default function FollowersScreen() {
         // Following: read the owner's own following array, then fetch each user doc
         const uids: string[] = owner.following ?? [];
         if (uids.length > 0) {
-          const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, "users", uid))));
+          const snaps = await Promise.all(uids.map((uid) => getDoc(doc(db, "profiles", uid))));
           list = snaps.filter((s) => s.exists()).map((s) => ({ uid: s.id, ...s.data() } as UserItem));
         }
       }
@@ -84,7 +84,7 @@ export default function FollowersScreen() {
 
       // isFollowing for each item = check MY own following array
       if (user) {
-        const mySnap = await getDoc(doc(db, "users", user.uid));
+        const mySnap = await getDoc(doc(db, "profiles", user.uid));
         const myFollowing: string[] = mySnap.exists() ? (mySnap.data()["following"] ?? []) : [];
         const state: Record<string, boolean> = {};
         list.forEach((u) => { state[u.uid] = myFollowing.includes(u.uid); });
@@ -107,7 +107,7 @@ export default function FollowersScreen() {
       setLoadingUids((prev) => new Set(prev).add(item.uid));
       try {
         // Only write to OWN document
-        await updateDoc(doc(db, "users", user.uid), { following: arrayRemove(item.uid) });
+        await updateDoc(doc(db, "profiles", user.uid), { following: arrayRemove(item.uid) });
         setFollowingState((prev) => ({ ...prev, [item.uid]: false }));
         refreshProfile().catch(() => {});
       } catch (e) { console.warn("unfollow error:", e); }
@@ -127,7 +127,7 @@ export default function FollowersScreen() {
       setLoadingUids((prev) => new Set(prev).add(item.uid));
       try {
         // Only write to OWN document
-        await updateDoc(doc(db, "users", user.uid), { following: arrayUnion(item.uid) });
+        await updateDoc(doc(db, "profiles", user.uid), { following: arrayUnion(item.uid) });
         setFollowingState((prev) => ({ ...prev, [item.uid]: true }));
         refreshProfile().catch(() => {});
       } catch (e) { console.warn("follow error:", e); }

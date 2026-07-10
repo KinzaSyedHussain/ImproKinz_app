@@ -95,11 +95,11 @@ export default function PomodoroScreen() {
       <LinearGradient colors={["#059669", "#84CC16"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Pomodoro</Text>
-            <Text style={styles.headerSub}>{completedSessions} sessions completed</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Pomodoro</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>{completedSessions} sessions completed</Text>
           </View>
         </View>
       </LinearGradient>

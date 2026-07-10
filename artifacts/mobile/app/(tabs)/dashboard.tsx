@@ -51,11 +51,11 @@ export default function DashboardScreen() {
     >
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPad + 16 }]}>
-        <Text style={styles.headerLabel}>STUDY DASHBOARD</Text>
-        <Text style={styles.headerTitle}>Your Learning Hub</Text>
-        <Text style={styles.headerSub}>Access all your study tools in one place</Text>
+        <Text style={[styles.headerLabel, { color: colors.mutedForeground }]}>STUDY DASHBOARD</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Your Learning Hub</Text>
+        <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>Access all your study tools in one place</Text>
         <View style={styles.xpWrap}>
-          <Text style={styles.xpText}>★ {profile?.xp?.toLocaleString() ?? 0} XP</Text>
+          <Text style={[styles.xpText, { color: colors.primary }]}>★ {profile?.xp?.toLocaleString() ?? 0} XP</Text>
         </View>
       </View>
 
@@ -87,19 +87,16 @@ const styles = StyleSheet.create({
     borderBottomColor: "#FFFFFF10",
   },
   headerLabel: {
-    color: "rgba(255,255,255,0.55)",
     fontSize: 11,
     letterSpacing: 2,
     marginBottom: 8,
     fontWeight: "600",
   },
   headerTitle: {
-    color: "#FFFFFF",
     fontSize: 26,
     fontWeight: "700",
   },
   headerSub: {
-    color: "rgba(255,255,255,0.6)",
     fontSize: 14,
     marginTop: 4,
   },
@@ -114,7 +111,6 @@ const styles = StyleSheet.create({
     borderColor: "#F59E0B44",
   },
   xpText: {
-    color: "#F59E0B",
     fontSize: 13,
     fontWeight: "600",
   },

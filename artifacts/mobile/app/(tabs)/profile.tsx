@@ -107,10 +107,7 @@ export default function ProfileScreen() {
       );
       if (dataUrl) {
         const payload = { photoURL: dataUrl, updatedAt: serverTimestamp() };
-        await Promise.all([
-          setDoc(doc(db, "users", user.uid), payload, { merge: true }),
-          setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
-        ]);
+        await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
         await refreshProfile();
       }
     } catch (e: any) {
@@ -130,10 +127,7 @@ export default function ProfileScreen() {
       );
       if (dataUrl) {
         const payload = { bannerUrl: dataUrl, updatedAt: serverTimestamp() };
-        await Promise.all([
-          setDoc(doc(db, "users", user.uid), payload, { merge: true }),
-          setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
-        ]);
+        await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
         await refreshProfile();
       }
     } catch (e: any) {

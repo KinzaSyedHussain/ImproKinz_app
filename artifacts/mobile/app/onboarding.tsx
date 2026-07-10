@@ -155,10 +155,7 @@ export default function OnboardingScreen() {
         onboardingComplete: true,
         updatedAt: serverTimestamp(),
       };
-      await Promise.all([
-        updateDoc(doc(db, "users", user.uid), payload),
-        setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
-      ]);
+      await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
       await refreshProfile();
       router.replace("/(tabs)/");
     } catch (e) {

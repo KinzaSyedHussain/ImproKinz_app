@@ -117,11 +117,11 @@ export default function BoardScreen() {
       <LinearGradient colors={["#2563EB", "#06B6D4"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Study Board</Text>
-            <Text style={styles.headerSub}>Kanban-style task organizer</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Study Board</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>Kanban-style task organizer</Text>
           </View>
         </View>
       </LinearGradient>

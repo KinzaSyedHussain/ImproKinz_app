@@ -91,11 +91,8 @@ export default function SettingsScreen() {
         level: selectedLevel,
         updatedAt: serverTimestamp(),
       };
-      // Write to both collections so web and mobile stay in sync
-      await Promise.all([
-        setDoc(doc(db, "users", user.uid), payload, { merge: true }),
-        setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
-      ]);
+      // Write to 'profiles' — same collection the web app uses
+      await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

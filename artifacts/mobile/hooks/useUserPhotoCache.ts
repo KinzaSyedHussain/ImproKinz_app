@@ -15,16 +15,12 @@ async function fetchUserInfo(uid: string): Promise<UserInfo> {
   if (infoCache.has(uid)) return infoCache.get(uid)!;
   if (inFlight.has(uid)) return inFlight.get(uid)!;
 
-  const p = Promise.all([
-    getDoc(doc(db, "users",    uid)),
-    getDoc(doc(db, "profiles", uid)),
-  ])
-    .then(([mobileSnap, webSnap]) => {
-      const m = mobileSnap.data();
-      const w = webSnap.data();
+  const p = getDoc(doc(db, "profiles", uid))
+    .then((snap) => {
+      const data = snap.data();
       const info: UserInfo = {
-        photoURL:    (m?.photoURL    || w?.photoURL    || w?.avatar        || null) as string | null,
-        displayName: (m?.displayName || w?.displayName || w?.name || w?.userName || null) as string | null,
+        photoURL:    (data?.photoURL || data?.avatar || null) as string | null,
+        displayName: (data?.displayName || data?.name || data?.userName || null) as string | null,
       };
       infoCache.set(uid, info);
       inFlight.delete(uid);
