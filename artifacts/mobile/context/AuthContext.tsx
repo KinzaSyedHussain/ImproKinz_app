@@ -66,8 +66,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const snap = await getDoc(ref);
 
       if (snap.exists()) {
-        const data = snap.data() as UserProfile;
-        setProfile(data);
+        const data = snap.data();
+        // Normalize web profile field names to mobile ones
+        const normalized: UserProfile = {
+          uid,
+          email:           data.email       || "",
+          displayName:     data.displayName || data.name || data.userName || "Study User",
+          photoURL:        data.photoURL    || data.avatar || "",
+          bannerUrl:       data.bannerUrl   || data.banner,
+          bio:             data.bio         || "",
+          subjects:        data.subjects    || [],
+          xp:              data.xp          || 0,
+          streak:          data.streak      || 1,
+          lastActiveDate:  data.lastActiveDate || new Date().toDateString(),
+          createdAt:       data.createdAt   || Date.now(),
+          followers:       data.followers,
+          following:       data.following,
+          onboardingComplete: data.onboardingComplete,
+        };
+        setProfile(normalized);
       } else {
         const name  = fbUser?.displayName || "Study User";
         const photo = fbUser?.photoURL || `${DEFAULT_AVATAR}&name=${encodeURIComponent(name)}`;
