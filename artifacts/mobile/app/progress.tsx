@@ -115,11 +115,11 @@ export default function ProgressScreen() {
       <LinearGradient colors={["#7C3AED", "#EC4899"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Progress</Text>
-            <Text style={styles.headerSub}>Track your study goals</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Progress</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>Track your study goals</Text>
           </View>
         </View>
       </LinearGradient>

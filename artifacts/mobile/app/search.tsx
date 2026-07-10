@@ -72,7 +72,7 @@ export default function SearchScreen() {
           );
         setPosts(data);
       } else {
-        const snap = await getDocs(query(collection(db, "users"), limit(30)));
+        const snap = await getDocs(query(collection(db, "profiles"), limit(30)));
         const lower = q.toLowerCase();
         const data: UserResult[] = snap.docs
           .map((d) => ({ uid: d.id, ...(d.data() as Omit<UserResult, "uid">) }))

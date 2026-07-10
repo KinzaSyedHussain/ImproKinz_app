@@ -124,11 +124,11 @@ export default function TodoScreen() {
       <LinearGradient colors={["#059669", "#0891B2"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Todo List</Text>
-            <Text style={styles.headerSub}>{doneCount}/{totalCount} completed</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Todo List</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>{doneCount}/{totalCount} completed</Text>
           </View>
         </View>
       </LinearGradient>

@@ -78,10 +78,10 @@ export default function UserProfileScreen() {
     const fetchData = async () => {
       try {
         const [userSnap, postsSnap, followerSnap] = await Promise.all([
-          getDoc(doc(db, "users", targetId)),
+          getDoc(doc(db, "profiles", targetId)),
           getDocs(query(collection(db, "community_posts"), where("authorId", "==", targetId))),
-          // Count followers by querying users who have targetId in their following array
-          getDocs(query(collection(db, "users"), where("following", "array-contains", targetId))),
+          // Count followers by querying profiles who have targetId in their following array
+          getDocs(query(collection(db, "profiles"), where("following", "array-contains", targetId))),
         ]);
         if (userSnap.exists()) setProfile(userSnap.data() as UserProfile);
         setFollowerCount(followerSnap.size);
@@ -105,7 +105,7 @@ export default function UserProfileScreen() {
     setFollowerCount((c) => newState ? c + 1 : Math.max(0, c - 1));
     setFollowLoading(true);
     try {
-      await updateDoc(doc(db, "users", user.uid), {
+      await updateDoc(doc(db, "profiles", user.uid), {
         following: newState ? arrayUnion(targetId) : arrayRemove(targetId),
       });
       refreshProfile().catch(() => {});

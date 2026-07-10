@@ -98,11 +98,11 @@ export default function CalculatorScreen() {
       <LinearGradient colors={["#0891B2", "#2563EB"]} style={[styles.header, { paddingTop: topPad + 12 }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Calculator</Text>
-            <Text style={styles.headerSub}>Quick math solver</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Calculator</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>Quick math solver</Text>
           </View>
         </View>
       </LinearGradient>

@@ -219,14 +219,14 @@ export default function NotesScreen() {
       >
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color="#FFFFFF" />
+            <Icon name="arrow-left" size={20} color={colors.foreground} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Notes Maker</Text>
-            <Text style={styles.headerSub}>AI-generated study notes</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notes Maker</Text>
+            <Text style={[styles.headerSub, { color: colors.foreground }]}>AI-generated study notes</Text>
           </View>
           <View style={[styles.xpPill, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-            <Text style={styles.xpPillText}>+12 XP</Text>
+            <Text style={[styles.xpPillText, { color: colors.foreground }]}>+12 XP</Text>
           </View>
         </View>
 

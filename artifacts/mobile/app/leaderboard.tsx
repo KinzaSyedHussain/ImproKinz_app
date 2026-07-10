@@ -43,8 +43,8 @@ export default function LeaderboardScreen() {
   useEffect(() => {
     const fetch = async () => {
       const [xpSnap, streakSnap] = await Promise.all([
-        getDocs(query(collection(db, "users"), orderBy("xp", "desc"), limit(50))),
-        getDocs(query(collection(db, "users"), orderBy("streak", "desc"), limit(50))),
+        getDocs(query(collection(db, "profiles"), orderBy("xp", "desc"), limit(50))),
+        getDocs(query(collection(db, "profiles"), orderBy("streak", "desc"), limit(50))),
       ]);
       setXpLeaders(xpSnap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<LeaderUser, "uid">) })));
       setStreakLeaders(streakSnap.docs.map((d) => ({ uid: d.id, ...(d.data() as Omit<LeaderUser, "uid">) })));
@@ -65,10 +65,10 @@ export default function LeaderboardScreen() {
         style={[styles.header, { paddingTop: topPad + 8 }]}
       >
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Icon name="arrow-left" size={22} color="#FFFFFF" />
+          <Icon name="arrow-left" size={22} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Leaderboard</Text>
-        <Text style={styles.headerSub}>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Leaderboard</Text>
+        <Text style={[styles.headerSub, { color: colors.foreground }]}>
           {tab === "xp" ? "All-time knowledge points" : "Current daily streaks — resets if you miss a day"}
         </Text>
 
