@@ -1,6 +1,6 @@
 import { Icon } from "@/components/Icon";
 import { useRouter } from "expo-router";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -83,17 +83,19 @@ export default function SettingsScreen() {
     }
     setSaving(true);
     try {
-      await setDoc(
-        doc(db, "users", user.uid),
-        {
-          displayName: displayName.trim(),
-          bio: bio.trim(),
-          subjects: selectedSubjects,
-          studyGoal: selectedGoal,
-          level: selectedLevel,
-        },
-        { merge: true }
-      );
+      const payload = {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        subjects: selectedSubjects,
+        studyGoal: selectedGoal,
+        level: selectedLevel,
+        updatedAt: serverTimestamp(),
+      };
+      // Write to both collections so web and mobile stay in sync
+      await Promise.all([
+        setDoc(doc(db, "users", user.uid), payload, { merge: true }),
+        setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
+      ]);
       await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

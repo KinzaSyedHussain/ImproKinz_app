@@ -3,7 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -106,7 +106,11 @@ export default function ProfileScreen() {
         300, 300
       );
       if (dataUrl) {
-        await setDoc(doc(db, "users", user.uid), { photoURL: dataUrl }, { merge: true });
+        const payload = { photoURL: dataUrl, updatedAt: serverTimestamp() };
+        await Promise.all([
+          setDoc(doc(db, "users", user.uid), payload, { merge: true }),
+          setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
+        ]);
         await refreshProfile();
       }
     } catch (e: any) {
@@ -125,7 +129,11 @@ export default function ProfileScreen() {
         900, 400
       );
       if (dataUrl) {
-        await setDoc(doc(db, "users", user.uid), { bannerUrl: dataUrl }, { merge: true });
+        const payload = { bannerUrl: dataUrl, updatedAt: serverTimestamp() };
+        await Promise.all([
+          setDoc(doc(db, "users", user.uid), payload, { merge: true }),
+          setDoc(doc(db, "profiles", user.uid), payload, { merge: true }),
+        ]);
         await refreshProfile();
       }
     } catch (e: any) {
