@@ -1,8 +1,9 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Platform } from "react-native";
-import Purchases from "react-native-purchases";
+import Purchases, { type PurchasesPackage } from "react-native-purchases";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
+import { useAuth } from "@/context/AuthContext";
 
 const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
 const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
@@ -10,13 +11,15 @@ const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_AP
 
 export const REVENUECAT_ENTITLEMENT_IDENTIFIER = "premium";
 
+let revenueCatConfigured = false;
+
 function getRevenueCatApiKey() {
   if (!REVENUECAT_TEST_API_KEY || !REVENUECAT_IOS_API_KEY || !REVENUECAT_ANDROID_API_KEY) {
-    throw new Error("RevenueCat Public API Keys not found");
+    return null;
   }
 
   if (!REVENUECAT_ENTITLEMENT_IDENTIFIER) {
-    throw new Error("RevenueCat Entitlement Identifier not provided");
+    return null;
   }
 
   if (__DEV__ || Platform.OS === "web" || Constants.executionEnvironment === "storeClient") {
@@ -34,17 +37,61 @@ function getRevenueCatApiKey() {
   return REVENUECAT_TEST_API_KEY;
 }
 
-export function initializeRevenueCat() {
+export function initializeRevenueCat(): boolean {
+  if (revenueCatConfigured) return true;
+
   const apiKey = getRevenueCatApiKey();
-  if (!apiKey) throw new Error("RevenueCat Public API Key not found");
+  if (!apiKey) {
+    console.warn("RevenueCat is unavailable: public API keys are not configured.");
+    return false;
+  }
 
   Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
   Purchases.configure({ apiKey });
+  revenueCatConfigured = true;
 
   console.log("Configured RevenueCat");
+  return true;
 }
 
 function useSubscriptionContext() {
+  const { user } = useAuth();
+  const [customerError, setCustomerError] = useState<unknown>(null);
+  const [customerReady, setCustomerReady] = useState(false);
+
+  useEffect(() => {
+    if (!revenueCatConfigured) {
+      setCustomerReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCustomerReady(false);
+    setCustomerError(null);
+
+    const syncUser = async () => {
+      try {
+        if (user?.uid) {
+          await Purchases.logIn(user.uid);
+          if (!cancelled) setCustomerReady(true);
+        } else if (!cancelled) {
+          setCustomerReady(false);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCustomerError(error);
+          setCustomerReady(false);
+          console.warn("RevenueCat customer sync failed:", error);
+        }
+      }
+    };
+
+    syncUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
+
   const customerInfoQuery = useQuery({
     queryKey: ["revenuecat", "customer-info"],
     queryFn: async () => {
@@ -52,6 +99,7 @@ function useSubscriptionContext() {
       return info;
     },
     staleTime: 60 * 1000,
+    enabled: revenueCatConfigured && !!user && customerReady,
   });
 
   const offeringsQuery = useQuery({
@@ -61,10 +109,11 @@ function useSubscriptionContext() {
       return offerings;
     },
     staleTime: 300 * 1000,
+    enabled: revenueCatConfigured,
   });
 
   const purchaseMutation = useMutation({
-    mutationFn: async (packageToPurchase: any) => {
+    mutationFn: async (packageToPurchase: PurchasesPackage) => {
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
       return customerInfo;
     },
@@ -85,7 +134,9 @@ function useSubscriptionContext() {
     customerInfo: customerInfoQuery.data,
     offerings: offeringsQuery.data,
     isSubscribed,
-    isLoading: customerInfoQuery.isLoading || offeringsQuery.isLoading,
+    isConfigured: revenueCatConfigured,
+    error: customerError || customerInfoQuery.error || offeringsQuery.error,
+    isLoading: revenueCatConfigured && (customerInfoQuery.isLoading || offeringsQuery.isLoading),
     purchase: purchaseMutation.mutateAsync,
     restore: restoreMutation.mutateAsync,
     isPurchasing: purchaseMutation.isPending,

@@ -29,6 +29,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { useColors } from "@/hooks/useColors";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { AdBanner } from "@/components/AdBanner";
 
 const POOL_SIZE = 60;
 const PAGE_SIZE = 12;
@@ -222,29 +223,32 @@ export default function HomeScreen() {
           )}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: botPad }}
           ListHeaderComponent={
-            <TouchableOpacity
-              style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push("/create-post")}
-              activeOpacity={0.7}
-            >
-              <View style={styles.composerTop}>
-                <UserAvatar photoURL={profile?.photoURL} displayName={profile?.displayName} size={38} />
-                <Text style={[styles.composerPrompt, { color: colors.mutedForeground }]}>
-                  Share your study progress, notes, or ideas...
-                </Text>
-              </View>
-              <View style={styles.composerFooter}>
-                <View style={styles.composerActions}>
-                  <Icon name="image" size={18} color={colors.mutedForeground} />
-                  <Icon name="video" size={18} color={colors.mutedForeground} />
-                  <Icon name="file-text" size={18} color={colors.mutedForeground} />
-                  <Icon name="bar-chart-2" size={18} color={colors.mutedForeground} />
+            <View>
+              <TouchableOpacity
+                style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => router.push("/create-post")}
+                activeOpacity={0.7}
+              >
+                <View style={styles.composerTop}>
+                  <UserAvatar photoURL={profile?.photoURL} displayName={profile?.displayName} size={38} />
+                  <Text style={[styles.composerPrompt, { color: colors.mutedForeground }]}>
+                    Share your study progress, notes, or ideas...
+                  </Text>
                 </View>
-                <View style={[styles.postMiniBtn, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.postMiniText, { color: colors.primaryForeground }]}>Post</Text>
+                <View style={styles.composerFooter}>
+                  <View style={styles.composerActions}>
+                    <Icon name="image" size={18} color={colors.mutedForeground} />
+                    <Icon name="video" size={18} color={colors.mutedForeground} />
+                    <Icon name="file-text" size={18} color={colors.mutedForeground} />
+                    <Icon name="bar-chart-2" size={18} color={colors.mutedForeground} />
+                  </View>
+                  <View style={[styles.postMiniBtn, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.postMiniText, { color: colors.primaryForeground }]}>Post</Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+              <AdBanner />
+            </View>
           }
           refreshControl={
             <RefreshControl

@@ -3,3 +3,4 @@
 - [Clerk SDK v5 methods](clerk-sdk-methods.md) — correct method names for signIn/signUp in Expo; old invented names cause silent runtime failures.
 - [Web platform shims](web-platform-shims.md) — Metro bundles ALL requires eagerly; use .web.ts/.native.ts files for AsyncStorage, firebase.ts, tokenCache. ClerkLoaded blocks render on web — remove it.
 - [Signup-only onboarding](signup-onboarding.md) — Route new verified accounts to onboarding; existing sign-ins go directly to the app.
+- [RevenueCat AdMob boundary](revenuecat-admob.md) — AdMob serves ads; RevenueCat's current loadAndTrack adapter is native-only and Expo Go must skip native ads.
