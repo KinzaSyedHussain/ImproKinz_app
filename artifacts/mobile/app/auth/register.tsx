@@ -1,4 +1,3 @@
-import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { Icon } from "@/components/Icon";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -39,14 +38,6 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
-  const { isSignedIn } = useClerkAuth();
-
-  // Already signed in? Go to home
-  useEffect(() => {
-    if (isSignedIn) {
-      router.replace("/(tabs)/");
-    }
-  }, [isSignedIn]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -117,7 +108,9 @@ export default function RegisterScreen() {
       const result = await signUp.attemptEmailAddressVerification({ code });
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        router.replace("/(tabs)/");
+        // Only newly created accounts go through onboarding. Existing users
+        // use the sign-in screen and are sent straight to the app.
+        router.replace("/onboarding");
       } else {
         setError("Verification incomplete. Please try again.");
       }
