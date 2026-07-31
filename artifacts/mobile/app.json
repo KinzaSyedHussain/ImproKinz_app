@@ -35,6 +35,14 @@
           "photosPermission": "Allow ImproKinz to access your photos",
           "cameraPermission": "Allow ImproKinz to use your camera"
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "userTrackingUsageDescription": "ImproKinz uses this permission to provide relevant ads and measure ad performance."
+        }
       ]
     ],
     "experiments": {

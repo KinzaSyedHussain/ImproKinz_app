@@ -167,6 +167,17 @@ export function Sidebar({ visible, onClose }: Props) {
 
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
+            <TouchableOpacity
+              style={[styles.navItem, { backgroundColor: colors.primary + "12" }]}
+              onPress={() => navigate("/paywall")}
+              activeOpacity={0.7}
+            >
+              <Icon name="award" size={20} color={colors.primary} />
+              <Text style={[styles.navLabel, { color: colors.primary }]}>Go Premium</Text>
+            </TouchableOpacity>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
             {/* Theme toggle */}
             <TouchableOpacity
               style={styles.navItem}

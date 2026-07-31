@@ -19,11 +19,18 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ClerkFirebaseBridge } from "@/context/ClerkFirebaseBridge";
+import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
+try {
+  initializeRevenueCat();
+} catch (error) {
+  console.warn("RevenueCat initialization failed:", error);
+}
 
 function RootLayoutNav() {
   return (
@@ -49,6 +56,7 @@ function RootLayoutNav() {
       <Stack.Screen name="pomodoro" />
       <Stack.Screen name="progress" />
       <Stack.Screen name="calculator" />
+      <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
     </Stack>
@@ -96,9 +104,11 @@ export default function RootLayout() {
             <QueryClientProvider client={queryClient}>
               <AuthProvider>
                 <ClerkFirebaseBridge />
-                <InnerProviders>
-                  <RootLayoutNav />
-                </InnerProviders>
+                <SubscriptionProvider>
+                  <InnerProviders>
+                    <RootLayoutNav />
+                  </InnerProviders>
+                </SubscriptionProvider>
               </AuthProvider>
             </QueryClientProvider>
           </ErrorBoundary>

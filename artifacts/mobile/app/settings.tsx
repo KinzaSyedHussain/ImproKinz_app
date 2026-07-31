@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
+import { useSubscription } from "@/lib/revenuecat";
 
 const ALL_SUBJECTS = [
   "Math", "Science", "History", "English", "Physics",
@@ -38,6 +39,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, user, refreshProfile } = useAuth();
+  const { isConfigured, isSubscribed } = useSubscription();
   const { isDark, toggleTheme } = useTheme();
 
   const [displayName, setDisplayName] = useState("");
@@ -349,6 +351,29 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
+          </View>
+
+          {/* Appearance */}
+          <Text style={S.sectionTitle}>MEMBERSHIP</Text>
+          <View style={S.card}>
+            <TouchableOpacity
+              style={S.themeRow}
+              onPress={() => router.push("/paywall")}
+              disabled={!isConfigured}
+            >
+              <View style={S.themeLeft}>
+                <Icon name="award" size={20} color={colors.primary} />
+                <View>
+                  <Text style={S.themeLabel}>
+                    {isSubscribed ? "ImproKinz Premium" : "Upgrade to Premium"}
+                  </Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}>
+                    {isSubscribed ? "Ad-free study experience" : "Unlock unlimited study tools"}
+                  </Text>
+                </View>
+              </View>
+              <Icon name="chevron-right" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
 
           {/* Appearance */}

@@ -49,7 +49,7 @@ pnpm workspace monorepo using TypeScript. Mobile-first study social media app wi
 
 ### Lib
 - `lib/firebase.ts` — Firebase init
-- `lib/revenuecat.tsx` — RevenueCat SDK wrapper (deferred — paywall not yet integrated)
+- `lib/revenuecat.tsx` — RevenueCat SDK wrapper, customer identity, offerings, purchases, and premium entitlement state
 
 ## Onboarding Flow
 
@@ -57,7 +57,7 @@ New users (profile without `onboardingComplete: true`) are routed to `/onboardin
 Steps: 1) Nickname, 2) Field of study, 3) Study level, 4) Main goal.
 Saves to Firestore and sets `onboardingComplete: true`.
 
-## RevenueCat (Setup Complete, Paywall Deferred)
+## RevenueCat and Ads
 
 Seeds run — entities created in RevenueCat project `projda4bb8e3`:
 - Entitlement: `premium`
@@ -66,7 +66,11 @@ Seeds run — entities created in RevenueCat project `projda4bb8e3`:
 - Android API key: stored as `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`
 - iOS API key: stored as `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY`
 
-**Note**: RevenueCat Replit integration was dismissed by user. Secret key stored manually as `REVENUECAT_SECRET_API_KEY`. Paywall UI (`app/paywall.tsx`) is built but not yet wired into the app navigation.
+- The RevenueCat Replit integration was dismissed by the user; the client uses the saved public keys and the secret remains server-side only.
+- `app/paywall.tsx` is mounted through the root provider and reachable from Settings and the sidebar.
+- The `premium` entitlement removes the AdMob banner for subscribed users.
+- AdMob is configured for native builds. Expo Go intentionally skips AdMob because it does not include the native ad module.
+- RevenueCat's current AdMob `loadAndTrack` adapter is native Swift/Kotlin-only and is not exposed by `react-native-purchases`; the app uses the supported React Native AdMob loader with the premium suppression rule isolated in `components/AdBanner.native.tsx`.
 
 ## Firebase
 

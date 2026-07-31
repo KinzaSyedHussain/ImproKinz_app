@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
 } from "react-native";
@@ -31,14 +32,13 @@ const FEATURES = [
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { offerings, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } =
+  const { offerings, isConfigured, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } =
     useSubscription();
   const [confirmVisible, setConfirmVisible] = useState(false);
 
-  if (isSubscribed) {
-    router.replace("/(tabs)");
-    return null;
-  }
+  useEffect(() => {
+    if (isSubscribed) router.replace("/(tabs)");
+  }, [isSubscribed, router]);
 
   const currentOffering = offerings?.current;
   const pkg = currentOffering?.availablePackages[0];
@@ -62,6 +62,7 @@ export default function PaywallScreen() {
     } catch (e: any) {
       if (e?.userCancelled) return;
       console.error("Purchase error:", e);
+      Alert.alert("Purchase unavailable", "We couldn't complete the purchase. Please try again.");
     }
   };
 
@@ -70,8 +71,11 @@ export default function PaywallScreen() {
       await restore();
     } catch (e) {
       console.error("Restore error:", e);
+      Alert.alert("Restore unavailable", "We couldn't restore your purchases. Please try again.");
     }
   };
+
+  if (isSubscribed) return null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -121,7 +125,9 @@ export default function PaywallScreen() {
             <Text style={styles.planName}>{productTitle}</Text>
             <Text style={styles.planFreq}>Billed monthly after trial</Text>
           </View>
-          {isLoading ? (
+          {!isConfigured ? (
+            <Text style={styles.unavailable}>Unavailable</Text>
+          ) : isLoading ? (
             <ActivityIndicator color={GOLD} />
           ) : (
             <Text style={styles.price}>{priceString}<Text style={styles.perMo}>/mo</Text></Text>
@@ -131,8 +137,8 @@ export default function PaywallScreen() {
         {/* CTA */}
         <TouchableOpacity
           style={[styles.ctaBtn, (isPurchasing || isLoading) && styles.ctaDisabled]}
-          onPress={handleSubscribe}
-          disabled={isPurchasing || isLoading}
+           onPress={handleSubscribe}
+           disabled={isPurchasing || isLoading || !isConfigured || !pkg}
           activeOpacity={0.85}
         >
           {isPurchasing ? (
@@ -144,8 +150,8 @@ export default function PaywallScreen() {
 
         {/* Restore */}
         <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={isRestoring}>
-          <Text style={styles.restoreText}>
-            {isRestoring ? "Restoring…" : "Restore Purchases"}
+           <Text style={styles.restoreText}>
+             {isRestoring ? "Restoring…" : "Restore Purchases"}
           </Text>
         </TouchableOpacity>
 
@@ -228,6 +234,7 @@ const styles = StyleSheet.create({
   planName: { color: TEXT, fontFamily: "Inter_600SemiBold", fontSize: 15 },
   planFreq: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
   price: { color: GOLD, fontFamily: "Inter_700Bold", fontSize: 26 },
+  unavailable: { color: MUTED, fontFamily: "Inter_500Medium", fontSize: 14 },
   perMo: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 14 },
   ctaBtn: {
     backgroundColor: GOLD, borderRadius: 14, paddingVertical: 16,
