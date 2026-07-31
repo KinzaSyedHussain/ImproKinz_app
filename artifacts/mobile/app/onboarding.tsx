@@ -39,7 +39,7 @@ const FIELDS = [
   { label: "History", icon: "library" as const },
   { label: "Art & Design", icon: "color-palette" as const },
   { label: "Law", icon: "scale" as const },
-  { label: "Psychology", icon: "brain" as const },
+  { label: "Psychology", icon: "bulb" as const },
   { label: "Other", icon: "ellipsis-horizontal-circle" as const },
 ];
 
@@ -157,7 +157,7 @@ export default function OnboardingScreen() {
       };
       await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
       await refreshProfile();
-      router.replace("/(tabs)/");
+      router.replace("/(tabs)");
     } catch (e) {
       console.error("Onboarding save error:", e);
     } finally {
@@ -187,7 +187,7 @@ export default function OnboardingScreen() {
             )}
             <StepDots total={TOTAL} current={step} />
             <TouchableOpacity
-              onPress={() => router.replace("/(tabs)/")}
+              onPress={() => router.replace("/(tabs)")}
               style={styles.skipBtn}
             >
               <Text style={styles.skipText}>Skip</Text>

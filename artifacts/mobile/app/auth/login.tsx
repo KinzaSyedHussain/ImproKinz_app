@@ -43,7 +43,7 @@ export default function LoginScreen() {
   // Already signed in? Go to home
   useEffect(() => {
     if (isSignedIn) {
-      router.replace("/(tabs)/");
+      router.replace("/(tabs)");
     }
   }, [isSignedIn]);
   const [email, setEmail] = useState("");
@@ -94,7 +94,7 @@ export default function LoginScreen() {
       });
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        router.replace("/(tabs)/");
+        router.replace("/(tabs)");
       } else {
         setError("Sign in incomplete. Please try again.");
       }
@@ -116,7 +116,7 @@ export default function LoginScreen() {
       });
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        router.replace("/(tabs)/");
+        router.replace("/(tabs)");
       }
     } catch (e: any) {
       const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || "Google sign-in failed";

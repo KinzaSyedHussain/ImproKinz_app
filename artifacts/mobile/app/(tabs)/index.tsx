@@ -2,6 +2,10 @@ import { Icon } from "@/components/Icon";
 import { SkeletonCard } from "@/components/SkeletonCard";
 import { useRouter } from "expo-router";
 import {
+  collection,
+  getDocs,
+  limit,
+  query,
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
@@ -42,6 +46,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,8 +54,15 @@ export default function HomeScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [feedAttempt, setFeedAttempt] = useState(0);
   const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const poolRef = useRef<Post[]>([]);
+
+  const loadPosts = () => {
+    setLoading(true);
+    setLoadError(null);
+    setFeedAttempt((attempt) => attempt + 1);
+  };
 
   // Simple feed load: getDocs directly in useEffect
   const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
@@ -97,7 +109,7 @@ export default function HomeScreen() {
     }, 8000);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, []);
+  }, [feedAttempt]);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
@@ -308,6 +320,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  composer: { marginHorizontal: 12, marginBottom: 8, padding: 14, borderRadius: 16, borderWidth: 1 },
+  composerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
+  composerPrompt: { flex: 1, fontSize: 13 },
+  composerFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
+  composerActions: { flexDirection: "row", gap: 14 },
+  postMiniBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  postMiniText: { fontSize: 12, fontWeight: "700" },
   empty: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
   emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
