@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSignUp } from "@clerk/clerk-expo";
+import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 
 const { width: W, height: H } = Dimensions.get("window");
 
@@ -88,8 +89,8 @@ export default function RegisterScreen() {
       await signUp.create({
         emailAddress: email.trim(),
         password,
-        firstName: name.trim(),
       });
+      await AsyncStorage.setItem("pending_onboarding_nickname", name.trim());
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
       setPendingVerification(true);
     } catch (e: any) {
@@ -101,13 +102,15 @@ export default function RegisterScreen() {
   };
 
   const handleVerify = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || loading || code.trim().length < 6) return;
     setError("");
     setLoading(true);
     try {
       const result = await signUp.attemptEmailAddressVerification({ code });
       if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
+        if (result.createdSessionId) {
+          await setActive({ session: result.createdSessionId });
+        }
         // Only newly created accounts go through onboarding. Existing users
         // use the sign-in screen and are sent straight to the app.
         router.replace("/onboarding");
@@ -115,6 +118,23 @@ export default function RegisterScreen() {
         setError("Verification incomplete. Please try again.");
       }
     } catch (e: any) {
+      const clerkError = e?.errors?.[0];
+      const clerkMessage = String(
+        clerkError?.longMessage || clerkError?.message || e?.message || "",
+      ).toLowerCase();
+
+      // Clerk treats a second submission for the same code as an error even
+      // though the account is already verified. Treat that response as a
+      // successful, repeatable completion of the signup flow.
+      if (clerkMessage.includes("already verified")) {
+        const sessionId = e?.createdSessionId || (signUp as any)?.createdSessionId;
+        if (sessionId) {
+          await setActive({ session: sessionId });
+        }
+        router.replace("/onboarding");
+        return;
+      }
+
       const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || "Verification failed";
       setError(msg);
     } finally {
