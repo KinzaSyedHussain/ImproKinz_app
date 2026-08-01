@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -136,6 +137,12 @@ export default function OnboardingScreen() {
 
   const TOTAL = 6;
 
+  React.useEffect(() => {
+    AsyncStorage.getItem("pending_onboarding_nickname").then((value) => {
+      if (value) setNickname(value);
+    }).catch(() => {});
+  }, []);
+
   const animateStep = (next: () => void) => {
     Animated.sequence([
       Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
@@ -177,6 +184,7 @@ export default function OnboardingScreen() {
         updatedAt: serverTimestamp(),
       };
       await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
+      await AsyncStorage.removeItem("pending_onboarding_nickname").catch(() => {});
       await refreshProfile();
       router.replace("/paywall?fromOnboarding=1");
     } catch (e) {
