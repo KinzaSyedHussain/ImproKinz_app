@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSubscription } from "@/lib/revenuecat";
+import { useLocalSearchParams } from "expo-router";
 
 const GOLD = "#F59E0B";
 const DARK = "#0D0B2B";
@@ -32,6 +33,7 @@ const FEATURES = [
 
 export default function PaywallScreen() {
   const router = useRouter();
+  const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
   const { offerings, isConfigured, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } =
     useSubscription();
   const [confirmVisible, setConfirmVisible] = useState(false);
@@ -155,6 +157,16 @@ export default function PaywallScreen() {
           </Text>
         </TouchableOpacity>
 
+        {fromOnboarding === "1" && (
+          <TouchableOpacity
+            style={styles.startFreeBtn}
+            onPress={() => router.replace("/(tabs)")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.startFreeText}>or start free with 100 daily credits</Text>
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.legal}>
           Payment will be charged to your account at confirmation of purchase. Subscription automatically renews
           unless cancelled at least 24 hours before the end of the period.
@@ -244,6 +256,8 @@ const styles = StyleSheet.create({
   ctaText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 17 },
   restoreBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 16 },
   restoreText: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13 },
+  startFreeBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 10 },
+  startFreeText: { color: GOLD, fontFamily: "Inter_600SemiBold", fontSize: 14 },
   legal: { color: "#4B5563", fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center", lineHeight: 16 },
   modalOverlay: {
     flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center",

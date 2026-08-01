@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,6 +34,7 @@ export default function ChatbotScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { consumeTool, refundCredits } = useCredits();
 
   const [messages, setMessages] = useState<Message[]>([
     { role: "assistant", text: "Hi! I'm your study assistant. Ask me anything about math, science, history, languages, or study tips!" },
@@ -46,6 +49,7 @@ export default function ChatbotScreen() {
   const send = async (textOverride?: string) => {
     const text = (textOverride || input).trim();
     if (!text || loading) return;
+    if (!(await consumeTool("chatbot"))) return;
     const userMsg: Message = { role: "user", text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
@@ -62,6 +66,7 @@ export default function ChatbotScreen() {
       const data = await res.json() as { reply: string };
       setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Sorry, I couldn't answer that." }]);
     } catch {
+      await refundCredits(5);
       setMessages((prev) => [...prev, { role: "assistant", text: "Sorry, I couldn't connect to the AI. Please try again." }]);
     } finally {
       setLoading(false);
@@ -83,6 +88,7 @@ export default function ChatbotScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Study Chatbot</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>AI-powered study assistant</Text>
           </View>
+          <ToolCreditPill tool="chatbot" />
         </View>
       </LinearGradient>
 

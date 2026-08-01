@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { CreditBalancePill, ToolCreditLabel } from "@/components/CreditUI";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const GAP = 12;
@@ -33,6 +34,8 @@ const TOOLS = [
   { icon: "bar-chart-2", label: "Progress", route: "/progress", colors: ["#7C3AED", "#EC4899"] as [string, string] },
   { icon: "cpu", label: "Calculator", route: "/calculator", colors: ["#0891B2", "#2563EB"] as [string, string] },
 ];
+
+const TOOL_KEYS = ["flashcards", "summarizer", "todo", "quiz", "board", "notes", "chatbot", "pomodoro", "progress", "calculator"] as const;
 
 export default function DashboardScreen() {
   const colors = useColors();
@@ -57,11 +60,12 @@ export default function DashboardScreen() {
         <View style={styles.xpWrap}>
           <Text style={[styles.xpText, { color: colors.primary }]}>★ {profile?.xp?.toLocaleString() ?? 0} XP</Text>
         </View>
+        <CreditBalancePill />
       </View>
 
       {/* 2-column grid */}
       <View style={[styles.grid, { paddingHorizontal: PAD }]}>
-        {TOOLS.map((tool) => (
+        {TOOLS.map((tool, index) => (
           <TouchableOpacity
             key={tool.label}
             style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -72,6 +76,7 @@ export default function DashboardScreen() {
               <Icon name={tool.icon as any} size={24} color="#FFFFFF" />
             </LinearGradient>
             <Text style={[styles.cardLabel, { color: colors.foreground }]}>{tool.label}</Text>
+            <ToolCreditLabel tool={TOOL_KEYS[index]} />
           </TouchableOpacity>
         ))}
       </View>

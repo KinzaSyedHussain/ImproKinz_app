@@ -19,6 +19,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ClerkFirebaseBridge } from "@/context/ClerkFirebaseBridge";
+import { CreditProvider } from "@/context/CreditContext";
 import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -105,9 +106,11 @@ export default function RootLayout() {
               <AuthProvider>
                 <ClerkFirebaseBridge />
                 <SubscriptionProvider>
-                  <InnerProviders>
-                    <RootLayoutNav />
-                  </InnerProviders>
+                  <CreditProvider>
+                    <InnerProviders>
+                      <RootLayoutNav />
+                    </InnerProviders>
+                  </CreditProvider>
                 </SubscriptionProvider>
               </AuthProvider>
             </QueryClientProvider>

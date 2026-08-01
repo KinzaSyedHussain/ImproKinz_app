@@ -59,6 +59,21 @@ const GOALS = [
   { label: "Stay curious", icon: "star" as const },
 ];
 
+const REASONS = [
+  { label: "Pass my exams", icon: "school" as const },
+  { label: "Improve my grades", icon: "trending-up" as const },
+  { label: "Build better study habits", icon: "time" as const },
+  { label: "Learn faster with AI", icon: "sparkles" as const },
+  { label: "Prepare for my career", icon: "briefcase" as const },
+];
+
+const STUDY_TIMES = [
+  { label: "Less than 30 minutes", icon: "flash" as const },
+  { label: "30–60 minutes", icon: "time" as const },
+  { label: "1–2 hours", icon: "hourglass" as const },
+  { label: "More than 2 hours", icon: "trophy" as const },
+];
+
 /* ── Step indicator ──────────────────────────────────────────── */
 function StepDots({ total, current }: { total: number; current: number }) {
   return (
@@ -113,11 +128,13 @@ export default function OnboardingScreen() {
   const [level, setLevel] = useState("");
   const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
+  const [surveyReason, setSurveyReason] = useState("");
+  const [studyTime, setStudyTime] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  const TOTAL = 4;
+  const TOTAL = 6;
 
   const animateStep = (next: () => void) => {
     Animated.sequence([
@@ -140,6 +157,8 @@ export default function OnboardingScreen() {
     if (step === 1) return field !== "";
     if (step === 2) return level !== "";
     if (step === 3) return goal !== "";
+    if (step === 4) return surveyReason !== "";
+    if (step === 5) return studyTime !== "";
     return false;
   };
 
@@ -152,12 +171,14 @@ export default function OnboardingScreen() {
         subjects: [field],
         level,
         goal,
+        surveyReason,
+        studyTime,
         onboardingComplete: true,
         updatedAt: serverTimestamp(),
       };
       await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
       await refreshProfile();
-      router.replace("/(tabs)");
+      router.replace("/paywall?fromOnboarding=1");
     } catch (e) {
       console.error("Onboarding save error:", e);
     } finally {
@@ -186,12 +207,7 @@ export default function OnboardingScreen() {
               <View style={{ width: 38 }} />
             )}
             <StepDots total={TOTAL} current={step} />
-            <TouchableOpacity
-              onPress={() => router.replace("/(tabs)")}
-              style={styles.skipBtn}
-            >
-              <Text style={styles.skipText}>Skip</Text>
-            </TouchableOpacity>
+            <View style={{ width: 38 }} />
           </View>
 
           {/* Content */}
@@ -207,6 +223,12 @@ export default function OnboardingScreen() {
             )}
             {step === 3 && (
               <StepGoal goal={goal} setGoal={setGoal} />
+            )}
+            {step === 4 && (
+              <StepSurveyReason reason={surveyReason} setReason={setSurveyReason} />
+            )}
+            {step === 5 && (
+              <StepStudyTime studyTime={studyTime} setStudyTime={setStudyTime} />
             )}
           </Animated.View>
 
@@ -391,6 +413,78 @@ function StepGoal({
             {goal === g.label && (
               <Ionicons name="checkmark-circle" size={20} color={GOLD} />
             )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StepSurveyReason({
+  reason,
+  setReason,
+}: {
+  reason: string;
+  setReason: (value: string) => void;
+}) {
+  return (
+    <View style={styles.stepWrap}>
+      <View style={styles.iconCircle}>
+        <Ionicons name="sparkles" size={34} color={GOLD} />
+      </View>
+      <Text style={styles.stepTitle}>Why are you here?</Text>
+      <Text style={styles.stepSub}>This helps us make your study space more useful.</Text>
+      <View style={styles.levelList}>
+        {REASONS.map((item) => (
+          <TouchableOpacity
+            key={item.label}
+            style={[styles.levelRow, reason === item.label && styles.levelRowSelected]}
+            onPress={() => setReason(item.label)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.levelIcon, reason === item.label && styles.levelIconSelected]}>
+              <Ionicons name={item.icon} size={20} color={reason === item.label ? DARK : GOLD} />
+            </View>
+            <Text style={[styles.levelLabel, reason === item.label && styles.levelLabelSelected]}>
+              {item.label}
+            </Text>
+            {reason === item.label && <Ionicons name="checkmark-circle" size={20} color={GOLD} />}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StepStudyTime({
+  studyTime,
+  setStudyTime,
+}: {
+  studyTime: string;
+  setStudyTime: (value: string) => void;
+}) {
+  return (
+    <View style={styles.stepWrap}>
+      <View style={styles.iconCircle}>
+        <Ionicons name="time" size={34} color={GOLD} />
+      </View>
+      <Text style={styles.stepTitle}>How much do you study?</Text>
+      <Text style={styles.stepSub}>We'll use this to shape your daily study rhythm.</Text>
+      <View style={styles.levelList}>
+        {STUDY_TIMES.map((item) => (
+          <TouchableOpacity
+            key={item.label}
+            style={[styles.levelRow, studyTime === item.label && styles.levelRowSelected]}
+            onPress={() => setStudyTime(item.label)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.levelIcon, studyTime === item.label && styles.levelIconSelected]}>
+              <Ionicons name={item.icon} size={20} color={studyTime === item.label ? DARK : GOLD} />
+            </View>
+            <Text style={[styles.levelLabel, studyTime === item.label && styles.levelLabelSelected]}>
+              {item.label}
+            </Text>
+            {studyTime === item.label && <Ionicons name="checkmark-circle" size={20} color={GOLD} />}
           </TouchableOpacity>
         ))}
       </View>

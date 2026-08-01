@@ -18,6 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 interface QuizOption { label: string; text: string; }
 interface QuizQuestion { question: string; options: QuizOption[]; answer: string; }
@@ -27,6 +29,7 @@ export default function QuizScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addXP } = useAuth();
+  const { consumeTool, refundCredits } = useCredits();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -37,6 +40,7 @@ export default function QuizScreen() {
 
   const generate = async () => {
     if (!text.trim()) { Alert.alert("Error", "Please enter some text first"); return; }
+    if (!(await consumeTool("quiz"))) return;
     setLoading(true);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
@@ -52,6 +56,7 @@ export default function QuizScreen() {
       setSubmitted(false);
       setPhase("quiz");
     } catch {
+      await refundCredits(20);
       Alert.alert("Error", "Failed to generate quiz. Make sure the API is configured.");
     } finally {
       setLoading(false);
@@ -100,6 +105,7 @@ export default function QuizScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Quiz Generator</Text>
+          <ToolCreditPill tool="quiz" />
           <View style={[styles.xpPill, { backgroundColor: colors.secondary }]}>
             <Text style={[styles.xpPillText, { color: colors.primary }]}>+20 XP</Text>
           </View>

@@ -18,12 +18,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { FlashcardViewer, Flashcard } from "@/components/FlashcardViewer";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 export default function FlashcardsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addXP } = useAuth();
+  const { consumeTool, refundCredits } = useCredits();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<Flashcard[]>([]);
@@ -34,6 +37,7 @@ export default function FlashcardsScreen() {
       Alert.alert("Error", "Please enter some text first");
       return;
     }
+    if (!(await consumeTool("flashcards"))) return;
     setLoading(true);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
@@ -48,6 +52,7 @@ export default function FlashcardsScreen() {
       setGenerated(true);
       await addXP(15);
     } catch (e: any) {
+      await refundCredits(15);
       Alert.alert("Error", "Failed to generate flashcards. Make sure the API is configured.");
     } finally {
       setLoading(false);
@@ -84,6 +89,7 @@ export default function FlashcardsScreen() {
           <View style={[styles.xpPill, { backgroundColor: colors.secondary }]}>
             <Text style={[styles.xpPillText, { color: colors.primary }]}>+15 XP</Text>
           </View>
+          <ToolCreditPill tool="flashcards" />
         </View>
         {generated && (
           <TouchableOpacity onPress={reset}>
