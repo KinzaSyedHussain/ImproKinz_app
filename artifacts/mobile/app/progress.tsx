@@ -16,6 +16,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 interface Goal {
   id: string;
@@ -48,6 +50,7 @@ export default function ProgressScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { consumeTool } = useCredits();
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [adding, setAdding] = useState(false);
@@ -68,6 +71,7 @@ export default function ProgressScreen() {
 
   const addGoal = async () => {
     if (!title.trim() || !target.trim() || !user) return;
+    if (!(await consumeTool("progress"))) return;
     const t = parseFloat(target);
     if (isNaN(t) || t <= 0) return;
     const newGoal: Goal = {
@@ -121,6 +125,7 @@ export default function ProgressScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Progress</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>Track your study goals</Text>
           </View>
+          <ToolCreditPill tool="progress" />
         </View>
       </LinearGradient>
 

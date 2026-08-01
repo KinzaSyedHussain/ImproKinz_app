@@ -4,3 +4,4 @@
 - [Web platform shims](web-platform-shims.md) — Metro bundles ALL requires eagerly; use .web.ts/.native.ts files for AsyncStorage, firebase.ts, tokenCache. ClerkLoaded blocks render on web — remove it.
 - [Signup-only onboarding](signup-onboarding.md) — Route new verified accounts to onboarding; existing sign-ins go directly to the app.
 - [RevenueCat AdMob boundary](revenuecat-admob.md) — AdMob serves ads; RevenueCat's current loadAndTrack adapter is native-only and Expo Go must skip native ads.
+- [Mobile credit system](credit-system.md) — Free users get 100 daily credits; tool costs are centralized and premium bypasses spending.

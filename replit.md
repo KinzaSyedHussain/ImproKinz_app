@@ -50,6 +50,8 @@ pnpm workspace monorepo using TypeScript. Mobile-first study social media app wi
 ### Lib
 - `lib/firebase.ts` — Firebase init
 - `lib/revenuecat.tsx` — RevenueCat SDK wrapper, customer identity, offerings, purchases, and premium entitlement state
+- `context/CreditContext.tsx` — 100-credit daily allowance, atomic Firestore spending, refunds, and premium unlimited access
+- `lib/toolCosts.ts` — shared per-tool credit pricing shown across the dashboard and tool screens
 
 ## Onboarding Flow
 
@@ -69,6 +71,8 @@ Seeds run — entities created in RevenueCat project `projda4bb8e3`:
 - The RevenueCat Replit integration was dismissed by the user; the client uses the saved public keys and the secret remains server-side only.
 - `app/paywall.tsx` is mounted through the root provider and reachable from Settings and the sidebar.
 - The `premium` entitlement removes the AdMob banner for subscribed users.
+- New verified signups complete the profile survey, then see the Premium paywall with an “or start free” path for 100 daily credits.
+- Free users receive 100 credits per day. Each study tool displays its cost and current balance; Premium users see unlimited access.
 - AdMob is configured for native builds. Expo Go intentionally skips AdMob because it does not include the native ad module.
 - RevenueCat's current AdMob `loadAndTrack` adapter is native Swift/Kotlin-only and is not exposed by `react-native-purchases`; the app uses the supported React Native AdMob loader with the premium suppression rule isolated in `components/AdBanner.native.tsx`.
 

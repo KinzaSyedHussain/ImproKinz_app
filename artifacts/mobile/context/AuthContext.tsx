@@ -36,6 +36,10 @@ export interface UserProfile {
   followers?: string[];
   following?: string[];
   onboardingComplete?: boolean;
+  creditsBalance?: number;
+  creditsDate?: string;
+  surveyReason?: string;
+  studyTime?: string;
 }
 
 interface AuthContextType {
@@ -83,6 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           followers:       data.followers,
           following:       data.following,
           onboardingComplete: data.onboardingComplete,
+          creditsBalance: data.creditsBalance,
+          creditsDate: data.creditsDate,
+          surveyReason: data.surveyReason,
+          studyTime: data.studyTime,
         };
         setProfile(normalized);
       } else {
@@ -99,6 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           streak: 1,
           lastActiveDate: new Date().toDateString(),
           createdAt: Date.now(),
+          creditsBalance: 100,
+          creditsDate: new Date().toISOString().slice(0, 10),
         };
         await setDoc(ref, { ...p, createdAt: serverTimestamp() });
         setProfile(p);

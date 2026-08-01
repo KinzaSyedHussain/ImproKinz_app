@@ -17,12 +17,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 export default function SummarizerScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addXP } = useAuth();
+  const { consumeTool, refundCredits } = useCredits();
   const [text, setText] = useState("");
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,6 +35,7 @@ export default function SummarizerScreen() {
       Alert.alert("Error", "Please enter some text first");
       return;
     }
+    if (!(await consumeTool("summarizer"))) return;
     setLoading(true);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
@@ -45,6 +49,7 @@ export default function SummarizerScreen() {
       setSummary(data.summary || "");
       await addXP(10);
     } catch {
+      await refundCredits(10);
       Alert.alert("Error", "Failed to generate summary. Make sure the API is configured.");
     } finally {
       setLoading(false);
@@ -77,6 +82,7 @@ export default function SummarizerScreen() {
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>
             AI Summarizer
           </Text>
+          <ToolCreditPill tool="summarizer" />
           <View style={[styles.xpPill, { backgroundColor: colors.secondary }]}>
             <Text style={[styles.xpPillText, { color: colors.primary }]}>+10 XP</Text>
           </View>

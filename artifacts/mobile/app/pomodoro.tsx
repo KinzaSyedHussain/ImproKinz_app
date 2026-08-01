@@ -14,6 +14,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 const WORK_MIN = 25;
 const BREAK_MIN = 5;
@@ -29,11 +31,13 @@ export default function PomodoroScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { addXP } = useAuth();
+  const { consumeTool } = useCredits();
 
   const [mode, setMode] = useState<"work" | "break">("work");
   const [secondsLeft, setSecondsLeft] = useState(WORK_MIN * 60);
   const [running, setRunning] = useState(false);
   const [completedSessions, setCompletedSessions] = useState(0);
+  const [chargedForCurrentSession, setChargedForCurrentSession] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
@@ -75,13 +79,21 @@ export default function PomodoroScreen() {
     setRunning(false);
     setMode(newMode);
     setSecondsLeft(newMode === "work" ? WORK_MIN * 60 : BREAK_MIN * 60);
+    setChargedForCurrentSession(false);
   };
 
-  const toggle = () => setRunning((r) => !r);
+  const toggle = async () => {
+    if (!running && mode === "work" && !chargedForCurrentSession) {
+      if (!(await consumeTool("pomodoro"))) return;
+      setChargedForCurrentSession(true);
+    }
+    setRunning((r) => !r);
+  };
 
   const reset = () => {
     setRunning(false);
     setSecondsLeft(mode === "work" ? WORK_MIN * 60 : BREAK_MIN * 60);
+    setChargedForCurrentSession(false);
   };
 
   const ringColor = mode === "work" ? "#059669" : "#D97706";
@@ -101,6 +113,7 @@ export default function PomodoroScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Pomodoro</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>{completedSessions} sessions completed</Text>
           </View>
+          <ToolCreditPill tool="pomodoro" />
         </View>
       </LinearGradient>
 

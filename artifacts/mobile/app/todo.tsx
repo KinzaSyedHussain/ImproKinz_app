@@ -18,6 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 interface TodoItem {
   id: string;
@@ -50,6 +52,7 @@ export default function TodoScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { consumeTool } = useCredits();
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [input, setInput] = useState("");
@@ -70,6 +73,7 @@ export default function TodoScreen() {
 
   const addTodo = async () => {
     if (!input.trim() || !user) return;
+    if (!(await consumeTool("todo"))) return;
     const newTodo: TodoItem = {
       id: `${user.uid}_${Date.now()}`,
       text: input.trim(),
@@ -130,6 +134,7 @@ export default function TodoScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Todo List</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>{doneCount}/{totalCount} completed</Text>
           </View>
+          <ToolCreditPill tool="todo" />
         </View>
       </LinearGradient>
 

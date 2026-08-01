@@ -12,11 +12,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 export default function CalculatorScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { consumeTool } = useCredits();
 
   const [display, setDisplay] = useState("0");
   const [prev, setPrev] = useState<string | null>(null);
@@ -41,8 +44,9 @@ export default function CalculatorScreen() {
     setFresh(true);
   };
 
-  const calculate = () => {
+  const calculate = async () => {
     if (!prev || !op) return;
+    if (!(await consumeTool("calculator"))) return;
     const a = parseFloat(prev);
     const b = parseFloat(display);
     let result = 0;
@@ -104,6 +108,7 @@ export default function CalculatorScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Calculator</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>Quick math solver</Text>
           </View>
+          <ToolCreditPill tool="calculator" />
         </View>
       </LinearGradient>
 

@@ -19,6 +19,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 interface Note {
   id: string;
@@ -78,6 +80,7 @@ export default function NotesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, addXP } = useAuth();
+  const { consumeTool, refundCredits } = useCredits();
 
   const [activeTab, setActiveTab] = useState<"generate" | "saved">("generate");
   const [notes, setNotes] = useState<Note[]>([]);
@@ -117,6 +120,7 @@ export default function NotesScreen() {
       Alert.alert("Enter a topic", "What topic should the AI write notes about?");
       return;
     }
+    if (!(await consumeTool("notes"))) return;
     setGenerating(true);
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
@@ -134,6 +138,7 @@ export default function NotesScreen() {
       setEditSubject(subject);
       setModalVisible(true);
     } catch {
+      await refundCredits(12);
       Alert.alert("AI Error", "Could not generate notes. Check your connection and try again.");
     } finally {
       setGenerating(false);
@@ -225,6 +230,7 @@ export default function NotesScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notes Maker</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>AI-generated study notes</Text>
           </View>
+          <ToolCreditPill tool="notes" />
           <View style={[styles.xpPill, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
             <Text style={[styles.xpPillText, { color: colors.foreground }]}>+12 XP</Text>
           </View>

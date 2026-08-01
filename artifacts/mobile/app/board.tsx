@@ -17,6 +17,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
 type ColumnKey = "todo" | "doing" | "done";
 
@@ -56,6 +58,7 @@ export default function BoardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { consumeTool } = useCredits();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [input, setInput] = useState("");
@@ -74,6 +77,7 @@ export default function BoardScreen() {
 
   const addTask = async (column: ColumnKey) => {
     if (!input.trim() || !user) return;
+    if (!(await consumeTool("board"))) return;
     const newTask: Task = {
       id: `${user.uid}_${Date.now()}`,
       text: input.trim(),
@@ -123,6 +127,7 @@ export default function BoardScreen() {
             <Text style={[styles.headerTitle, { color: colors.foreground }]}>Study Board</Text>
             <Text style={[styles.headerSub, { color: colors.foreground }]}>Kanban-style task organizer</Text>
           </View>
+          <ToolCreditPill tool="board" />
         </View>
       </LinearGradient>
 
