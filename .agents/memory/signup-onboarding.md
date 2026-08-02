@@ -32,3 +32,9 @@ Clerk may also return `username` in `missingFields`; the completion loop should 
 **Why:** Clerk dashboard sign-up settings can require a username independently of email, name, or legal acceptance, while the UI otherwise reports only a generic incomplete signup.
 
 **How to apply:** Normalize Clerk field identifiers, satisfy every supported missing field, reload the returned signup resource, and only show an error after the retry window is exhausted.
+
+The onboarding completion screen must not depend only on Firebase `user` immediately after Clerk activation; use the loaded profile or Clerk user ID while the bridge settles.
+
+**Why:** Clerk activation and Firebase auth/profile hydration are asynchronous, so the final onboarding action can otherwise return silently before saving or opening the paywall.
+
+**How to apply:** Resolve an authenticated identity from Firebase, the profile context, or Clerk, and surface a visible save error when no identity or write is available.
