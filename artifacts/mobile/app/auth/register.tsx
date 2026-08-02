@@ -16,7 +16,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSignUp } from "@clerk/clerk-expo";
+import { useAuth as useClerkAuth, useSignUp } from "@clerk/clerk-expo";
 import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 
 const { width: W, height: H } = Dimensions.get("window");
@@ -34,6 +34,12 @@ const PERKS = [
   { icon: "🤖", text: "AI tools: flashcards, quizzes & more" },
   { icon: "🏆", text: "Climb the leaderboard with streaks" },
 ];
+
+const SESSION_POLL_ATTEMPTS = 8;
+const SESSION_POLL_DELAY_MS = 500;
+
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 function getClerkErrorMessage(error: any, fallback: string): string {
   return (
@@ -70,6 +76,7 @@ export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signUp, setActive, isLoaded } = useSignUp();
+  const { isSignedIn } = useClerkAuth();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -81,11 +88,16 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const actionInFlight = useRef(false);
+  const isSignedInRef = useRef(!!isSignedIn);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(50)).current;
   const starAnims = useRef(STARS.map(() => new Animated.Value(0.1))).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    isSignedInRef.current = !!isSignedIn;
+  }, [isSignedIn]);
 
   useEffect(() => {
     Animated.parallel([
@@ -202,14 +214,29 @@ export default function RegisterScreen() {
     if (!completedSignup || completedSignup.status !== "complete") {
       throw new Error("Verification is not complete yet.");
     }
-    let sessionId = completedSignup.createdSessionId;
-    if (!sessionId) {
-      const refreshedSignup = await completedSignup.reload();
-      sessionId = refreshedSignup.createdSessionId;
+
+    let currentSignup = completedSignup;
+    let sessionId = currentSignup.createdSessionId;
+    for (let attempt = 0; !sessionId && attempt < SESSION_POLL_ATTEMPTS; attempt += 1) {
+      if (isSignedInRef.current) {
+        router.replace("/onboarding");
+        return;
+      }
+      await wait(SESSION_POLL_DELAY_MS);
+      currentSignup = await currentSignup.reload();
+      if (currentSignup.status === "complete") {
+        sessionId = currentSignup.createdSessionId;
+      }
     }
+
+    if (isSignedInRef.current) {
+      router.replace("/onboarding");
+      return;
+    }
+
     if (!sessionId || !setActive) {
       throw new Error(
-        "Your email is verified, but the session is still being prepared. Please try again.",
+        "Your email is verified, but Clerk did not return a session yet. Please tap Verify again.",
       );
     }
 
@@ -224,14 +251,28 @@ export default function RegisterScreen() {
       throw new Error("The signup session is no longer available.");
     }
 
-    const refreshedSignup = await signUp.reload();
-    if (refreshedSignup.status === "complete") {
-      await finishVerifiedSignup(refreshedSignup);
+    let currentSignup = signUp;
+    for (let attempt = 0; attempt < SESSION_POLL_ATTEMPTS; attempt += 1) {
+      if (isSignedInRef.current) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      await wait(SESSION_POLL_DELAY_MS);
+      currentSignup = await currentSignup.reload();
+      if (currentSignup.status === "complete") {
+        await finishVerifiedSignup(currentSignup);
+        return;
+      }
+    }
+
+    if (isSignedInRef.current) {
+      router.replace("/onboarding");
       return;
     }
 
     throw new Error(
-      "Your email is verified, but the signup session is still being prepared. Please try again.",
+      "Your email is verified, but Clerk is still preparing the signup session. Please tap Verify again.",
     );
   };
 
