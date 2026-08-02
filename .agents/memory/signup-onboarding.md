@@ -26,3 +26,9 @@ If Clerk is configured to require legal acceptance, the custom registration form
 **Why:** Existing signup attempts retain the requirements from when they were created, so testing a new requirement against an old verification session produces the same generic `missing_requirements` message.
 
 **How to apply:** Require the checkbox before creating a new signup, pass the accepted value to `signUp.create` and `signUp.update`, then test from a fresh registration attempt.
+
+Clerk may also return `username` in `missingFields`; the completion loop should update that requirement before treating the verified signup as failed.
+
+**Why:** Clerk dashboard sign-up settings can require a username independently of email, name, or legal acceptance, while the UI otherwise reports only a generic incomplete signup.
+
+**How to apply:** Normalize Clerk field identifiers, satisfy every supported missing field, reload the returned signup resource, and only show an error after the retry window is exhausted.

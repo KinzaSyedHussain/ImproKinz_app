@@ -170,12 +170,12 @@ export default function RegisterScreen() {
       if (completedSignup.status === "complete") {
         await finishVerifiedSignup(completedSignup);
       } else {
-        setError(getIncompleteSignupMessage(completedSignup));
+        await recoverCompletedSignup(completedSignup);
       }
     } catch (e: any) {
       if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
         try {
-          await recoverCompletedSignup();
+          await recoverCompletedSignup(signUp);
         } catch (recoveryError: any) {
           setError(getVerificationRecoveryMessage(recoveryError));
         }
@@ -204,7 +204,7 @@ export default function RegisterScreen() {
     } catch (e: any) {
       if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
         try {
-          await recoverCompletedSignup();
+          await recoverCompletedSignup(signUp);
         } catch (recoveryError: any) {
           setError(getVerificationRecoveryMessage(recoveryError));
         }
@@ -258,11 +258,19 @@ export default function RegisterScreen() {
   ): Promise<NonNullable<typeof signUp>> => {
     if (signup.status === "complete") return signup;
 
-    const missingFields = (signup.missingFields ?? []).map((field) => String(field));
+    const missingFields = (signup.missingFields ?? []).map((field) =>
+      String(field)
+        .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+        .replace(/[-\s]/g, "_")
+        .toLowerCase(),
+    );
     const needsFirstName = missingFields.includes("first_name");
     const needsLastName = missingFields.includes("last_name");
     const needsLegalAcceptance = missingFields.includes("legal_accepted");
-    if (!needsFirstName && !needsLastName && !needsLegalAcceptance) return signup;
+    const needsUsername = missingFields.includes("username");
+    if (!needsFirstName && !needsLastName && !needsLegalAcceptance && !needsUsername) {
+      return signup;
+    }
 
     const savedName = await AsyncStorage.getItem("pending_onboarding_nickname").catch(
       () => null,
@@ -273,31 +281,52 @@ export default function RegisterScreen() {
     const nameParts = fullName ? fullName.split(/\s+/) : [];
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || firstName;
+    const emailUsername = email
+      .split("@")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    const nameUsername = fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const usernameBase = (emailUsername || nameUsername || "learner").slice(0, 24);
+    const username = /^[a-z]/.test(usernameBase)
+      ? usernameBase
+      : `user${usernameBase}`.slice(0, 30);
 
     return signup.update({
       ...(needsFirstName && firstName ? { firstName } : {}),
       ...(needsLastName && lastName ? { lastName } : {}),
       ...(needsLegalAcceptance && legalAccepted ? { legalAccepted: true } : {}),
+      ...(needsUsername ? { username: username || "learner" } : {}),
     });
   };
 
   const getIncompleteSignupMessage = (signup: NonNullable<typeof signUp>) => {
-    const missingFields = (signup.missingFields ?? []).map((field) => String(field));
-    if (missingFields.includes("first_name") || missingFields.includes("last_name")) {
+    const missingFields = (signup.missingFields ?? []).map((field) =>
+      String(field)
+        .replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)
+        .replace(/[_-]/g, " ")
+        .trim()
+        .toLowerCase(),
+    );
+    if (missingFields.includes("first name") || missingFields.includes("last name")) {
       return "Your email is verified. We still need your name to finish creating your account.";
     }
-    if (missingFields.includes("legal_accepted")) {
+    if (missingFields.includes("legal accepted")) {
       return "Please agree to the Terms of Service and Privacy Policy before creating your account.";
     }
-    return "Your email is verified, but Clerk still needs one more account detail.";
+    if (missingFields.includes("username")) {
+      return "Your email is verified, but Clerk still needs a username to finish creating your account.";
+    }
+    return `Your email is verified, but Clerk still needs: ${missingFields.join(", ")}.`;
   };
 
-  const recoverCompletedSignup = async () => {
-    if (!signUp) {
+  const recoverCompletedSignup = async (
+    startingSignup: NonNullable<typeof signUp>,
+  ) => {
+    if (!startingSignup) {
       throw new Error("The signup session is no longer available.");
     }
 
-    let currentSignup = signUp;
+    let currentSignup = startingSignup;
     for (let attempt = 0; attempt < SESSION_POLL_ATTEMPTS; attempt += 1) {
       if (isSignedInRef.current) {
         router.replace("/onboarding");
@@ -311,6 +340,7 @@ export default function RegisterScreen() {
         await finishVerifiedSignup(completedSignup);
         return;
       }
+      currentSignup = completedSignup;
     }
 
     if (isSignedInRef.current) {
@@ -319,7 +349,7 @@ export default function RegisterScreen() {
     }
 
     throw new Error(
-      "Your email is verified, but Clerk is still preparing the signup session. Please tap Verify again.",
+      getIncompleteSignupMessage(currentSignup),
     );
   };
 
