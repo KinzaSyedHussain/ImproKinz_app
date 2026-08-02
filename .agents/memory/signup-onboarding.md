@@ -14,3 +14,9 @@ Email verification completion is idempotent: if Clerk reports that the verificat
 **Why:** A repeated submit or delayed UI event can reach Clerk after the first verification succeeded; surfacing that response leaves a valid new account stranded on the verification screen.
 
 **How to apply:** Guard concurrent verification submissions, catch resend failures, and poll `reload()` after both normal and duplicate-verification responses because the legacy SDK can expose completion/session data asynchronously. Use the installed Clerk resource API (`create`, `prepareEmailAddressVerification`, `attemptEmailAddressVerification`, `reload`) rather than mixing in the newer future-resource API. Never fall back to immediate password sign-in after verification; that can report a false “account not found.”
+
+Clerk can accept the email code but leave the legacy signup at `missing_requirements` when required profile fields are not supplied. The registration name is intentionally stored locally during creation, then submitted with `signUp.update` only for fields Clerk reports as missing after verification.
+
+**Why:** Passing unsupported name parameters into the initial signup request previously caused Clerk signup failures, while omitting required dashboard-configured name fields prevented the verified signup from producing a session.
+
+**How to apply:** Keep initial `signUp.create` limited to supported fields. After verification, inspect `missingFields`, fill only the required name fields from the locally saved signup name, then retry session completion.

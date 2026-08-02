@@ -160,10 +160,11 @@ export default function RegisterScreen() {
       const result = await signUp.attemptEmailAddressVerification({
         code: code.trim(),
       });
-      if (result.status === "complete") {
-        await finishVerifiedSignup(result);
+      const completedSignup = await completeSignupRequirements(result);
+      if (completedSignup.status === "complete") {
+        await finishVerifiedSignup(completedSignup);
       } else {
-        setError("Verification incomplete. Please try again.");
+        setError(getIncompleteSignupMessage(completedSignup));
       }
     } catch (e: any) {
       if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
@@ -246,6 +247,40 @@ export default function RegisterScreen() {
     router.replace("/onboarding");
   };
 
+  const completeSignupRequirements = async (
+    signup: NonNullable<typeof signUp>,
+  ): Promise<NonNullable<typeof signUp>> => {
+    if (signup.status === "complete") return signup;
+
+    const missingFields = (signup.missingFields ?? []).map((field) => String(field));
+    const needsFirstName = missingFields.includes("first_name");
+    const needsLastName = missingFields.includes("last_name");
+    if (!needsFirstName && !needsLastName) return signup;
+
+    const savedName = await AsyncStorage.getItem("pending_onboarding_nickname").catch(
+      () => null,
+    );
+    const fullName = (name.trim() || savedName?.trim() || "").trim();
+    if (!fullName) return signup;
+
+    const nameParts = fullName.split(/\s+/);
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(" ") || firstName;
+
+    return signup.update({
+      ...(needsFirstName ? { firstName } : {}),
+      ...(needsLastName ? { lastName } : {}),
+    });
+  };
+
+  const getIncompleteSignupMessage = (signup: NonNullable<typeof signUp>) => {
+    const missingFields = (signup.missingFields ?? []).map((field) => String(field));
+    if (missingFields.includes("first_name") || missingFields.includes("last_name")) {
+      return "Your email is verified. We still need your name to finish creating your account.";
+    }
+    return "Your email is verified, but Clerk still needs one more account detail.";
+  };
+
   const recoverCompletedSignup = async () => {
     if (!signUp) {
       throw new Error("The signup session is no longer available.");
@@ -260,8 +295,9 @@ export default function RegisterScreen() {
 
       await wait(SESSION_POLL_DELAY_MS);
       currentSignup = await currentSignup.reload();
-      if (currentSignup.status === "complete") {
-        await finishVerifiedSignup(currentSignup);
+      const completedSignup = await completeSignupRequirements(currentSignup);
+      if (completedSignup.status === "complete") {
+        await finishVerifiedSignup(completedSignup);
         return;
       }
     }
