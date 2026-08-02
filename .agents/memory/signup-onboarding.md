@@ -44,3 +44,9 @@ Unauthenticated entry and sign-out should land on a dedicated auth choice screen
 **Why:** Sending users directly to only one auth form made the intended sign-in/sign-up choice unclear and inconsistent after sign-out.
 
 **How to apply:** Route the root unauthenticated state and sidebar sign-out to `/auth`; keep `/auth/login` and `/auth/register` as the two explicit destinations.
+
+Poll votes and social reactions need conflict-safe writes when multiple accounts can interact with the same post.
+
+**Why:** Replacing a whole nested poll object from stale client state causes one account's vote to disappear when another account votes or the feed refreshes.
+
+**How to apply:** Read the current post inside a Firestore transaction, modify only the targeted user's vote, and expose persisted user IDs through an inspectable voter/liker list.

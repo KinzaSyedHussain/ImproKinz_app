@@ -8,13 +8,18 @@ import {
   arrayUnion,
   deleteDoc,
   doc,
+  getDoc,
+  runTransaction,
   updateDoc,
 } from "firebase/firestore";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Image,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -78,6 +83,146 @@ export interface Post {
   videoUrl?: string;
   poll?: PollData;
   code?: CodeBlock;
+}
+
+interface PersonSummary {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+}
+
+interface PeopleGroup {
+  label: string;
+  ids: string[];
+}
+
+async function fetchPeople(ids: string[]): Promise<PersonSummary[]> {
+  const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 100);
+  const people = await Promise.all(
+    uniqueIds.map(async (uid) => {
+      try {
+        const snap = await getDoc(doc(db, "profiles", uid));
+        const data = snap.data() ?? {};
+        return {
+          uid,
+          displayName: data.displayName || data.name || data.userName || "Study User",
+          photoURL: data.photoURL || data.avatar || undefined,
+        };
+      } catch {
+        return { uid, displayName: "Study User" };
+      }
+    }),
+  );
+  return people;
+}
+
+function PeopleModal({
+  visible,
+  title,
+  ids,
+  groups,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  ids: string[];
+  groups?: PeopleGroup[];
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const [people, setPeople] = useState<PersonSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const idsKey = ids.join("|");
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchPeople(ids)
+      .then((result) => {
+        if (!cancelled) setPeople(result);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, idsKey]);
+
+  const peopleById = new Map(people.map((person) => [person.uid, person]));
+  const renderPerson = (uid: string) => {
+    const person = peopleById.get(uid);
+    return (
+      <View key={uid} style={styles.personRow}>
+        <UserAvatar
+          photoURL={person?.photoURL}
+          displayName={person?.displayName || "Study User"}
+          size={40}
+        />
+        <Text style={[styles.personName, { color: colors.foreground }]}>
+          {person?.displayName || "Study User"}
+        </Text>
+      </View>
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.peopleOverlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.peopleSheet, { backgroundColor: colors.card }]}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <View>
+              <Text style={[styles.sheetTitle, { color: colors.foreground }]}>{title}</Text>
+              <Text style={[styles.sheetSubtitle, { color: colors.mutedForeground }]}>
+                {ids.length} {ids.length === 1 ? "person" : "people"}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} style={styles.sheetClose}>
+              <Icon name="x" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {loading ? (
+            <View style={styles.peopleEmpty}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : ids.length === 0 ? (
+            <View style={styles.peopleEmpty}>
+              <Icon name="users" size={28} color={colors.mutedForeground} />
+              <Text style={[styles.emptyPeopleText, { color: colors.mutedForeground }]}>
+                No one yet
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.peopleList}
+            >
+              {groups
+                ? groups.map((group) => (
+                    <View key={group.label} style={styles.peopleGroup}>
+                      <Text style={[styles.groupLabel, { color: colors.primary }]}>
+                        {group.label}
+                      </Text>
+                      {group.ids.length > 0 ? (
+                        group.ids.map(renderPerson)
+                      ) : (
+                        <Text style={[styles.noGroupVotes, { color: colors.mutedForeground }]}>
+                          No votes yet
+                        </Text>
+                      )}
+                    </View>
+                  ))
+                : ids.map(renderPerson)}
+            </ScrollView>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
 /**
@@ -256,52 +401,83 @@ function InlineVideoPlayer({ uri, width, height }: { uri: string; width: number;
 function PollView({ post, user }: { post: Post; user: any }) {
   const colors = useColors();
   const [localPoll, setLocalPoll] = useState(post.poll);
+  const [votersVisible, setVotersVisible] = useState(false);
+  const [voting, setVoting] = useState(false);
+  const [voterGroups, setVoterGroups] = useState<PeopleGroup[]>([]);
   const totalVotes = localPoll?.options.reduce((sum, o) => sum + (o.votes?.length || 0), 0) || 0;
+
+  useEffect(() => {
+    setLocalPoll(post.poll);
+  }, [post.poll]);
 
   if (!localPoll || !localPoll.options.length) return null;
 
   const handleVote = async (optionIndex: number) => {
-    if (!user) return;
+    if (!user || voting) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const ref = doc(db, "community_posts", post.id);
     const uid = user.uid;
-
-    // Check if user already voted for any option
-    const alreadyVotedIndex = localPoll.options.findIndex((o) => o.votes?.includes(uid));
-
-    let newOptions = [...localPoll.options];
-
-    if (alreadyVotedIndex === optionIndex) {
-      // Remove vote from this option
-      newOptions[optionIndex] = {
-        ...newOptions[optionIndex],
-        votes: newOptions[optionIndex].votes.filter((v) => v !== uid),
-      };
-    } else {
-      // Remove vote from previous option if any
-      if (alreadyVotedIndex >= 0) {
-        newOptions[alreadyVotedIndex] = {
-          ...newOptions[alreadyVotedIndex],
-          votes: newOptions[alreadyVotedIndex].votes.filter((v) => v !== uid),
-        };
-      }
-      // Add vote to new option
-      newOptions[optionIndex] = {
-        ...newOptions[optionIndex],
-        votes: [...(newOptions[optionIndex].votes || []), uid],
-      };
-    }
-
-    setLocalPoll({ ...localPoll, options: newOptions });
+    const previousPoll = localPoll;
+    setVoting(true);
 
     try {
-      await updateDoc(ref, { poll: { ...localPoll, options: newOptions } });
+      const nextPoll = await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        const data = snapshot.data() ?? {};
+        const storedPoll = data.poll ?? data.pollData ?? {};
+        const storedOptions = Array.isArray(storedPoll.options)
+          ? storedPoll.options
+          : [];
+        const options = storedOptions.map((option: any) => ({
+          text: option.text ?? option.label ?? option.name ?? "Option",
+          votes: Array.isArray(option.votes) ? [...option.votes] : [],
+        }));
+        if (optionIndex < 0 || optionIndex >= options.length) {
+          throw new Error("This poll option is no longer available.");
+        }
+
+        const alreadyVotedIndex = options.findIndex((option: PollOption) =>
+          option.votes.includes(uid),
+        );
+        if (alreadyVotedIndex === optionIndex) {
+          options[optionIndex].votes = options[optionIndex].votes.filter((id: string) => id !== uid);
+        } else {
+          if (alreadyVotedIndex >= 0) {
+            options[alreadyVotedIndex].votes = options[alreadyVotedIndex].votes.filter(
+              (id: string) => id !== uid,
+            );
+          }
+          options[optionIndex].votes = [...options[optionIndex].votes, uid];
+        }
+
+        const result = {
+          question: storedPoll.question ?? storedPoll.title ?? localPoll.question,
+          options,
+        };
+        transaction.update(ref, { poll: result });
+        return result;
+      });
+      setLocalPoll(nextPoll);
     } catch (e) {
-      // Revert on error
-      setLocalPoll(post.poll);
+      setLocalPoll(previousPoll);
+      Alert.alert("Vote not saved", "Please check your connection and try again.");
+    } finally {
+      setVoting(false);
     }
   };
+
+  const openVoters = () => {
+    setVoterGroups(
+      localPoll.options.map((option) => ({
+        label: option.text,
+        ids: option.votes ?? [],
+      })),
+    );
+    setVotersVisible(true);
+  };
+
+  const voterIds = [...new Set(localPoll.options.flatMap((option) => option.votes ?? []))];
 
   return (
     <View style={styles.pollContainer}>
@@ -320,6 +496,7 @@ function PollView({ post, user }: { post: Post; user: any }) {
             key={idx}
             style={[styles.pollOption, { backgroundColor: hasVoted ? colors.primary + "25" : colors.muted + "80", borderColor: hasVoted ? colors.primary : colors.border }]}
             onPress={() => handleVote(idx)}
+            disabled={voting}
             activeOpacity={0.7}
           >
             <View style={styles.pollOptionRow}>
@@ -349,6 +526,19 @@ function PollView({ post, user }: { post: Post; user: any }) {
       <Text style={[styles.pollTotal, { color: colors.mutedForeground }]}>
         {totalVotes} total vote{totalVotes !== 1 ? "s" : ""}
       </Text>
+      <TouchableOpacity style={styles.viewPeopleButton} onPress={openVoters} activeOpacity={0.75}>
+        <Icon name="users" size={15} color={colors.primary} />
+        <Text style={[styles.viewPeopleText, { color: colors.primary }]}>
+          See who voted · {voterIds.length}
+        </Text>
+      </TouchableOpacity>
+      <PeopleModal
+        visible={votersVisible}
+        title="Poll voters"
+        ids={voterIds}
+        groups={voterGroups}
+        onClose={() => setVotersVisible(false)}
+      />
     </View>
   );
 }
@@ -401,6 +591,7 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
   const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
   const [saved, setSaved] = useState(user ? savedBy.includes(user.uid) : false);
   const [likeCount, setLikeCount] = useState(likes.length);
+  const [likesVisible, setLikesVisible] = useState(false);
   const [deleted, setDeleted] = useState(false);
 
   const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
@@ -566,9 +757,15 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
               color={liked ? "#EF4444" : colors.mutedForeground}
             />
           </Animated.View>
-          <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
-            {likeCount}
-          </Text>
+          <TouchableOpacity
+            onPress={() => likeCount > 0 && setLikesVisible(true)}
+            disabled={likeCount === 0}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+          >
+            <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
+              {likeCount}
+            </Text>
+          </TouchableOpacity>
         </TouchableOpacity>
 
         {/* Comment */}
@@ -603,6 +800,12 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           </Text>
         </TouchableOpacity>
       </View>
+      <PeopleModal
+        visible={likesVisible}
+        title="Liked by"
+        ids={likes}
+        onClose={() => setLikesVisible(false)}
+      />
     </PressableScale>
   );
 }
@@ -701,6 +904,104 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     marginTop: 2,
+  },
+  viewPeopleButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  viewPeopleText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+  },
+  peopleOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(4, 2, 18, 0.62)",
+  },
+  peopleSheet: {
+    maxHeight: "78%",
+    minHeight: 260,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#6B5FA0",
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2D265A",
+  },
+  sheetTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 20,
+  },
+  sheetSubtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    marginTop: 3,
+  },
+  sheetClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF0D",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  peopleList: {
+    paddingVertical: 12,
+    gap: 4,
+  },
+  peopleGroup: {
+    gap: 2,
+    marginBottom: 14,
+  },
+  groupLabel: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 12,
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  personRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  personName: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 15,
+  },
+  noGroupVotes: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    paddingVertical: 6,
+  },
+  peopleEmpty: {
+    flex: 1,
+    minHeight: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  emptyPeopleText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
   },
 
   // Code block styles
