@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -122,7 +123,8 @@ function Pill({
 /* ── Main ────────────────────────────────────────────────────── */
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
+  const { userId: clerkUserId } = useClerkAuth();
 
   const [step, setStep] = useState(0);
   const [field, setField] = useState("");
@@ -132,6 +134,7 @@ export default function OnboardingScreen() {
   const [surveyReason, setSurveyReason] = useState("");
   const [studyTime, setStudyTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -170,8 +173,13 @@ export default function OnboardingScreen() {
   };
 
   const handleFinish = async () => {
-    if (!user) return;
+    const uid = user?.uid ?? profile?.uid ?? clerkUserId;
+    if (!uid) {
+      setSaveError("Your account is still loading. Please wait a moment and try again.");
+      return;
+    }
     setSaving(true);
+    setSaveError("");
     try {
       const payload = {
         displayName: nickname.trim() || undefined,
@@ -183,12 +191,13 @@ export default function OnboardingScreen() {
         onboardingComplete: true,
         updatedAt: serverTimestamp(),
       };
-      await setDoc(doc(db, "profiles", user.uid), payload, { merge: true });
+      await setDoc(doc(db, "profiles", uid), payload, { merge: true });
       await AsyncStorage.removeItem("pending_onboarding_nickname").catch(() => {});
       await refreshProfile();
       router.replace("/paywall?fromOnboarding=1");
     } catch (e) {
       console.error("Onboarding save error:", e);
+      setSaveError("We couldn't save your preferences. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -255,6 +264,7 @@ export default function OnboardingScreen() {
               </Text>
             )}
           </TouchableOpacity>
+          {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -591,4 +601,12 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: { opacity: 0.4 },
   ctaText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 17 },
+  saveError: {
+    color: "#FCA5A5",
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 12,
+  },
 });
