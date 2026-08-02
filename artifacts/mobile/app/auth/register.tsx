@@ -35,6 +35,37 @@ const PERKS = [
   { icon: "🏆", text: "Climb the leaderboard with streaks" },
 ];
 
+function getClerkErrorMessage(error: any, fallback: string): string {
+  return (
+    error?.errors?.[0]?.longMessage ||
+    error?.errors?.[0]?.message ||
+    error?.longMessage ||
+    error?.message ||
+    fallback
+  );
+}
+
+function isAlreadyVerifiedError(error: any): boolean {
+  const message = [
+    error?.errors?.[0]?.longMessage,
+    error?.errors?.[0]?.message,
+    error?.longMessage,
+    error?.message,
+    (() => {
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return "";
+      }
+    })(),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return /already(?:\s+been)?\s+verified/.test(message);
+}
+
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -49,6 +80,7 @@ export default function RegisterScreen() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const actionInFlight = useRef(false);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(50)).current;
@@ -80,10 +112,11 @@ export default function RegisterScreen() {
   }, []);
 
   const handleRegister = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded || actionInFlight.current) return;
     setError("");
     if (!name.trim() || !email.trim() || !password) { setError("Please fill in all fields"); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    actionInFlight.current = true;
     setLoading(true);
     try {
       await signUp.create({
@@ -94,52 +127,120 @@ export default function RegisterScreen() {
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
       setPendingVerification(true);
     } catch (e: any) {
-      const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || "Sign up failed";
-      setError(msg);
+      setError(getClerkErrorMessage(e, "Sign up failed"));
     } finally {
       setLoading(false);
+      actionInFlight.current = false;
     }
   };
 
   const handleVerify = async () => {
-    if (!isLoaded || loading || code.trim().length < 6) return;
+    if (!isLoaded || loading || actionInFlight.current || code.trim().length < 6) return;
     setError("");
+    actionInFlight.current = true;
     setLoading(true);
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code });
+      if (signUp.status === "complete") {
+        await finishVerifiedSignup(signUp);
+        return;
+      }
+
+      const result = await signUp.attemptEmailAddressVerification({
+        code: code.trim(),
+      });
       if (result.status === "complete") {
-        if (result.createdSessionId) {
-          await setActive({ session: result.createdSessionId });
-        }
-        // Only newly created accounts go through onboarding. Existing users
-        // use the sign-in screen and are sent straight to the app.
-        router.replace("/onboarding");
+        await finishVerifiedSignup(result);
       } else {
         setError("Verification incomplete. Please try again.");
       }
     } catch (e: any) {
-      const clerkError = e?.errors?.[0];
-      const clerkMessage = String(
-        clerkError?.longMessage || clerkError?.message || e?.message || "",
-      ).toLowerCase();
-
-      // Clerk treats a second submission for the same code as an error even
-      // though the account is already verified. Treat that response as a
-      // successful, repeatable completion of the signup flow.
-      if (clerkMessage.includes("already verified")) {
-        const sessionId = e?.createdSessionId || (signUp as any)?.createdSessionId;
-        if (sessionId) {
-          await setActive({ session: sessionId });
+      if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
+        try {
+          await recoverCompletedSignup();
+        } catch (recoveryError: any) {
+          setError(getVerificationRecoveryMessage(recoveryError));
         }
-        router.replace("/onboarding");
+      } else {
+        setError(getClerkErrorMessage(e, "Verification failed"));
+      }
+    } finally {
+      setLoading(false);
+      actionInFlight.current = false;
+    }
+  };
+
+  const handleResend = async () => {
+    if (!isLoaded || loading || actionInFlight.current) return;
+    setError("");
+    actionInFlight.current = true;
+    setLoading(true);
+    try {
+      if (signUp.status === "complete") {
+        await finishVerifiedSignup(signUp);
         return;
       }
 
-      const msg = e?.errors?.[0]?.longMessage || e?.errors?.[0]?.message || e?.message || "Verification failed";
-      setError(msg);
+      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+      setError("A new verification code was sent.");
+    } catch (e: any) {
+      if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
+        try {
+          await recoverCompletedSignup();
+        } catch (recoveryError: any) {
+          setError(getVerificationRecoveryMessage(recoveryError));
+        }
+      } else {
+        setError(getClerkErrorMessage(e, "Could not resend code"));
+      }
     } finally {
       setLoading(false);
+      actionInFlight.current = false;
     }
+  };
+
+  const finishVerifiedSignup = async (completedSignup: typeof signUp) => {
+    if (!completedSignup || completedSignup.status !== "complete") {
+      throw new Error("Verification is not complete yet.");
+    }
+    let sessionId = completedSignup.createdSessionId;
+    if (!sessionId) {
+      const refreshedSignup = await completedSignup.reload();
+      sessionId = refreshedSignup.createdSessionId;
+    }
+    if (!sessionId || !setActive) {
+      throw new Error(
+        "Your email is verified, but the session is still being prepared. Please try again.",
+      );
+    }
+
+    await setActive({ session: sessionId });
+    // Only newly created accounts go through onboarding. Existing users
+    // use the sign-in screen and are sent straight to the app.
+    router.replace("/onboarding");
+  };
+
+  const recoverCompletedSignup = async () => {
+    if (!signUp) {
+      throw new Error("The signup session is no longer available.");
+    }
+
+    const refreshedSignup = await signUp.reload();
+    if (refreshedSignup.status === "complete") {
+      await finishVerifiedSignup(refreshedSignup);
+      return;
+    }
+
+    throw new Error(
+      "Your email is verified, but the signup session is still being prepared. Please try again.",
+    );
+  };
+
+  const getVerificationRecoveryMessage = (error: any) => {
+    const message = getClerkErrorMessage(error, "");
+    if (message.toLowerCase().includes("couldn't find")) {
+      return "Your email was verified, but this signup session expired. Please sign in with your email and password.";
+    }
+    return message || "Your email was verified, but we could not finish signing you in. Please try again.";
   };
 
   const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.85] });
@@ -213,7 +314,8 @@ export default function RegisterScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => signUp?.prepareEmailAddressVerification({ strategy: "email_code" })}
+                onPress={handleResend}
+                disabled={busy}
                 style={{ marginTop: 16 }}
               >
                 <Text style={styles.resendText}>Didn't receive it? Resend code</Text>
