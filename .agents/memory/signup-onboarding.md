@@ -20,3 +20,9 @@ Clerk can accept the email code but leave the legacy signup at `missing_requirem
 **Why:** Passing unsupported name parameters into the initial signup request previously caused Clerk signup failures, while omitting required dashboard-configured name fields prevented the verified signup from producing a session.
 
 **How to apply:** Keep initial `signUp.create` limited to supported fields. After verification, inspect `missingFields`, fill only the required name fields from the locally saved signup name, then retry session completion.
+
+If Clerk is configured to require legal acceptance, the custom registration form must collect explicit consent and send `legalAccepted: true`; an older in-progress signup cannot be retroactively repaired by the new checkbox.
+
+**Why:** Existing signup attempts retain the requirements from when they were created, so testing a new requirement against an old verification session produces the same generic `missing_requirements` message.
+
+**How to apply:** Require the checkbox before creating a new signup, pass the accepted value to `signUp.create` and `signUp.update`, then test from a fresh registration attempt.
