@@ -87,6 +87,7 @@ export default function RegisterScreen() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const actionInFlight = useRef(false);
   const isSignedInRef = useRef(!!isSignedIn);
 
@@ -128,12 +129,17 @@ export default function RegisterScreen() {
     setError("");
     if (!name.trim() || !email.trim() || !password) { setError("Please fill in all fields"); return; }
     if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (!legalAccepted) {
+      setError("Please agree to the Terms of Service and Privacy Policy.");
+      return;
+    }
     actionInFlight.current = true;
     setLoading(true);
     try {
       await signUp.create({
         emailAddress: email.trim(),
         password,
+        legalAccepted: true,
       });
       await AsyncStorage.setItem("pending_onboarding_nickname", name.trim());
       await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
@@ -255,21 +261,23 @@ export default function RegisterScreen() {
     const missingFields = (signup.missingFields ?? []).map((field) => String(field));
     const needsFirstName = missingFields.includes("first_name");
     const needsLastName = missingFields.includes("last_name");
-    if (!needsFirstName && !needsLastName) return signup;
+    const needsLegalAcceptance = missingFields.includes("legal_accepted");
+    if (!needsFirstName && !needsLastName && !needsLegalAcceptance) return signup;
 
     const savedName = await AsyncStorage.getItem("pending_onboarding_nickname").catch(
       () => null,
     );
     const fullName = (name.trim() || savedName?.trim() || "").trim();
-    if (!fullName) return signup;
+    if (!fullName && (needsFirstName || needsLastName)) return signup;
 
-    const nameParts = fullName.split(/\s+/);
-    const firstName = nameParts[0];
+    const nameParts = fullName ? fullName.split(/\s+/) : [];
+    const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || firstName;
 
     return signup.update({
-      ...(needsFirstName ? { firstName } : {}),
-      ...(needsLastName ? { lastName } : {}),
+      ...(needsFirstName && firstName ? { firstName } : {}),
+      ...(needsLastName && lastName ? { lastName } : {}),
+      ...(needsLegalAcceptance && legalAccepted ? { legalAccepted: true } : {}),
     });
   };
 
@@ -277,6 +285,9 @@ export default function RegisterScreen() {
     const missingFields = (signup.missingFields ?? []).map((field) => String(field));
     if (missingFields.includes("first_name") || missingFields.includes("last_name")) {
       return "Your email is verified. We still need your name to finish creating your account.";
+    }
+    if (missingFields.includes("legal_accepted")) {
+      return "Please agree to the Terms of Service and Privacy Policy before creating your account.";
     }
     return "Your email is verified, but Clerk still needs one more account detail.";
   };
@@ -521,6 +532,21 @@ export default function RegisterScreen() {
                 </View>
 
                 <TouchableOpacity
+                  style={styles.legalConsent}
+                  onPress={() => setLegalAccepted((accepted) => !accepted)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.checkbox, legalAccepted && styles.checkboxSelected]}>
+                    {legalAccepted && <Text style={styles.checkboxMark}>✓</Text>}
+                  </View>
+                  <Text style={styles.legalConsentText}>
+                    I agree to the <Text style={styles.legalLink}>Terms of Service</Text>
+                    {" "}and{" "}
+                    <Text style={styles.legalLink}>Privacy Policy</Text>.
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   onPress={handleRegister}
                   disabled={busy}
                   style={{ opacity: busy ? 0.75 : 1 }}
@@ -584,6 +610,12 @@ const styles = StyleSheet.create({
   inputWrap: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#13103A", borderRadius: 14, borderWidth: 1.5, borderColor: "#2D2080", paddingHorizontal: 14, paddingVertical: 13 },
   inputFocused: { borderColor: "#A78BFA" },
   input: { flex: 1, color: "#FFFFFF", fontSize: 15 },
+  legalConsent: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 2 },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: "#6B5FA0", alignItems: "center", justifyContent: "center", marginTop: 1 },
+  checkboxSelected: { backgroundColor: "#7C3AED", borderColor: "#A78BFA" },
+  checkboxMark: { color: "#FFFFFF", fontSize: 14, fontWeight: "800", lineHeight: 17 },
+  legalConsentText: { color: "#8B7CC4", fontSize: 12, lineHeight: 18, flex: 1 },
+  legalLink: { color: "#C4B5FD", fontWeight: "600" },
 
   createBtn: { borderRadius: 14, paddingVertical: 15, alignItems: "center", shadowColor: "#7C3AED", shadowOpacity: 0.45, shadowRadius: 12, elevation: 6 },
   btnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
