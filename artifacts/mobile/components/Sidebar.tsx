@@ -197,7 +197,7 @@ export function Sidebar({ visible, onClose }: Props) {
                 onPress={async () => {
                   onClose();
                   try { await logOut(); } catch {}
-                  router.replace("/auth/login");
+                  router.replace("/auth");
                 }}
                 activeOpacity={0.7}
               >
@@ -209,7 +209,7 @@ export function Sidebar({ visible, onClose }: Props) {
                 style={[styles.navItem, styles.signOutItem]}
                 onPress={() => {
                   onClose();
-                  router.replace("/auth/login");
+                  router.replace("/auth");
                 }}
                 activeOpacity={0.7}
               >

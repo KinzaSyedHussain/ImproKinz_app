@@ -56,7 +56,7 @@ export default function Root() {
         // or still loading from Firestore.
         router.replace("/(tabs)");
       } else {
-        router.replace("/auth/login");
+        router.replace("/auth");
       }
     }, 3200);
     return () => clearTimeout(t);

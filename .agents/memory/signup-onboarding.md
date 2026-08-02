@@ -38,3 +38,9 @@ The onboarding completion screen must not depend only on Firebase `user` immedia
 **Why:** Clerk activation and Firebase auth/profile hydration are asynchronous, so the final onboarding action can otherwise return silently before saving or opening the paywall.
 
 **How to apply:** Resolve an authenticated identity from Firebase, the profile context, or Clerk, and surface a visible save error when no identity or write is available.
+
+Unauthenticated entry and sign-out should land on a dedicated auth choice screen with separate Sign In and Create Account actions.
+
+**Why:** Sending users directly to only one auth form made the intended sign-in/sign-up choice unclear and inconsistent after sign-out.
+
+**How to apply:** Route the root unauthenticated state and sidebar sign-out to `/auth`; keep `/auth/login` and `/auth/register` as the two explicit destinations.
