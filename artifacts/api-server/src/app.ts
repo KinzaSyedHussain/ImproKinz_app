@@ -27,7 +27,8 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
+// Posts can include compressed image data when created from the mobile app.
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(clerkMiddleware({
   publishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY,

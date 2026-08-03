@@ -50,3 +50,9 @@ Poll votes and social reactions need conflict-safe writes when multiple accounts
 **Why:** Replacing a whole nested poll object from stale client state causes one account's vote to disappear when another account votes or the feed refreshes.
 
 **How to apply:** Read the current post inside a Firestore transaction, modify only the targeted user's vote, and expose persisted user IDs through an inspectable voter/liker list.
+
+Clerk can mark a user signed in before Firebase auth hydration finishes.
+
+**Why:** The app may route a Clerk-authenticated user into the feed while the Firebase bridge is still settling; requiring only the Firebase auth context makes actions such as creating a post fail during that window.
+
+**How to apply:** For authenticated writes, resolve the identity from Firebase first and Clerk second. Prefer an authenticated server endpoint when available, and only use direct Firestore when Firebase has actually hydrated.
