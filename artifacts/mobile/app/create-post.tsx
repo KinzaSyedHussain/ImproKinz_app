@@ -4,6 +4,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import React, { useState } from "react";
 import {
@@ -105,6 +106,7 @@ export default function CreatePostScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { getToken, userId: clerkUserId } = useClerkAuth();
   const { user, profile, addXP } = useAuth();
 
   const [content, setContent] = useState("");
@@ -192,7 +194,11 @@ export default function CreatePostScreen() {
 
   const handlePost = async () => {
     setError("");
-    if (!user) { setError("You must be signed in to post."); return; }
+    const authorId = user?.uid || clerkUserId;
+    if (!authorId) {
+      setError("Your account is still loading. Please wait a moment and try again.");
+      return;
+    }
 
     // Validate based on post type
     if (type === "poll") {
@@ -244,14 +250,14 @@ export default function CreatePostScreen() {
     }
 
     try {
-      const authorName = profile?.displayName || user.displayName || "Learner";
-      const rawPhoto = profile?.photoURL || user.photoURL || "";
+      const authorName = profile?.displayName || user?.displayName || "Learner";
+      const rawPhoto = profile?.photoURL || user?.photoURL || "";
       const authorPhoto = rawPhoto.startsWith("data:")
         ? `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`
         : rawPhoto || `https://ui-avatars.com/api/?background=F59E0B&color=0D0B2B&name=${encodeURIComponent(authorName)}`;
 
       const postData: Record<string, any> = {
-        authorId: user.uid,
+        authorId,
         authorName,
         authorPhoto,
         content: type === "poll" ? pollQuestion.trim() : type === "code" ? (codeContent.trim().slice(0, 50) + "...") : content.trim(),
@@ -264,7 +270,6 @@ export default function CreatePostScreen() {
         likes: [],
         savedBy: [],
         commentCount: 0,
-        createdAt: serverTimestamp(),
       };
 
       // Add poll data
@@ -285,7 +290,40 @@ export default function CreatePostScreen() {
         };
       }
 
-      await addDoc(collection(db, "community_posts"), postData);
+      const apiBase = process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : "";
+      const clerkToken = await getToken().catch(() => null);
+      let createdThroughApi = false;
+
+      if (apiBase && clerkToken) {
+        const response = await fetch(`${apiBase}/api/posts`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${clerkToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(postData),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result.error || `Post failed (${response.status}).`);
+        }
+        createdThroughApi = true;
+      }
+
+      if (!createdThroughApi && user) {
+        await addDoc(collection(db, "community_posts"), {
+          ...postData,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      if (!createdThroughApi && !user) {
+        throw new Error(
+          "Your account connection is still loading. Please wait a moment and try again.",
+        );
+      }
 
       addXP(10).catch(console.warn);
       router.back();
