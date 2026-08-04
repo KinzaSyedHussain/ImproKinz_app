@@ -30,7 +30,7 @@ interface Props {
 const MAIN_NAV = [
   { icon: "home", label: "Home", route: "/(tabs)" },
   { icon: "compass", label: "Explore", route: "/search" },
-  { icon: "users", label: "Community", route: "/(tabs)" },
+  { icon: "users", label: "Study Hub", route: "/study-hub" },
   { icon: "bell", label: "Notifications", route: "/(tabs)/notifications" },
   { icon: "mail", label: "Messages", route: "/(tabs)" },
 ];

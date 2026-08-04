@@ -29,6 +29,7 @@ const POST_TYPES = [
   { value: "note", label: "Study Note", icon: "file-text" },
   { value: "question", label: "Question", icon: "help-circle" },
   { value: "tip", label: "Study Tip", icon: "zap" },
+  { value: "progress", label: "Study Log", icon: "activity" },
   { value: "poll", label: "Poll", icon: "bar-chart-2" },
   { value: "code", label: "Code", icon: "code" },
 ] as const;
@@ -110,7 +111,7 @@ export default function CreatePostScreen() {
   const { user, profile, addXP } = useAuth();
 
   const [content, setContent] = useState("");
-  const [type, setType] = useState<"note" | "question" | "tip" | "poll" | "code">("note");
+  const [type, setType] = useState<"note" | "question" | "tip" | "poll" | "code" | "progress">("note");
   const [subject, setSubject] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -129,6 +130,9 @@ export default function CreatePostScreen() {
   // Code block state
   const [codeLanguage, setCodeLanguage] = useState("");
   const [codeContent, setCodeContent] = useState("");
+  const [progressDuration, setProgressDuration] = useState("");
+  const [progressCompleted, setProgressCompleted] = useState("");
+  const [progressNextStep, setProgressNextStep] = useState("");
 
   const CODE_LANGUAGES = [
     "Python", "JavaScript", "Java", "C++", "C#", "TypeScript",
@@ -207,6 +211,11 @@ export default function CreatePostScreen() {
       if (validOptions.length < 2) { setError("Please add at least 2 poll options."); return; }
     } else if (type === "code") {
       if (!codeContent.trim()) { setError("Please enter your code."); return; }
+    } else if (type === "progress") {
+      if (!content.trim() || !progressDuration.trim() || !progressCompleted.trim() || !progressNextStep.trim()) {
+        setError("Add your update, study time, what you completed, and your next step.");
+        return;
+      }
     } else {
       if (!content.trim()) { setError("Please write something first."); return; }
     }
@@ -271,6 +280,14 @@ export default function CreatePostScreen() {
         savedBy: [],
         commentCount: 0,
       };
+
+      if (type === "progress") {
+        postData.studyProgress = {
+          duration: progressDuration.trim(),
+          completed: progressCompleted.trim(),
+          nextStep: progressNextStep.trim(),
+        };
+      }
 
       // Add poll data
       if (type === "poll") {
@@ -358,6 +375,12 @@ export default function CreatePostScreen() {
   const canPost = () => {
     if (type === "poll") return pollQuestion.trim() && pollOptions.filter((o) => o.trim()).length >= 2;
     if (type === "code") return codeContent.trim().length > 0;
+    if (type === "progress") {
+      return content.trim().length > 0
+        && progressDuration.trim().length > 0
+        && progressCompleted.trim().length > 0
+        && progressNextStep.trim().length > 0;
+    }
     return content.trim().length > 0;
   };
 
@@ -412,8 +435,8 @@ export default function CreatePostScreen() {
           </View>
         </View>
 
-        {/* Content — only for note/question/tip */}
-        {type !== "poll" && type !== "code" && (
+        {/* Content for regular posts; study logs use the structured editor below. */}
+        {type !== "poll" && type !== "code" && type !== "progress" && (
           <TextInput
             style={[styles.contentInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
             placeholder="Share your knowledge treasure..."
@@ -488,6 +511,44 @@ export default function CreatePostScreen() {
               onChangeText={setCodeContent}
               multiline
               textAlignVertical="top"
+            />
+          </View>
+        )}
+
+        {type === "progress" && (
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>STUDY UPDATE</Text>
+            <TextInput
+              style={[styles.contentInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="What did you study today?"
+              placeholderTextColor={colors.mutedForeground}
+              value={content}
+              onChangeText={setContent}
+              multiline
+              textAlignVertical="top"
+            />
+            <View style={styles.progressFormGrid}>
+              <TextInput
+                style={[styles.progressInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+                placeholder="Time e.g. 45 min"
+                placeholderTextColor={colors.mutedForeground}
+                value={progressDuration}
+                onChangeText={setProgressDuration}
+              />
+              <TextInput
+                style={[styles.progressInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+                placeholder="Completed"
+                placeholderTextColor={colors.mutedForeground}
+                value={progressCompleted}
+                onChangeText={setProgressCompleted}
+              />
+            </View>
+            <TextInput
+              style={[styles.progressInput, { backgroundColor: colors.card, color: colors.foreground, borderColor: colors.border }]}
+              placeholder="Next step"
+              placeholderTextColor={colors.mutedForeground}
+              value={progressNextStep}
+              onChangeText={setProgressNextStep}
             />
           </View>
         )}
@@ -649,4 +710,6 @@ const styles = StyleSheet.create({
   langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
   langChipText: { fontSize: 12, fontWeight: "500" },
   codeInput: { borderRadius: 16, borderWidth: 1, padding: 16, minHeight: 200, fontSize: 14, lineHeight: 20, fontFamily: "monospace" },
+  progressFormGrid: { flexDirection: "row", gap: 10 },
+  progressInput: { flex: 1, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
 });

@@ -17,6 +17,7 @@ import {
   Image,
   Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -56,6 +57,7 @@ export default function HomeScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedAttempt, setFeedAttempt] = useState(0);
+  const [feedFilter, setFeedFilter] = useState<"all" | "question" | "note" | "progress" | "poll" | "subject">("all");
   const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
   const poolRef = useRef<Post[]>([]);
 
@@ -83,12 +85,17 @@ export default function HomeScreen() {
           try { return normalizePost(p.id || "", p); } catch { return null; }
         }).filter((p): p is Post => p !== null);
         all.sort((a, b) => b.createdAt - a.createdAt);
-        const shuffled = shuffle(all);
-        const firstPage = shuffled.slice(0, PAGE_SIZE);
-        poolRef.current = shuffled.slice(PAGE_SIZE);
+        // Keep the feed intentional and study-first. Apply filters before paging.
+        const filtered = feedFilter === "all"
+          ? all
+          : feedFilter === "subject"
+          ? all.filter((post) => !!post.subject && (profile?.subjects || []).includes(post.subject))
+          : all.filter((post) => post.type === feedFilter);
+        const firstPage = filtered.slice(0, PAGE_SIZE);
+        poolRef.current = filtered.slice(PAGE_SIZE);
         if (!cancelled) {
           setPosts(firstPage);
-          setHasMore(shuffled.length > PAGE_SIZE || raw.length === POOL_SIZE);
+          setHasMore(filtered.length > PAGE_SIZE);
           setLoadError(null);
           setLoading(false);
         }
@@ -110,7 +117,7 @@ export default function HomeScreen() {
     }, 8000);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [feedAttempt]);
+  }, [feedAttempt, feedFilter, profile?.subjects?.join("|")]);
 
   const loadMore = async () => {
     if (!hasMore || loadingMore) return;
@@ -121,6 +128,12 @@ export default function HomeScreen() {
         poolRef.current = poolRef.current.slice(PAGE_SIZE);
         setPosts((prev) => [...prev, ...next]);
         setHasMore(poolRef.current.length > 0 || !!lastDocRef.current);
+        return;
+      }
+      // The API feed is intentionally capped and already filtered above.
+      // Do not append an unfiltered Firestore page to a filtered feed.
+      if (feedFilter !== "all") {
+        setHasMore(false);
         return;
       }
       if (!lastDocRef.current) { setHasMore(false); return; }
@@ -247,6 +260,32 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </TouchableOpacity>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {([
+                  ["all", "For you"],
+                  ["question", "Questions"],
+                  ["note", "Notes"],
+                  ["progress", "Study logs"],
+                  ["poll", "Polls"],
+                  ["subject", "My subjects"],
+                ] as const).map(([value, label]) => (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => setFeedFilter(value)}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor: feedFilter === value ? colors.primary : colors.muted,
+                        borderColor: feedFilter === value ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: feedFilter === value ? colors.primaryForeground : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               <AdBanner />
             </View>
           }
@@ -325,6 +364,8 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   composer: { marginHorizontal: 12, marginBottom: 8, padding: 14, borderRadius: 16, borderWidth: 1 },
+  filterRow: { paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
   composerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
   composerPrompt: { flex: 1, fontSize: 13 },
   composerFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },

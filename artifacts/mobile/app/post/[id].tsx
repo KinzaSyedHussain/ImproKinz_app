@@ -1,4 +1,5 @@
 import { Icon } from "@/components/Icon";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
@@ -48,6 +49,7 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, profile, addXP } = useAuth();
+  const { getToken } = useClerkAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,6 +123,35 @@ export default function PostDetailScreen() {
         },
       },
     ]);
+  };
+
+  const markBestAnswer = async (commentId: string) => {
+    const postId = Array.isArray(id) ? id[0] : id;
+    if (!postId || !post || post.authorId !== user?.uid) return;
+    try {
+      const token = await getToken().catch(() => null);
+      const apiBase = process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : "";
+      if (apiBase && token) {
+        const response = await fetch(`${apiBase}/api/posts/${postId}/best-answer`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ commentId: post.bestAnswerId === commentId ? null : commentId }),
+        });
+        if (!response.ok) throw new Error("Could not save the best answer.");
+      } else {
+        await updateDoc(doc(db, "community_posts", postId), {
+          bestAnswerId: post.bestAnswerId === commentId ? null : commentId,
+        });
+      }
+      setPost((current) => current ? {
+        ...current,
+        bestAnswerId: current.bestAnswerId === commentId ? undefined : commentId,
+      } : current);
+    } catch (error: any) {
+      Alert.alert("Best answer", error?.message || "Could not save the best answer.");
+    }
   };
 
   const handleSubmit = async () => {
@@ -280,6 +311,23 @@ export default function PostDetailScreen() {
                 {isOwn && (
                   <TouchableOpacity onPress={() => handleDelete(comment)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     <Icon name="trash-2" size={13} color="#EF4444" />
+                  </TouchableOpacity>
+                )}
+                {post.type === "question" && user?.uid === post.authorId && (
+                  <TouchableOpacity
+                    onPress={() => markBestAnswer(comment.id)}
+                    style={[
+                      styles.bestAnswerButton,
+                      {
+                        backgroundColor: post.bestAnswerId === comment.id ? "#10B98122" : colors.muted,
+                        borderColor: post.bestAnswerId === comment.id ? "#10B981" : colors.border,
+                      },
+                    ]}
+                  >
+                    <Icon name="check-circle" size={13} color={post.bestAnswerId === comment.id ? "#10B981" : colors.mutedForeground} />
+                    <Text style={{ color: post.bestAnswerId === comment.id ? "#10B981" : colors.mutedForeground, fontSize: 10, fontWeight: "700" }}>
+                      {post.bestAnswerId === comment.id ? "Best answer" : "Mark best"}
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -490,6 +538,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   replyBtnText: { fontSize: 12 },
+  bestAnswerButton: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", borderWidth: 1, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, marginTop: 5 },
 
   // ── "View X replies" — Facebook style ────────────────────────────────────
   viewRepliesRow: {

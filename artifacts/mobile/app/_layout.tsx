@@ -60,6 +60,7 @@ function RootLayoutNav() {
       <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="study-hub" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }
