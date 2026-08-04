@@ -1,5 +1,6 @@
 import { Icon } from "@/components/Icon";
 import { PressableScale } from "@/components/PressableScale";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
@@ -20,6 +21,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -356,6 +358,10 @@ const TYPE_CONFIG = {
   code:     { label: "Code",     color: "#10B981" },
 };
 
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : "";
+
 function timeAgo(ts: number) {
   const diff = Date.now() - ts;
   if (diff < 60000) return "just now";
@@ -400,6 +406,7 @@ function InlineVideoPlayer({ uri, width, height }: { uri: string; width: number;
 
 function PollView({ post, user }: { post: Post; user: any }) {
   const colors = useColors();
+  const { getToken } = useClerkAuth();
   const [localPoll, setLocalPoll] = useState(post.poll);
   const [votersVisible, setVotersVisible] = useState(false);
   const [voting, setVoting] = useState(false);
@@ -422,46 +429,69 @@ function PollView({ post, user }: { post: Post; user: any }) {
     setVoting(true);
 
     try {
-      const nextPoll = await runTransaction(db, async (transaction) => {
-        const snapshot = await transaction.get(ref);
-        const data = snapshot.data() ?? {};
-        const storedPoll = data.poll ?? data.pollData ?? {};
-        const storedOptions = Array.isArray(storedPoll.options)
-          ? storedPoll.options
-          : [];
-        const options = storedOptions.map((option: any) => ({
-          text: option.text ?? option.label ?? option.name ?? "Option",
-          votes: Array.isArray(option.votes) ? [...option.votes] : [],
-        }));
-        if (optionIndex < 0 || optionIndex >= options.length) {
-          throw new Error("This poll option is no longer available.");
-        }
+      let nextPoll: PollData | null = null;
+      const clerkToken = await getToken().catch(() => null);
 
-        const alreadyVotedIndex = options.findIndex((option: PollOption) =>
-          option.votes.includes(uid),
-        );
-        if (alreadyVotedIndex === optionIndex) {
-          options[optionIndex].votes = options[optionIndex].votes.filter((id: string) => id !== uid);
-        } else {
-          if (alreadyVotedIndex >= 0) {
-            options[alreadyVotedIndex].votes = options[alreadyVotedIndex].votes.filter(
-              (id: string) => id !== uid,
-            );
+      if (API_BASE && clerkToken) {
+        const response = await fetch(`${API_BASE}/api/posts/${post.id}/vote`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${clerkToken}`,
+          },
+          body: JSON.stringify({ optionIndex }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          nextPoll = result.poll;
+        } else if (response.status !== 404 && response.status !== 503) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || "Vote could not be saved.");
+        }
+      }
+
+      // Keep a direct Firestore fallback for environments where the API is unavailable.
+      if (!nextPoll) {
+        nextPoll = await runTransaction(db, async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          const data = snapshot.data() ?? {};
+          const storedPoll = data.poll ?? data.pollData ?? {};
+          const storedOptions = Array.isArray(storedPoll.options) ? storedPoll.options : [];
+          const options = storedOptions.map((option: any) => ({
+            text: option.text ?? option.label ?? option.name ?? "Option",
+            votes: Array.isArray(option.votes) ? [...option.votes] : [],
+          }));
+          if (optionIndex < 0 || optionIndex >= options.length) {
+            throw new Error("This poll option is no longer available.");
           }
-          options[optionIndex].votes = [...options[optionIndex].votes, uid];
-        }
 
-        const result = {
-          question: storedPoll.question ?? storedPoll.title ?? localPoll.question,
-          options,
-        };
-        transaction.update(ref, { poll: result });
-        return result;
-      });
+          const alreadyVotedIndex = options.findIndex((option: PollOption) =>
+            option.votes.includes(uid),
+          );
+          if (alreadyVotedIndex === optionIndex) {
+            options[optionIndex].votes = options[optionIndex].votes.filter((id: string) => id !== uid);
+          } else {
+            if (alreadyVotedIndex >= 0) {
+              options[alreadyVotedIndex].votes = options[alreadyVotedIndex].votes.filter(
+                (id: string) => id !== uid,
+              );
+            }
+            options[optionIndex].votes = [...options[optionIndex].votes, uid];
+          }
+
+          const result = {
+            question: storedPoll.question ?? storedPoll.title ?? localPoll.question,
+            options,
+          };
+          transaction.update(ref, { poll: result });
+          return result;
+        });
+      }
+
       setLocalPoll(nextPoll);
-    } catch (e) {
+    } catch (e: any) {
       setLocalPoll(previousPoll);
-      Alert.alert("Vote not saved", "Please check your connection and try again.");
+      Alert.alert("Vote not saved", e?.message || "Please check your connection and try again.");
     } finally {
       setVoting(false);
     }
@@ -664,6 +694,17 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: `${displayName || post.authorName}'s study post`,
+        message: `${displayName || post.authorName} shared a study ${typeConfig.label.toLowerCase()}:\n\n${post.content || post.poll?.question || "Check out this post on ImproKinz."}`,
+      });
+    } catch (e) {
+      Alert.alert("Sharing unavailable", "This post could not be shared right now.");
+    }
+  };
+
   const typeConfig = TYPE_CONFIG[post.type] || TYPE_CONFIG.note;
 
   if (deleted) return null;
@@ -781,7 +822,7 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         </TouchableOpacity>
 
         {/* Share */}
-        <TouchableOpacity style={styles.action} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.action} onPress={handleShare} activeOpacity={0.7}>
           <Icon name="share-2" size={20} color={colors.mutedForeground} />
           <Text style={[styles.actionText, { color: colors.mutedForeground }]}>Share</Text>
         </TouchableOpacity>
@@ -812,10 +853,10 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    marginHorizontal: 16,
-    marginVertical: 6,
+    marginHorizontal: 12,
+    marginVertical: 5,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -827,37 +868,38 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 14,
-    paddingBottom: 10,
+    padding: 12,
+    paddingBottom: 8,
   },
   authorRow: { flexDirection: "row", alignItems: "center", flex: 1 },
   authorInfo: { marginLeft: 10 },
   authorName: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
   time: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 1 },
-  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   typeText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
   content: {
     fontFamily: "Inter_400Regular",
     fontSize: 15,
     lineHeight: 23,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   subject: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
   },
   divider: { height: 1, marginHorizontal: 14, marginTop: 6 },
   actions: {
     flexDirection: "row",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 24,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  action: { flexDirection: "row", alignItems: "center", gap: 6 },
-  actionText: { fontFamily: "Inter_500Medium", fontSize: 13 },
+  action: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
+  actionText: { fontFamily: "Inter_500Medium", fontSize: 12 },
 
   // Poll styles
   pollContainer: {

@@ -104,4 +104,77 @@ router.post("/posts", async (req: any, res) => {
   }
 });
 
+router.post("/posts/:postId/vote", async (req: any, res) => {
+  const db = getAdminDb();
+  if (!db) {
+    return res.status(503).json({ error: "Firebase Admin not configured" });
+  }
+
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized — no Clerk session" });
+  }
+
+  const optionIndex = Number(req.body?.optionIndex);
+  if (!Number.isInteger(optionIndex) || optionIndex < 0) {
+    return res.status(400).json({ error: "A valid poll option is required." });
+  }
+
+  try {
+    const poll = await db.runTransaction(async (transaction) => {
+      const ref = db.collection("community_posts").doc(req.params.postId);
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists) {
+        throw new Error("POST_NOT_FOUND");
+      }
+
+      const data = snapshot.data() ?? {};
+      const storedPoll = data.poll ?? data.pollData;
+      const storedOptions = storedPoll && Array.isArray(storedPoll.options)
+        ? storedPoll.options
+        : [];
+      const options = storedOptions.map((option: any) => ({
+        text: option.text ?? option.label ?? option.name ?? "Option",
+        votes: Array.isArray(option.votes) ? [...option.votes] : [],
+      }));
+
+      if (optionIndex >= options.length) {
+        throw new Error("INVALID_POLL_OPTION");
+      }
+
+      const currentOption = options.findIndex((option: any) => option.votes.includes(userId));
+      if (currentOption === optionIndex) {
+        options[optionIndex].votes = options[optionIndex].votes.filter(
+          (id: string) => id !== userId,
+        );
+      } else {
+        if (currentOption >= 0) {
+          options[currentOption].votes = options[currentOption].votes.filter(
+            (id: string) => id !== userId,
+          );
+        }
+        options[optionIndex].votes = [...options[optionIndex].votes, userId];
+      }
+
+      const nextPoll = {
+        question: storedPoll?.question ?? storedPoll?.title ?? data.content ?? "Poll",
+        options,
+      };
+      transaction.update(ref, { poll: nextPoll });
+      return nextPoll;
+    });
+
+    return res.json({ poll });
+  } catch (e: any) {
+    if (e?.message === "POST_NOT_FOUND") {
+      return res.status(404).json({ error: "Post not found." });
+    }
+    if (e?.message === "INVALID_POLL_OPTION") {
+      return res.status(400).json({ error: "This poll option is no longer available." });
+    }
+    console.error("[posts] vote failed:", e);
+    return res.status(500).json({ error: "Failed to save vote." });
+  }
+});
+
 export default router;
