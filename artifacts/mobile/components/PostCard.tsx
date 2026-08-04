@@ -13,7 +13,7 @@ import {
   runTransaction,
   updateDoc,
 } from "firebase/firestore";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -662,6 +662,30 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
     congrats: [],
   });
   const [deleted, setDeleted] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+
+  const activeReaction = user
+    ? (Object.keys(reactionState) as ReactionKey[]).find((k) => reactionState[k].includes(user.uid))
+    : undefined;
+  const totalReactions = REACTIONS.reduce((sum, r) => sum + reactionState[r.key].length, 0);
+
+  const handleLikeTap = () => {
+    if (!user) {
+      Alert.alert("Sign in to react", "Create an account or sign in to react to posts.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    handleReaction("like");
+  };
+
+  const handleLikeLongPress = () => {
+    if (!user) {
+      Alert.alert("Sign in to react", "Create an account or sign in to react to posts.");
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setPickerVisible(true);
+  };
 
   const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
@@ -923,30 +947,40 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         <InlineVideoPlayer uri={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
       )}
 
-      <View style={styles.reactionRow}>
-        {REACTIONS.map((reaction) => {
-          const count = reactionState[reaction.key].length;
-          const active = !!user && reactionState[reaction.key].includes(user.uid);
-          return (
-            <TouchableOpacity
-              key={reaction.key}
-              style={[styles.reactionButton, active && { backgroundColor: colors.primary + "18", borderColor: colors.primary + "66" }]}
-              onPress={() => handleReaction(reaction.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
-              <Text style={[styles.reactionLabel, { color: active ? colors.primary : colors.mutedForeground }]}>
-                {reaction.label}
-              </Text>
-              {count > 0 && <Text style={[styles.reactionCount, { color: colors.mutedForeground }]}>{count}</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {totalReactions > 0 && (
+        <View style={styles.reactionTally}>
+          <View style={styles.reactionTallyEmojis}>
+            {REACTIONS.filter((r) => reactionState[r.key].length > 0).map((r) => (
+              <Text key={r.key} style={styles.reactionTallyEmoji}>{r.emoji}</Text>
+            ))}
+          </View>
+          <Text style={[styles.reactionTallyCount, { color: colors.mutedForeground }]}>{totalReactions}</Text>
+        </View>
+      )}
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
       {/* Actions */}
       <View style={styles.actions}>
+        {/* Like — tap for Like, long-press for reaction picker */}
+        <TouchableOpacity
+          style={styles.action}
+          onPress={handleLikeTap}
+          onLongPress={handleLikeLongPress}
+          delayLongPress={350}
+          activeOpacity={0.7}
+        >
+          {activeReaction ? (
+            <Text style={styles.activeReactionEmoji}>
+              {REACTIONS.find((r) => r.key === activeReaction)?.emoji}
+            </Text>
+          ) : (
+            <Icon name="heart-outline" size={20} color={colors.mutedForeground} />
+          )}
+          <Text style={[styles.actionText, { color: activeReaction ? colors.primary : colors.mutedForeground }]}>
+            {activeReaction ? REACTIONS.find((r) => r.key === activeReaction)?.label : "Like"}
+          </Text>
+        </TouchableOpacity>
+
         {/* Comment */}
         <TouchableOpacity
           style={styles.action}
@@ -979,6 +1013,40 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* LinkedIn-style reaction picker */}
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerBackdrop}
+          onPress={() => setPickerVisible(false)}
+          activeOpacity={1}
+        >
+          <View style={[styles.pickerBubble, { backgroundColor: colors.card, borderColor: colors.border, shadowColor: "#000" }]}>
+            {REACTIONS.map((reaction) => {
+              const active = activeReaction === reaction.key;
+              return (
+                <TouchableOpacity
+                  key={reaction.key}
+                  style={[styles.pickerOption, active && { backgroundColor: colors.primary + "18" }]}
+                  onPress={() => { setPickerVisible(false); handleReaction(reaction.key); }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.pickerEmoji}>{reaction.emoji}</Text>
+                  <Text style={[styles.pickerLabel, { color: active ? colors.primary : colors.mutedForeground }]}>
+                    {reaction.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </PressableScale>
   );
 }
@@ -1032,27 +1100,52 @@ const styles = StyleSheet.create({
   },
   action: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
   actionText: { fontFamily: "Inter_500Medium", fontSize: 12 },
-  reactionRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  reactionButton: {
+  // Reaction tally (compact summary above divider)
+  reactionTally: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "transparent",
-    borderRadius: 14,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 2,
   },
-  reactionEmoji: { fontSize: 14 },
-  reactionLabel: { fontFamily: "Inter_500Medium", fontSize: 11 },
-  reactionCount: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  reactionTallyEmojis: { flexDirection: "row", gap: -2 },
+  reactionTallyEmoji: { fontSize: 13 },
+  reactionTallyCount: { fontFamily: "Inter_400Regular", fontSize: 12 },
+
+  // Active reaction emoji in action bar
+  activeReactionEmoji: { fontSize: 18 },
+
+  // Reaction picker modal
+  pickerBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingBottom: 80,
+    paddingHorizontal: 16,
+  },
+  pickerBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    borderWidth: 1,
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  pickerOption: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 12,
+  },
+  pickerEmoji: { fontSize: 26 },
+  pickerLabel: { fontFamily: "Inter_500Medium", fontSize: 10 },
   progressBox: {
     marginHorizontal: 12,
     marginVertical: 6,
