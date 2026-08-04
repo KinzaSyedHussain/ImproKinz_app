@@ -4,6 +4,7 @@ import aiRouter from "./ai";
 import videosRouter from "./videos";
 import authRouter from "./auth";
 import postsRouter from "./posts";
+import studyRouter from "./study";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(aiRouter);
 router.use(videosRouter);
 router.use(authRouter);
 router.use(postsRouter);
+router.use(studyRouter);
 
 export default router;

@@ -66,13 +66,21 @@ export interface CodeBlock {
   content: string;
 }
 
+export type ReactionKey = "like" | "insightful" | "congrats";
+
+export interface PostReactions {
+  like: string[];
+  insightful: string[];
+  congrats: string[];
+}
+
 export interface Post {
   id: string;
   authorId: string;
   authorName: string;
   authorPhoto: string;
   content: string;
-  type: "note" | "question" | "tip" | "poll" | "code";
+  type: "note" | "question" | "tip" | "poll" | "code" | "progress";
   likes: string[];
   savedBy: string[];
   commentCount: number;
@@ -85,6 +93,13 @@ export interface Post {
   videoUrl?: string;
   poll?: PollData;
   code?: CodeBlock;
+  reactions?: PostReactions;
+  bestAnswerId?: string;
+  studyProgress?: {
+    duration: string;
+    completed: string;
+    nextStep: string;
+  };
 }
 
 interface PersonSummary {
@@ -259,9 +274,10 @@ export function normalizePost(id: string, data: Record<string, any>): Post {
   // Helper: check if a Firestore value is actually present (not null)
   const hasValue = (v: any) => v !== null && v !== undefined && !(typeof v === "object" && "nullValue" in v);
   const rawType = data.type ?? data.postType ?? data.kind ?? "";
-  let type: "note" | "question" | "tip" | "poll" | "code" = "note";
+  let type: "note" | "question" | "tip" | "poll" | "code" | "progress" = "note";
   if (rawType === "poll" || (hasValue(data.poll) && typeof data.poll === "object" && data.poll.options) || (hasValue(data.pollData) && typeof data.pollData === "object" && data.pollData.options)) type = "poll";
   else if (rawType === "code" || (hasValue(data.code) && typeof data.code === "object" && data.code.content) || hasValue(data.codeBlock) || hasValue(data.codeSnippet)) type = "code";
+  else if (rawType === "progress") type = "progress";
   else if (rawType === "note" || rawType === "question" || rawType === "tip") type = rawType;
 
   // ── poll ───────────────────────────────────────────────────────────
@@ -341,6 +357,19 @@ export function normalizePost(id: string, data: Record<string, any>): Post {
     createdAt,
     poll,
     code,
+    reactions: {
+      like: Array.isArray(data.reactions?.like) ? data.reactions.like : (Array.isArray(data.likes) ? data.likes : []),
+      insightful: Array.isArray(data.reactions?.insightful) ? data.reactions.insightful : [],
+      congrats: Array.isArray(data.reactions?.congrats) ? data.reactions.congrats : [],
+    },
+    bestAnswerId: typeof data.bestAnswerId === "string" ? data.bestAnswerId : undefined,
+    studyProgress: data.studyProgress && typeof data.studyProgress === "object"
+      ? {
+          duration: String(data.studyProgress.duration ?? ""),
+          completed: String(data.studyProgress.completed ?? ""),
+          nextStep: String(data.studyProgress.nextStep ?? ""),
+        }
+      : undefined,
   };
 }
 
@@ -356,7 +385,14 @@ const TYPE_CONFIG = {
   tip:      { label: "Tip",      color: "#10B981" },
   poll:     { label: "Poll",     color: "#A855F7" },
   code:     { label: "Code",     color: "#10B981" },
+  progress: { label: "Study log", color: "#38BDF8" },
 };
+
+const REACTIONS: Array<{ key: ReactionKey; emoji: string; label: string }> = [
+  { key: "like", emoji: "👍", label: "Like" },
+  { key: "insightful", emoji: "💡", label: "Insightful" },
+  { key: "congrats", emoji: "🎉", label: "Congrats" },
+];
 
 const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
   ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -593,6 +629,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function PostCard({ post, onRefresh, onDelete }: Props) {
   const colors = useColors();
+  const { getToken } = useClerkAuth();
   const { user, profile } = useAuth();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
@@ -618,20 +655,16 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
 
   const likes = Array.isArray(post.likes) ? post.likes : [];
   const savedBy = Array.isArray(post.savedBy) ? post.savedBy : [];
-  const [liked, setLiked] = useState(user ? likes.includes(user.uid) : false);
   const [saved, setSaved] = useState(user ? savedBy.includes(user.uid) : false);
-  const [likeCount, setLikeCount] = useState(likes.length);
-  const [likesVisible, setLikesVisible] = useState(false);
+  const [reactionState, setReactionState] = useState<PostReactions>(post.reactions ?? {
+    like: likes,
+    insightful: [],
+    congrats: [],
+  });
   const [deleted, setDeleted] = useState(false);
 
   const imageSource = post.imageUrl || (post.mediaType === "image" ? post.mediaUrl : undefined);
   const videoSource = post.videoUrl || (post.mediaType === "video" ? post.mediaUrl : undefined);
-
-  // Animated heart
-  const heartScale = useSharedValue(1);
-  const heartStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartScale.value }],
-  }));
 
   // Animated bookmark
   const bookmarkScale = useSharedValue(1);
@@ -658,40 +691,126 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
     ]);
   };
 
-  const handleLike = () => {
-    if (!user) return;
+  const handleReaction = async (reaction: ReactionKey) => {
+    if (!user) {
+      Alert.alert("Sign in to react", "Create an account or sign in to support study posts.");
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    heartScale.value = withSequence(
-      withSpring(1.35, { damping: 10, stiffness: 400 }),
-      withSpring(1, { damping: 12, stiffness: 300 })
+    const previous = reactionState;
+    const current = (Object.keys(previous) as ReactionKey[]).find((key) =>
+      previous[key].includes(user.uid),
     );
-    const ref = doc(db, "community_posts", post.id);
-    if (liked) {
-      setLiked(false);
-      setLikeCount((c) => c - 1);
-      updateDoc(ref, { likes: arrayRemove(user.uid) }).catch(() => {});
-    } else {
-      setLiked(true);
-      setLikeCount((c) => c + 1);
-      updateDoc(ref, { likes: arrayUnion(user.uid) }).catch(() => {});
+    const next: PostReactions = {
+      like: previous.like.filter((id) => id !== user.uid),
+      insightful: previous.insightful.filter((id) => id !== user.uid),
+      congrats: previous.congrats.filter((id) => id !== user.uid),
+    };
+    if (current !== reaction) next[reaction] = [...next[reaction], user.uid];
+    setReactionState(next);
+
+    try {
+      const clerkToken = await getToken().catch(() => null);
+      if (API_BASE && clerkToken) {
+        const response = await fetch(`${API_BASE}/api/posts/${post.id}/reaction`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${clerkToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ reaction }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setReactionState(result.reactions);
+          return;
+        }
+        if (response.status !== 404 && response.status !== 503) {
+          throw new Error("Reaction could not be saved.");
+        }
+      }
+
+      await runTransaction(db, async (transaction) => {
+        const ref = doc(db, "community_posts", post.id);
+        const snapshot = await transaction.get(ref);
+        const data = snapshot.data() ?? {};
+        const raw = data.reactions ?? {};
+        const stored: PostReactions = {
+          like: Array.isArray(raw.like) ? [...raw.like] : (Array.isArray(data.likes) ? [...data.likes] : []),
+          insightful: Array.isArray(raw.insightful) ? [...raw.insightful] : [],
+          congrats: Array.isArray(raw.congrats) ? [...raw.congrats] : [],
+        };
+        const already = (Object.keys(stored) as ReactionKey[]).find((key) => stored[key].includes(user.uid));
+        (Object.keys(stored) as ReactionKey[]).forEach((key) => {
+          stored[key] = stored[key].filter((id) => id !== user.uid);
+        });
+        if (already !== reaction) stored[reaction].push(user.uid);
+        transaction.update(ref, { reactions: stored, likes: stored.like });
+        setReactionState(stored);
+      });
+    } catch (error) {
+      setReactionState(previous);
+      Alert.alert("Reaction not saved", "Please check your connection and try again.");
     }
   };
 
-  const handleSave = () => {
+  const performSave = async (collectionName: string) => {
     if (!user) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     bookmarkScale.value = withSequence(
       withSpring(1.3, { damping: 10, stiffness: 400 }),
       withSpring(1, { damping: 12, stiffness: 300 })
     );
-    const ref = doc(db, "community_posts", post.id);
-    if (saved) {
-      setSaved(false);
-      updateDoc(ref, { savedBy: arrayRemove(user.uid) }).catch(() => {});
-    } else {
-      setSaved(true);
-      updateDoc(ref, { savedBy: arrayUnion(user.uid) }).catch(() => {});
+    try {
+      const token = await getToken().catch(() => null);
+      if (API_BASE && token) {
+        const response = await fetch(`${API_BASE}/api/posts/${post.id}/save`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ collection: collectionName }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          setSaved(!!result.saved);
+          return;
+        }
+        if (response.status !== 404 && response.status !== 503) {
+          throw new Error("Save could not be updated.");
+        }
+      }
+
+      const ref = doc(db, "community_posts", post.id);
+      if (saved) {
+        setSaved(false);
+        await updateDoc(ref, { savedBy: arrayRemove(user.uid) });
+      } else {
+        setSaved(true);
+        await updateDoc(ref, {
+          savedBy: arrayUnion(user.uid),
+          [`savedCollections.${user.uid}`]: collectionName,
+        });
+      }
+    } catch (error: any) {
+      setSaved(saved);
+      Alert.alert("Save not updated", error?.message || "Please check your connection and try again.");
     }
+  };
+
+  const handleSave = () => {
+    if (!user) {
+      Alert.alert("Sign in to save", "Create an account or sign in to save study posts.");
+      return;
+    }
+    if (saved) {
+      performSave("Read later");
+      return;
+    }
+    Alert.alert("Save to collection", "Choose where to keep this post.", [
+      { text: "Read later", onPress: () => performSave("Read later") },
+      { text: "Exam revision", onPress: () => performSave("Exam revision") },
+      { text: "Important formulas", onPress: () => performSave("Important formulas") },
+      { text: "Cancel", style: "cancel" },
+    ]);
   };
 
   const handleShare = async () => {
@@ -767,6 +886,25 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
       {(!isPoll || (post.content && post.content !== post.poll?.question)) && !isCode && (
         <Text style={[styles.content, { color: colors.foreground }]}>{post.content}</Text>
       )}
+      {post.type === "progress" && post.studyProgress && (
+        <View style={[styles.progressBox, { backgroundColor: colors.secondary + "80", borderColor: colors.border }]}>
+          <Text style={[styles.progressTitle, { color: colors.primary }]}>Study progress</Text>
+          <View style={styles.progressGrid}>
+            <View style={styles.progressMetric}>
+              <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>TIME</Text>
+              <Text style={[styles.progressValue, { color: colors.foreground }]}>{post.studyProgress.duration}</Text>
+            </View>
+            <View style={styles.progressMetric}>
+              <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>COMPLETED</Text>
+              <Text style={[styles.progressValue, { color: colors.foreground }]}>{post.studyProgress.completed}</Text>
+            </View>
+            <View style={styles.progressMetric}>
+              <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>NEXT</Text>
+              <Text style={[styles.progressValue, { color: colors.foreground }]}>{post.studyProgress.nextStep}</Text>
+            </View>
+          </View>
+        </View>
+      )}
       {!!post.subject && (
         <Text style={[styles.subject, { color: colors.primary }]}>#{post.subject}</Text>
       )}
@@ -785,30 +923,30 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         <InlineVideoPlayer uri={videoSource} width={imageWidth} height={IMAGE_HEIGHT} />
       )}
 
+      <View style={styles.reactionRow}>
+        {REACTIONS.map((reaction) => {
+          const count = reactionState[reaction.key].length;
+          const active = !!user && reactionState[reaction.key].includes(user.uid);
+          return (
+            <TouchableOpacity
+              key={reaction.key}
+              style={[styles.reactionButton, active && { backgroundColor: colors.primary + "18", borderColor: colors.primary + "66" }]}
+              onPress={() => handleReaction(reaction.key)}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+              <Text style={[styles.reactionLabel, { color: active ? colors.primary : colors.mutedForeground }]}>
+                {reaction.label}
+              </Text>
+              {count > 0 && <Text style={[styles.reactionCount, { color: colors.mutedForeground }]}>{count}</Text>}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
       <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
       {/* Actions */}
       <View style={styles.actions}>
-        {/* Like */}
-        <TouchableOpacity style={styles.action} onPress={handleLike} activeOpacity={0.7}>
-          <Animated.View style={heartStyle}>
-            <Icon
-              name={liked ? "heart" : "heart-outline"}
-              size={20}
-              color={liked ? "#EF4444" : colors.mutedForeground}
-            />
-          </Animated.View>
-          <TouchableOpacity
-            onPress={() => likeCount > 0 && setLikesVisible(true)}
-            disabled={likeCount === 0}
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-          >
-            <Text style={[styles.actionText, { color: liked ? "#EF4444" : colors.mutedForeground }]}>
-              {likeCount}
-            </Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-
         {/* Comment */}
         <TouchableOpacity
           style={styles.action}
@@ -841,12 +979,6 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           </Text>
         </TouchableOpacity>
       </View>
-      <PeopleModal
-        visible={likesVisible}
-        title="Liked by"
-        ids={likes}
-        onClose={() => setLikesVisible(false)}
-      />
     </PressableScale>
   );
 }
@@ -900,6 +1032,39 @@ const styles = StyleSheet.create({
   },
   action: { flexDirection: "row", alignItems: "center", gap: 5, minWidth: 0 },
   actionText: { fontFamily: "Inter_500Medium", fontSize: 12 },
+  reactionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  reactionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "transparent",
+    borderRadius: 14,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  reactionEmoji: { fontSize: 14 },
+  reactionLabel: { fontFamily: "Inter_500Medium", fontSize: 11 },
+  reactionCount: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  progressBox: {
+    marginHorizontal: 12,
+    marginVertical: 6,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  progressTitle: { fontFamily: "Inter_600SemiBold", fontSize: 12, marginBottom: 8 },
+  progressGrid: { flexDirection: "row", gap: 8 },
+  progressMetric: { flex: 1, gap: 2 },
+  progressLabel: { fontFamily: "Inter_600SemiBold", fontSize: 9, letterSpacing: 0.5 },
+  progressValue: { fontFamily: "Inter_500Medium", fontSize: 12 },
 
   // Poll styles
   pollContainer: {
