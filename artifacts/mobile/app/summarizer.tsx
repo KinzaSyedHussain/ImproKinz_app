@@ -30,11 +30,11 @@ export default function SummarizerScreen() {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const botPad = insets.bottom + 24;
+
   const generate = async () => {
-    if (!text.trim()) {
-      Alert.alert("Error", "Please enter some text first");
-      return;
-    }
+    if (!text.trim()) { Alert.alert("No content", "Paste some text to summarise first."); return; }
     if (!(await consumeTool("summarizer"))) return;
     setLoading(true);
     try {
@@ -44,128 +44,132 @@ export default function SummarizerScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
       });
-      if (!res.ok) throw new Error("AI generation failed");
+      if (!res.ok) throw new Error("Generation failed");
       const data = await res.json() as { summary: string };
       setSummary(data.summary || "");
       await addXP(10);
     } catch {
       await refundCredits(10);
-      Alert.alert("Error", "Failed to generate summary. Make sure the API is configured.");
+      Alert.alert("Generation failed", "Make sure the API is connected and try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const reset = () => {
-    setSummary("");
-    setText("");
-  };
-
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
-  const botPad = insets.bottom + (Platform.OS === "web" ? 34 : 16);
+  const reset = () => { setSummary(""); setText(""); };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View
-        style={[
-          styles.header,
-          { paddingTop: topPad, backgroundColor: colors.card, borderBottomColor: colors.border },
-        ]}
-      >
-        <TouchableOpacity onPress={() => router.back()}>
-          <Icon name="arrow-left" size={22} color={colors.foreground} />
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Icon name="arrow-left" size={21} color={colors.foreground} />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            AI Summarizer
-          </Text>
-          <ToolCreditPill tool="summarizer" />
+        <View style={styles.headerMid}>
+          <View style={[styles.toolIconWrap, { backgroundColor: "#38BDF820" }]}>
+            <Icon name="file-text" size={17} color="#38BDF8" />
+          </View>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Summariser</Text>
           <View style={[styles.xpPill, { backgroundColor: colors.secondary }]}>
-            <Text style={[styles.xpPillText, { color: colors.primary }]}>+10 XP</Text>
+            <Text style={[styles.xpText, { color: colors.primary }]}>+10 XP</Text>
           </View>
         </View>
-        {summary && (
-          <TouchableOpacity onPress={reset}>
-            <Icon name="refresh-cw" size={20} color={colors.primary} />
-          </TouchableOpacity>
-        )}
+        <View style={styles.headerRight}>
+          <ToolCreditPill tool="summarizer" />
+          {!!summary && (
+            <TouchableOpacity onPress={reset} style={styles.resetBtn}>
+              <Icon name="refresh-cw" size={17} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView
-        style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={[styles.content, { paddingBottom: botPad }]}
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.scroll, { paddingBottom: botPad }]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <LinearGradient
-          colors={["#7C3AED", "#DB2777"]}
-          style={styles.heroBanner}
-        >
-          <Icon name="align-left" size={32} color="#FFFFFF" />
-          <Text style={styles.heroTitle}>Smart Summary</Text>
-          <Text style={styles.heroSub}>
-            Turn lengthy study material into concise key points
-          </Text>
-        </LinearGradient>
-
-        <TextInput
-          style={[
-            styles.textArea,
-            { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground },
-          ]}
-          placeholder="Paste your study material, lecture notes, or article here..."
-          placeholderTextColor={colors.mutedForeground}
-          value={text}
-          onChangeText={setText}
-          multiline
-          textAlignVertical="top"
-        />
-
-        <TouchableOpacity
-          style={[styles.generateBtn, { opacity: loading || !text.trim() ? 0.7 : 1 }]}
-          onPress={generate}
-          disabled={loading || !text.trim()}
-        >
-          <LinearGradient
-            colors={["#7C3AED", "#DB2777"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.generateGradient}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Icon name="align-left" size={18} color="#fff" />
-                <Text style={styles.generateBtnText}>Generate Summary</Text>
-              </>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {summary ? (
-          <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={styles.summaryHeader}>
-              <Icon name="check-circle" size={18} color="#10B981" />
-              <Text style={[styles.summaryHeaderText, { color: "#10B981" }]}>
-                Summary · +10 XP earned!
+        {!summary ? (
+          <>
+            <View style={[styles.descRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Icon name="file-text" size={16} color="#38BDF8" />
+              <Text style={[styles.descText, { color: colors.mutedForeground }]}>
+                Paste any text — lecture notes, articles, or book chapters — and get a clear, concise summary.
               </Text>
             </View>
-            <Text style={[styles.summaryText, { color: colors.foreground }]}>
-              {summary}
-            </Text>
+
+            <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Text to summarise</Text>
+              <TextInput
+                style={[styles.textArea, { color: colors.foreground }]}
+                placeholder="Paste your study material, article, or lecture notes here…"
+                placeholderTextColor={colors.mutedForeground}
+                value={text}
+                onChangeText={setText}
+                multiline
+                textAlignVertical="top"
+              />
+              <Text style={[styles.charCount, { color: colors.mutedForeground }]}>{text.length} characters</Text>
+            </View>
+
+            <View style={[styles.tipsCard, { backgroundColor: colors.secondary + "60", borderColor: colors.border }]}>
+              <Text style={[styles.tipsTitle, { color: colors.foreground }]}>What works best</Text>
+              {[
+                "Longer texts produce more detailed summaries",
+                "Works with articles, chapters, or lecture notes",
+                "Key points and takeaways are highlighted",
+              ].map((tip, i) => (
+                <View key={i} style={styles.tipRow}>
+                  <Icon name="check-circle" size={13} color="#38BDF8" />
+                  <Text style={[styles.tipText, { color: colors.mutedForeground }]}>{tip}</Text>
+                </View>
+              ))}
+            </View>
+
             <TouchableOpacity
-              style={[styles.resetBtn, { backgroundColor: colors.muted }]}
-              onPress={reset}
+              onPress={generate}
+              disabled={loading || !text.trim()}
+              activeOpacity={0.85}
+              style={{ opacity: loading || !text.trim() ? 0.55 : 1 }}
             >
-              <Text style={[styles.resetBtnText, { color: colors.primary }]}>
-                Summarize New Text
-              </Text>
+              <LinearGradient
+                colors={["#38BDF8", "#0284C7"]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.generateBtn}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Icon name="file-text" size={18} color="#fff" />
+                    <Text style={styles.generateBtnText}>Summarise Text</Text>
+                  </>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
-          </View>
-        ) : null}
+          </>
+        ) : (
+          <>
+            <View style={[styles.successRow, { backgroundColor: "#38BDF818", borderColor: "#38BDF840" }]}>
+              <Icon name="check-circle" size={17} color="#38BDF8" />
+              <Text style={[styles.successText, { color: "#38BDF8" }]}>Summary ready · +10 XP earned</Text>
+            </View>
+
+            <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.summaryCardHeader}>
+                <Icon name="file-text" size={15} color="#38BDF8" />
+                <Text style={[styles.summaryCardTitle, { color: colors.foreground }]}>Summary</Text>
+              </View>
+              <Text style={[styles.summaryText, { color: colors.foreground }]}>{summary}</Text>
+            </View>
+
+            <TouchableOpacity onPress={reset} style={[styles.secondaryBtn, { backgroundColor: colors.secondary }]}>
+              <Icon name="refresh-cw" size={15} color={colors.primary} />
+              <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>Summarise different text</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -173,43 +177,56 @@ export default function SummarizerScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingBottom: 12, borderBottomWidth: 1, gap: 8,
   },
-  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 12 },
-  headerTitle: { fontFamily: undefined, fontSize: 18 },
-  xpPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  xpPillText: { fontFamily: undefined, fontSize: 12 },
-  content: { padding: 16, gap: 16 },
-  heroBanner: { borderRadius: 18, padding: 24, alignItems: "center", gap: 10 },
-  heroTitle: { color: "#FFFFFF", fontFamily: undefined, fontSize: 22 },
-  heroSub: { color: "rgba(255,255,255,0.8)", fontFamily: undefined, fontSize: 14, textAlign: "center" },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  headerMid: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  toolIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 17 },
+  xpPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  xpText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  resetBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+
+  scroll: { padding: 14, gap: 12 },
+
+  descRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    padding: 13, borderRadius: 12, borderWidth: 1,
+  },
+  descText: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 19, flex: 1 },
+
+  inputCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 8 },
+  inputLabel: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
   textArea: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    minHeight: 180,
-    fontFamily: undefined,
-    fontSize: 15,
-    lineHeight: 22,
+    fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22,
+    minHeight: 160, textAlignVertical: "top",
   },
-  generateBtn: { borderRadius: 14, overflow: "hidden" },
-  generateGradient: {
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
+  charCount: { fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "right" },
+
+  tipsCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 8 },
+  tipsTitle: { fontFamily: "Inter_600SemiBold", fontSize: 13, marginBottom: 2 },
+  tipRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  tipText: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1 },
+
+  generateBtn: { borderRadius: 13, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  generateBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
+
+  successRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    padding: 12, borderRadius: 10, borderWidth: 1, justifyContent: "center",
   },
-  generateBtnText: { color: "#FFFFFF", fontFamily: undefined, fontSize: 16 },
-  summaryCard: { borderRadius: 16, borderWidth: 1, padding: 16, gap: 12 },
-  summaryHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  summaryHeaderText: { fontFamily: undefined, fontSize: 14 },
-  summaryText: { fontFamily: undefined, fontSize: 15, lineHeight: 24 },
-  resetBtn: { padding: 12, borderRadius: 10, alignItems: "center" },
-  resetBtnText: { fontFamily: undefined, fontSize: 14 },
+  successText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+
+  summaryCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 12 },
+  summaryCardHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  summaryCardTitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  summaryText: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22 },
+
+  secondaryBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, padding: 13, borderRadius: 12, marginTop: 4,
+  },
+  secondaryBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
 });

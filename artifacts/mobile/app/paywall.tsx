@@ -17,62 +17,177 @@ import { useSubscription } from "@/lib/revenuecat";
 import { useLocalSearchParams } from "expo-router";
 
 const GOLD = "#F59E0B";
+const GOLD2 = "#D97706";
 const DARK = "#0D0B2B";
 const CARD = "#1A1740";
+const CARD2 = "#151230";
+const BORDER = "#2A2560";
 const TEXT = "#FFFFFF";
 const MUTED = "#9CA3AF";
+const PURPLE = "#7C3AED";
+const TEAL = "#10B981";
 
-const FEATURES = [
-  { icon: "flash" as const, label: "Unlimited AI Flashcards", desc: "Generate cards from any topic" },
-  { icon: "document-text" as const, label: "AI Notes Maker", desc: "Auto-summarise your study material" },
-  { icon: "help-circle" as const, label: "Unlimited Quizzes", desc: "Test yourself on anything" },
-  { icon: "trophy" as const, label: "Leaderboard Access", desc: "Compete with top students" },
-  { icon: "videocam" as const, label: "Curated Study Videos", desc: "Expert video library" },
-  { icon: "people" as const, label: "Full Social Feed", desc: "Share and discover study posts" },
+const FREE_FEATURES = [
+  "100 credits daily (resets each day)",
+  "AI flashcards, summaries & quizzes",
+  "Social feed & communities",
+  "Ads on workspace & feed",
 ];
+const FREE_MISSING = ["Unlimited AI usage", "No ads"];
+
+const MONTHLY_FEATURES = [
+  "Unlimited credits",
+  "Unlimited flashcards & summariser",
+  "Unlimited quizzes & notes",
+  "Premium AI access",
+  "No ads",
+  "Premium profile badge",
+];
+
+const YEARLY_FEATURES = [
+  "Everything in Monthly",
+  "Discounted yearly pricing",
+  "Priority AI access",
+  "Extended tool limits",
+  "Premium badge on profile",
+  "Stripe-ready architecture",
+];
+
+function CheckIcon({ color = TEAL }: { color?: string }) {
+  return <Ionicons name="checkmark-circle" size={16} color={color} />;
+}
+function CrossIcon() {
+  return <Ionicons name="close-circle" size={16} color="#4B5563" />;
+}
+
+interface PlanCardProps {
+  badge?: string;
+  badgeColor?: string;
+  icon: string;
+  name: string;
+  price: string;
+  period: string;
+  features: string[];
+  missingFeatures?: string[];
+  buttonLabel: string;
+  buttonStyle: "gold" | "purple" | "outline";
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+}
+
+function PlanCard({
+  badge, badgeColor = GOLD, icon, name, price, period, features, missingFeatures = [],
+  buttonLabel, buttonStyle, onPress, loading, disabled,
+}: PlanCardProps) {
+  const isGold = buttonStyle === "gold";
+  const isPurple = buttonStyle === "purple";
+
+  return (
+    <View style={[styles.planCard, buttonStyle === "purple" && styles.planCardHighlighted]}>
+      {badge ? (
+        <View style={[styles.badge, { backgroundColor: badgeColor + "22", borderColor: badgeColor }]}>
+          <Text style={[styles.badgeText, { color: badgeColor }]}>{badge}</Text>
+        </View>
+      ) : <View style={{ height: 26 }} />}
+
+      <View style={styles.planHeader}>
+        <View style={[styles.planIconWrap, { backgroundColor: isGold ? "#2A1F5E" : isPurple ? PURPLE + "20" : "#1F2937" }]}>
+          <Ionicons name={icon as any} size={22} color={isGold ? GOLD : isPurple ? "#C4B5FD" : MUTED} />
+        </View>
+        <Text style={styles.planName}>{name}</Text>
+      </View>
+
+      <Text style={[styles.planPrice, { color: isGold || isPurple ? TEXT : MUTED }]}>{price}</Text>
+      <Text style={styles.planPeriod}>{period}</Text>
+
+      <View style={styles.planDivider} />
+
+      <View style={styles.featureList}>
+        {features.map((f, i) => (
+          <View key={i} style={styles.featureRow}>
+            <CheckIcon color={isPurple ? "#C4B5FD" : TEAL} />
+            <Text style={styles.featureText}>{f}</Text>
+          </View>
+        ))}
+        {missingFeatures.map((f, i) => (
+          <View key={`x-${i}`} style={styles.featureRow}>
+            <CrossIcon />
+            <Text style={[styles.featureText, { color: "#6B7280", textDecorationLine: "line-through" }]}>{f}</Text>
+          </View>
+        ))}
+      </View>
+
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled || loading}
+        activeOpacity={0.85}
+        style={[
+          styles.planBtn,
+          isGold && { backgroundColor: CARD2, borderWidth: 1, borderColor: BORDER },
+          isPurple && { backgroundColor: PURPLE },
+          buttonStyle === "outline" && { backgroundColor: "transparent", borderWidth: 1.5, borderColor: GOLD },
+          (disabled || loading) && { opacity: 0.55 },
+        ]}
+      >
+        {loading
+          ? <ActivityIndicator size="small" color={isGold ? MUTED : TEXT} />
+          : <Text style={[styles.planBtnText, { color: isGold ? MUTED : TEXT }]}>{buttonLabel}</Text>
+        }
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 export default function PaywallScreen() {
   const router = useRouter();
   const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
-  const { offerings, isConfigured, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } =
-    useSubscription();
-  const [confirmVisible, setConfirmVisible] = useState(false);
+  const { offerings, isConfigured, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } = useSubscription();
+  const [purchasing, setPurchasing] = useState<"monthly" | "yearly" | null>(null);
+  const [confirmPkg, setConfirmPkg] = useState<any>(null);
 
   useEffect(() => {
     if (isSubscribed) router.replace("/(tabs)");
-  }, [isSubscribed, router]);
+  }, [isSubscribed]);
 
-  const currentOffering = offerings?.current;
-  const pkg = currentOffering?.availablePackages[0];
-  const priceString = pkg?.product.priceString ?? "$4.99";
-  const productTitle = pkg?.product.title ?? "ImproKinz Premium";
+  // Map RevenueCat packages to monthly/yearly
+  const allPackages = offerings?.current?.availablePackages ?? [];
+  const monthlyPkg = allPackages.find((p: any) =>
+    p.packageType === "MONTHLY" || p.identifier?.toLowerCase().includes("monthly")
+  ) ?? allPackages[0];
+  const yearlyPkg = allPackages.find((p: any) =>
+    p.packageType === "ANNUAL" || p.identifier?.toLowerCase().includes("annual") || p.identifier?.toLowerCase().includes("yearly")
+  ) ?? allPackages[1];
 
-  const handleSubscribe = () => {
-    if (__DEV__) {
-      setConfirmVisible(true);
-    } else {
-      doPurchase();
+  const monthlyPrice = monthlyPkg?.product?.priceString ?? "SAR 9.99";
+  const yearlyPrice = yearlyPkg?.product?.priceString ?? "SAR 29.99";
+
+  const handlePurchase = async (pkg: any, type: "monthly" | "yearly") => {
+    if (!pkg || !isConfigured) {
+      Alert.alert("Unavailable", "In-app purchases are not configured on this device.");
+      return;
     }
+    if (__DEV__) { setConfirmPkg({ pkg, type }); return; }
+    await doPurchase(pkg, type);
   };
 
-  const doPurchase = async () => {
-    setConfirmVisible(false);
-    if (!pkg) return;
+  const doPurchase = async (pkg: any, type: "monthly" | "yearly") => {
+    setConfirmPkg(null);
+    setPurchasing(type);
     try {
       await purchase(pkg);
       router.replace("/(tabs)");
     } catch (e: any) {
-      if (e?.userCancelled) return;
-      console.error("Purchase error:", e);
-      Alert.alert("Purchase unavailable", "We couldn't complete the purchase. Please try again.");
+      if (!e?.userCancelled) Alert.alert("Purchase failed", "Please try again or restore purchases.");
+    } finally {
+      setPurchasing(null);
     }
   };
 
   const handleRestore = async () => {
     try {
       await restore();
-    } catch (e) {
-      console.error("Restore error:", e);
+    } catch {
       Alert.alert("Restore unavailable", "We couldn't restore your purchases. Please try again.");
     }
   };
@@ -81,113 +196,119 @@ export default function PaywallScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-          <Ionicons name="close" size={24} color={MUTED} />
-        </TouchableOpacity>
-
-        {/* Crown badge */}
-        <View style={styles.crownWrap}>
-          <View style={styles.crownCircle}>
-            <Ionicons name="trophy" size={36} color={GOLD} />
-          </View>
-        </View>
-
-        <Text style={styles.title}>Unlock ImproKinz{"\n"}Premium</Text>
-        <Text style={styles.subtitle}>
-          Everything you need to study smarter, rise higher, and ace every exam.
-        </Text>
-
-        {/* Trial badge */}
-        <View style={styles.trialBadge}>
-          <Ionicons name="gift-outline" size={16} color={GOLD} />
-          <Text style={styles.trialText}> 7-day free trial • Cancel anytime</Text>
-        </View>
-
-        {/* Features */}
-        <View style={styles.featuresCard}>
-          {FEATURES.map((f, i) => (
-            <View key={i} style={[styles.featureRow, i < FEATURES.length - 1 && styles.featureDivider]}>
-              <View style={styles.featureIcon}>
-                <Ionicons name={f.icon} size={20} color={GOLD} />
-              </View>
-              <View style={styles.featureText}>
-                <Text style={styles.featureLabel}>{f.label}</Text>
-                <Text style={styles.featureDesc}>{f.desc}</Text>
-              </View>
-              <Ionicons name="checkmark-circle" size={20} color={GOLD} />
-            </View>
-          ))}
-        </View>
-
-        {/* Pricing */}
-        <View style={styles.priceCard}>
-          <View>
-            <Text style={styles.planName}>{productTitle}</Text>
-            <Text style={styles.planFreq}>Billed monthly after trial</Text>
-          </View>
-          {!isConfigured ? (
-            <Text style={styles.unavailable}>Unavailable</Text>
-          ) : isLoading ? (
-            <ActivityIndicator color={GOLD} />
-          ) : (
-            <Text style={styles.price}>{priceString}<Text style={styles.perMo}>/mo</Text></Text>
-          )}
-        </View>
-
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.ctaBtn, (isPurchasing || isLoading) && styles.ctaDisabled]}
-           onPress={handleSubscribe}
-           disabled={isPurchasing || isLoading || !isConfigured || !pkg}
-          activeOpacity={0.85}
-        >
-          {isPurchasing ? (
-            <ActivityIndicator color={DARK} />
-          ) : (
-            <Text style={styles.ctaText}>Start Free Trial</Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Restore */}
-        <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={isRestoring}>
-           <Text style={styles.restoreText}>
-             {isRestoring ? "Restoring…" : "Restore Purchases"}
-          </Text>
-        </TouchableOpacity>
-
-        {fromOnboarding === "1" && (
-          <TouchableOpacity
-            style={styles.startFreeBtn}
-            onPress={() => router.replace("/(tabs)")}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.startFreeText}>or start free with 100 daily credits</Text>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces
+      >
+        {/* Close button */}
+        {fromOnboarding !== "1" && (
+          <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+            <Ionicons name="close" size={22} color={MUTED} />
           </TouchableOpacity>
         )}
 
-        <Text style={styles.legal}>
-          Payment will be charged to your account at confirmation of purchase. Subscription automatically renews
-          unless cancelled at least 24 hours before the end of the period.
-        </Text>
+        {/* Header */}
+        <View style={styles.headerWrap}>
+          <View style={styles.crownRow}>
+            <View style={[styles.crownBadge, { backgroundColor: GOLD + "18", borderColor: GOLD }]}>
+              <Ionicons name="trophy" size={24} color={GOLD} />
+            </View>
+          </View>
+          <Text style={styles.title}>Choose your plan</Text>
+          <Text style={styles.subtitle}>
+            Upgrade for unlimited AI, no ads, and premium badges.{"\n"}Free users get 100 credits every day.
+          </Text>
+        </View>
+
+        {isLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator color={GOLD} size="large" />
+            <Text style={[styles.subtitle, { marginTop: 12 }]}>Loading plans…</Text>
+          </View>
+        ) : (
+          <>
+            {/* Free plan */}
+            <PlanCard
+              icon="star-outline"
+              name="Free"
+              price="$0"
+              period="Forever"
+              features={FREE_FEATURES}
+              missingFeatures={FREE_MISSING}
+              buttonLabel="Current plan"
+              buttonStyle="gold"
+              onPress={() => {}}
+              disabled
+            />
+
+            {/* Monthly plan */}
+            <PlanCard
+              badge="⭐  Most popular"
+              badgeColor={GOLD}
+              icon="flash"
+              name="Monthly"
+              price={monthlyPrice}
+              period="per month"
+              features={MONTHLY_FEATURES}
+              buttonLabel={purchasing === "monthly" ? "Processing…" : "Choose Monthly"}
+              buttonStyle="purple"
+              onPress={() => handlePurchase(monthlyPkg, "monthly")}
+              loading={purchasing === "monthly"}
+              disabled={!!purchasing || isLoading}
+            />
+
+            {/* Yearly plan */}
+            <PlanCard
+              badge="🏆  Best value"
+              badgeColor={TEAL}
+              icon="trophy"
+              name="Yearly"
+              price={yearlyPrice}
+              period="per year"
+              features={YEARLY_FEATURES}
+              buttonLabel={purchasing === "yearly" ? "Processing…" : "Choose Yearly"}
+              buttonStyle="outline"
+              onPress={() => handlePurchase(yearlyPkg, "yearly")}
+              loading={purchasing === "yearly"}
+              disabled={!!purchasing || isLoading}
+            />
+
+            {/* Footer actions */}
+            <View style={styles.footer}>
+              {fromOnboarding === "1" && (
+                <TouchableOpacity onPress={() => router.replace("/(tabs)")} style={styles.continueFreeBtn}>
+                  <Text style={styles.continueFreeText}>Continue with free plan</Text>
+                  <Ionicons name="arrow-forward" size={14} color={GOLD} />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity onPress={handleRestore} disabled={isRestoring} style={styles.restoreBtn}>
+                <Text style={styles.restoreText}>{isRestoring ? "Restoring…" : "Restore Purchases"}</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.legal}>
+                Payment charged at confirmation. Subscription renews automatically unless cancelled at least 24 hours before period ends.
+              </Text>
+            </View>
+          </>
+        )}
       </ScrollView>
 
-      {/* Dev-mode confirm modal */}
-      <Modal visible={confirmVisible} transparent animationType="fade">
+      {/* Dev-mode confirm */}
+      <Modal visible={!!confirmPkg} transparent animationType="fade" onRequestClose={() => setConfirmPkg(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Ionicons name="construct-outline" size={32} color={GOLD} style={{ marginBottom: 8 }} />
             <Text style={styles.modalTitle}>Test Purchase</Text>
             <Text style={styles.modalBody}>
-              You're in development mode. This will simulate a purchase using RevenueCat's test store.
-              No real charge will be made.
+              You're in development mode. This simulates the purchase via RevenueCat's test store. No real charge.
             </Text>
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setConfirmVisible(false)}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setConfirmPkg(null)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirm} onPress={doPurchase}>
+              <TouchableOpacity style={styles.modalConfirm} onPress={() => doPurchase(confirmPkg.pkg, confirmPkg.type)}>
                 <Text style={styles.modalConfirmText}>Confirm</Text>
               </TouchableOpacity>
             </View>
@@ -200,86 +321,87 @@ export default function PaywallScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: DARK },
-  scroll: { paddingHorizontal: 20, paddingBottom: 40 },
-  closeBtn: { alignSelf: "flex-end", padding: 8, marginTop: 4 },
-  crownWrap: { alignItems: "center", marginTop: 8, marginBottom: 16 },
-  crownCircle: {
-    width: 76, height: 76, borderRadius: 38,
-    backgroundColor: "#2A1F5E",
-    borderWidth: 2, borderColor: GOLD,
-    alignItems: "center", justifyContent: "center",
+  scroll: { paddingHorizontal: 16, paddingBottom: 48, paddingTop: 8 },
+  closeBtn: { alignSelf: "flex-end", padding: 10, marginBottom: 4 },
+
+  headerWrap: { alignItems: "center", marginBottom: 24 },
+  crownRow: { marginBottom: 14 },
+  crownBadge: {
+    width: 60, height: 60, borderRadius: 18,
+    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
   },
   title: {
-    fontSize: 28, fontFamily: "Inter_700Bold", color: TEXT,
-    textAlign: "center", lineHeight: 34, marginBottom: 10,
+    fontSize: 26, fontFamily: "Inter_700Bold", color: TEXT,
+    textAlign: "center", marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14, fontFamily: "Inter_400Regular", color: MUTED,
-    textAlign: "center", lineHeight: 20, marginBottom: 16,
+    fontSize: 13, fontFamily: "Inter_400Regular", color: MUTED,
+    textAlign: "center", lineHeight: 20,
   },
-  trialBadge: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1A1740", borderRadius: 20, paddingHorizontal: 16,
-    paddingVertical: 8, alignSelf: "center", marginBottom: 24,
-    borderWidth: 1, borderColor: GOLD,
+
+  loadingWrap: { alignItems: "center", paddingVertical: 48 },
+
+  // Plan card
+  planCard: {
+    backgroundColor: CARD, borderRadius: 18, padding: 18,
+    marginBottom: 14, borderWidth: 1, borderColor: BORDER,
   },
-  trialText: { color: GOLD, fontFamily: "Inter_600SemiBold", fontSize: 13 },
-  featuresCard: {
-    backgroundColor: CARD, borderRadius: 16, overflow: "hidden", marginBottom: 16,
+  planCardHighlighted: {
+    borderColor: PURPLE, borderWidth: 1.5,
+    shadowColor: PURPLE, shadowOpacity: 0.28, shadowRadius: 18, elevation: 6,
   },
-  featureRow: {
-    flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14,
+  badge: {
+    alignSelf: "center", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4,
+    borderWidth: 1, marginBottom: 12,
   },
-  featureDivider: { borderBottomWidth: 1, borderBottomColor: "#2A2560" },
-  featureIcon: {
-    width: 36, height: 36, borderRadius: 10, backgroundColor: "#2A1F5E",
-    alignItems: "center", justifyContent: "center", marginRight: 12,
+  badgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+
+  planHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  planIconWrap: {
+    width: 40, height: 40, borderRadius: 11,
+    alignItems: "center", justifyContent: "center",
   },
-  featureText: { flex: 1 },
-  featureLabel: { color: TEXT, fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  featureDesc: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 1 },
-  priceCard: {
-    backgroundColor: CARD, borderRadius: 16, padding: 16,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    borderWidth: 1.5, borderColor: GOLD, marginBottom: 20,
+  planName: { fontSize: 18, fontFamily: "Inter_700Bold", color: TEXT },
+
+  planPrice: { fontSize: 32, fontFamily: "Inter_700Bold", marginBottom: 2 },
+  planPeriod: { fontSize: 12, fontFamily: "Inter_400Regular", color: MUTED, marginBottom: 14 },
+
+  planDivider: { height: 1, backgroundColor: BORDER, marginBottom: 14 },
+
+  featureList: { gap: 9, marginBottom: 18 },
+  featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: TEXT, flex: 1 },
+
+  planBtn: {
+    borderRadius: 12, paddingVertical: 13, alignItems: "center",
   },
-  planName: { color: TEXT, fontFamily: "Inter_600SemiBold", fontSize: 15 },
-  planFreq: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-  price: { color: GOLD, fontFamily: "Inter_700Bold", fontSize: 26 },
-  unavailable: { color: MUTED, fontFamily: "Inter_500Medium", fontSize: 14 },
-  perMo: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 14 },
-  ctaBtn: {
-    backgroundColor: GOLD, borderRadius: 14, paddingVertical: 16,
-    alignItems: "center", marginBottom: 12,
+  planBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
+
+  // Footer
+  footer: { alignItems: "center", gap: 12, marginTop: 8 },
+  continueFreeBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingVertical: 10, paddingHorizontal: 20,
   },
-  ctaDisabled: { opacity: 0.6 },
-  ctaText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 17 },
-  restoreBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 16 },
+  continueFreeText: { color: GOLD, fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  restoreBtn: { paddingVertical: 8 },
   restoreText: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13 },
-  startFreeBtn: { alignItems: "center", paddingVertical: 10, marginBottom: 10 },
-  startFreeText: { color: GOLD, fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  legal: { color: "#4B5563", fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center", lineHeight: 16 },
-  modalOverlay: {
-    flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center",
+  legal: {
+    color: "#4B5563", fontFamily: "Inter_400Regular",
+    fontSize: 11, textAlign: "center", lineHeight: 16, paddingHorizontal: 12,
   },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center" },
   modalCard: {
     backgroundColor: CARD, borderRadius: 20, padding: 24, margin: 24,
     alignItems: "center", borderWidth: 1, borderColor: GOLD,
   },
   modalTitle: { color: TEXT, fontFamily: "Inter_700Bold", fontSize: 18, marginBottom: 8 },
-  modalBody: {
-    color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13,
-    textAlign: "center", lineHeight: 18, marginBottom: 20,
-  },
+  modalBody: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 18, marginBottom: 20 },
   modalBtns: { flexDirection: "row", gap: 12 },
-  modalCancel: {
-    flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center",
-    backgroundColor: "#2A2560",
-  },
+  modalCancel: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: "#2A2560" },
   modalCancelText: { color: MUTED, fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  modalConfirm: {
-    flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center",
-    backgroundColor: GOLD,
-  },
+  modalConfirm: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: GOLD },
   modalConfirmText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 14 },
 });

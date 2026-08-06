@@ -123,7 +123,7 @@ function Pill({
 /* ── Main ────────────────────────────────────────────────────── */
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, loadProfileByClerkId } = useAuth();
   const { userId: clerkUserId } = useClerkAuth();
 
   const [step, setStep] = useState(0);
@@ -181,8 +181,10 @@ export default function OnboardingScreen() {
     setSaving(true);
     setSaveError("");
     try {
+      // Always provide a concrete displayName — never undefined/empty
+      const displayName = nickname.trim() || profile?.displayName || "Learner";
       const payload = {
-        displayName: nickname.trim() || undefined,
+        displayName,
         subjects: [field],
         level,
         goal,
@@ -193,7 +195,9 @@ export default function OnboardingScreen() {
       };
       await setDoc(doc(db, "profiles", uid), payload, { merge: true });
       await AsyncStorage.removeItem("pending_onboarding_nickname").catch(() => {});
-      await refreshProfile();
+      // loadProfileByClerkId works regardless of Firebase auth state
+      // (refreshProfile silently does nothing when Firebase user is null)
+      await loadProfileByClerkId(uid);
       router.replace("/paywall?fromOnboarding=1");
     } catch (e) {
       console.error("Onboarding save error:", e);

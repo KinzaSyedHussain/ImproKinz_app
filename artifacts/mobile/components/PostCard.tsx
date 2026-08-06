@@ -969,7 +969,11 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           delayLongPress={350}
           activeOpacity={0.7}
         >
-          {activeReaction ? (
+          {activeReaction === "like" ? (
+            // Filled heart when "Like" is active
+            <Icon name="heart" size={20} color={colors.primary} />
+          ) : activeReaction ? (
+            // Emoji for Insightful / Congrats
             <Text style={styles.activeReactionEmoji}>
               {REACTIONS.find((r) => r.key === activeReaction)?.emoji}
             </Text>
