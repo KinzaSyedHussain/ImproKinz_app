@@ -56,19 +56,14 @@ function wordCount(text: string) {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
-function storageKey(uid: string) {
-  return `notes_v1_${uid}`;
-}
+function storageKey(uid: string) { return `notes_v1_${uid}`; }
 
 async function loadNotes(uid: string): Promise<Note[]> {
   try {
     const raw = await AsyncStorage.getItem(storageKey(uid));
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as Note[];
-    return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch {
-    return [];
-  }
+    return (JSON.parse(raw) as Note[]).sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch { return []; }
 }
 
 async function persistNotes(uid: string, notes: Note[]): Promise<void> {
@@ -86,40 +81,33 @@ export default function NotesScreen() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
 
-  // Generate form state
   const [topic, setTopic] = useState("");
   const [subject, setSubject] = useState("General");
   const [level, setLevel] = useState("High School");
   const [generating, setGenerating] = useState(false);
 
-  // Editor modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
   const [editSubject, setEditSubject] = useState("General");
   const [saving, setSaving] = useState(false);
-
   const [searchQuery, setSearchQuery] = useState("");
   const contentRef = useRef<TextInput>(null);
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
-  const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
+  const botPad = insets.bottom + 24;
 
   const fetchNotes = async () => {
     if (!user) { setLoadingNotes(false); return; }
-    const loaded = await loadNotes(user.uid);
-    setNotes(loaded);
+    setNotes(await loadNotes(user.uid));
     setLoadingNotes(false);
   };
 
   useEffect(() => { fetchNotes(); }, [user?.uid]);
 
   const generateNotes = async () => {
-    if (!topic.trim()) {
-      Alert.alert("Enter a topic", "What topic should the AI write notes about?");
-      return;
-    }
+    if (!topic.trim()) { Alert.alert("Enter a topic", "What topic should AI write notes about?"); return; }
     if (!(await consumeTool("notes"))) return;
     setGenerating(true);
     try {
@@ -157,12 +145,10 @@ export default function NotesScreen() {
     if (!editTitle.trim()) { Alert.alert("Title required", "Please add a title."); return; }
     if (!editContent.trim()) { Alert.alert("Content required", "Note has no content."); return; }
     if (!user) { Alert.alert("Not signed in", "Please sign in to save notes."); return; }
-
     setSaving(true);
     try {
       const now = Date.now();
       let updated: Note[];
-
       if (editingNote) {
         updated = notes.map((n) =>
           n.id === editingNote.id
@@ -170,18 +156,9 @@ export default function NotesScreen() {
             : n
         );
       } else {
-        const newNote: Note = {
-          id: `${user.uid}_${now}`,
-          title: editTitle.trim(),
-          content: editContent.trim(),
-          subject: editSubject,
-          createdAt: now,
-          updatedAt: now,
-        };
-        updated = [newNote, ...notes];
+        updated = [{ id: `${user.uid}_${now}`, title: editTitle.trim(), content: editContent.trim(), subject: editSubject, createdAt: now, updatedAt: now }, ...notes];
         addXP(12).catch(() => {});
       }
-
       await persistNotes(user.uid, updated);
       setNotes(updated);
       setModalVisible(false);
@@ -197,14 +174,11 @@ export default function NotesScreen() {
   const deleteNote = (note: Note) => {
     Alert.alert("Delete Note", `Delete "${note.title}"?`, [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete", style: "destructive",
-        onPress: async () => {
-          const updated = notes.filter((n) => n.id !== note.id);
-          await persistNotes(user!.uid, updated);
-          setNotes(updated);
-        },
-      },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        const updated = notes.filter((n) => n.id !== note.id);
+        await persistNotes(user!.uid, updated);
+        setNotes(updated);
+      }},
     ]);
   };
 
@@ -217,120 +191,105 @@ export default function NotesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <LinearGradient
-        colors={["#D97706", "#B45309"]}
-        style={[styles.header, { paddingTop: topPad + 12 }]}
-      >
+      {/* ── Header ──────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: topPad + 10, backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Icon name="arrow-left" size={20} color={colors.foreground} />
+            <Icon name="arrow-left" size={21} color={colors.foreground} />
           </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notes Maker</Text>
-            <Text style={[styles.headerSub, { color: colors.foreground }]}>AI-generated study notes</Text>
+          <View style={[styles.toolIconWrap, { backgroundColor: colors.primary + "20" }]}>
+            <Icon name="file-text" size={17} color={colors.primary} />
           </View>
+          <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notes</Text>
+          <View style={[styles.xpPill, { backgroundColor: colors.secondary }]}>
+            <Text style={[styles.xpText, { color: colors.primary }]}>+12 XP</Text>
+          </View>
+          <View style={{ flex: 1 }} />
           <ToolCreditPill tool="notes" />
-          <View style={[styles.xpPill, { backgroundColor: "rgba(255,255,255,0.25)" }]}>
-            <Text style={[styles.xpPillText, { color: colors.foreground }]}>+12 XP</Text>
-          </View>
         </View>
 
-        {/* Tab switcher */}
-        <View style={styles.tabSwitcher}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "generate" && styles.tabActive]}
-            onPress={() => setActiveTab("generate")}
-          >
-            <Icon name="zap" size={14} color={activeTab === "generate" ? "#B45309" : "rgba(255,255,255,0.7)"} />
-            <Text style={[styles.tabText, activeTab === "generate" ? styles.tabTextActive : styles.tabTextInactive]}>
-              Generate
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "saved" && styles.tabActive]}
-            onPress={() => setActiveTab("saved")}
-          >
-            <Icon name="book-open" size={14} color={activeTab === "saved" ? "#B45309" : "rgba(255,255,255,0.7)"} />
-            <Text style={[styles.tabText, activeTab === "saved" ? styles.tabTextActive : styles.tabTextInactive]}>
-              Saved ({notes.length})
-            </Text>
-          </TouchableOpacity>
+        {/* Tab bar */}
+        <View style={[styles.tabBar, { backgroundColor: colors.background }]}>
+          {(["generate", "saved"] as const).map((t) => (
+            <TouchableOpacity
+              key={t}
+              onPress={() => setActiveTab(t)}
+              style={[styles.tabBtn, activeTab === t && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
+            >
+              <Icon
+                name={t === "generate" ? "zap" : "book-open"}
+                size={15}
+                color={activeTab === t ? colors.primary : colors.mutedForeground}
+              />
+              <Text style={[styles.tabText, { color: activeTab === t ? colors.primary : colors.mutedForeground }]}>
+                {t === "generate" ? "Generate" : `Saved (${notes.length})`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      </LinearGradient>
+      </View>
 
-      {/* ── Generate tab ── */}
+      {/* ── Generate tab ─────────────────────────── */}
       {activeTab === "generate" && (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView
-            contentContainerStyle={[styles.generateContent, { paddingBottom: botPad }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: botPad }]}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
             {/* AI badge */}
-            <View style={[styles.aiBadge, { backgroundColor: colors.secondary }]}>
-              <Text style={styles.aiBadgeEmoji}>✦</Text>
-              <Text style={[styles.aiBadgeText, { color: colors.primary }]}>
-                Powered by Groq AI (Llama 3.1)
-              </Text>
+            <View style={[styles.aiBadge, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
+              <Icon name="zap" size={14} color={colors.primary} />
+              <Text style={[styles.aiBadgeText, { color: colors.primary }]}>Powered by Groq AI (Llama 3.1)</Text>
             </View>
 
-            {/* Topic input */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Topic *</Text>
-            <TextInput
-              style={[styles.topicInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
-              value={topic}
-              onChangeText={setTopic}
-              placeholder="e.g. Photosynthesis, World War II, Newton's Laws…"
-              placeholderTextColor={colors.mutedForeground}
-              multiline
-              returnKeyType="done"
-            />
+            {/* Topic */}
+            <View style={[styles.inputCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.inputLabel, { color: colors.foreground }]}>Topic *</Text>
+              <TextInput
+                style={[styles.topicInput, { color: colors.foreground }]}
+                value={topic}
+                onChangeText={setTopic}
+                placeholder="e.g. Photosynthesis, World War II, Newton's Laws…"
+                placeholderTextColor={colors.mutedForeground}
+                multiline
+                returnKeyType="done"
+              />
+            </View>
 
             {/* Subject */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Subject</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-            >
+            <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Subject</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {SUBJECTS.map((s) => {
                 const active = subject === s;
                 const col = SUBJECT_COLORS[s] ?? "#6B7280";
                 return (
                   <TouchableOpacity
                     key={s}
-                    style={[styles.chip, { borderColor: col, backgroundColor: active ? col : "transparent" }]}
+                    style={[styles.chip, { borderColor: active ? col : colors.border, backgroundColor: active ? col + "18" : "transparent" }]}
                     onPress={() => setSubject(s)}
                   >
-                    <Text style={[styles.chipText, { color: active ? "#fff" : col }]}>{s}</Text>
+                    <Text style={[styles.chipText, { color: active ? col : colors.mutedForeground, fontFamily: active ? "Inter_700Bold" : "Inter_500Medium" }]}>{s}</Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
             {/* Level */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Study Level</Text>
+            <Text style={[styles.sectionLabel, { color: colors.foreground }]}>Study level</Text>
             <View style={styles.levelRow}>
               {LEVELS.map((l) => {
                 const active = level === l;
                 return (
                   <TouchableOpacity
                     key={l}
-                    style={[
-                      styles.levelChip,
-                      {
-                        backgroundColor: active ? colors.primary : colors.card,
-                        borderColor: active ? colors.primary : colors.border,
-                      },
-                    ]}
+                    style={[styles.levelChip, {
+                      backgroundColor: active ? colors.primary : colors.card,
+                      borderColor: active ? colors.primary : colors.border,
+                    }]}
                     onPress={() => setLevel(l)}
                   >
-                    <Text style={[styles.levelChipText, { color: active ? colors.primaryForeground : colors.mutedForeground }]}>
-                      {l}
-                    </Text>
+                    <Text style={[styles.levelChipText, { color: active ? colors.primaryForeground : colors.mutedForeground }]}>{l}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -338,30 +297,35 @@ export default function NotesScreen() {
 
             {/* What you'll get */}
             <View style={[styles.previewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.previewTitle, { color: colors.foreground }]}>What AI will generate:</Text>
+              <View style={styles.previewHeader}>
+                <Icon name="file-text" size={15} color={colors.primary} />
+                <Text style={[styles.previewTitle, { color: colors.foreground }]}>AI will generate</Text>
+              </View>
               {[
-                "📌 Overview & key concepts",
-                "📋 Structured headings & sections",
-                "• Detailed bullet points & examples",
-                "🔑 Bold key terms & definitions",
-                "✅ Quick-review summary",
-              ].map((item) => (
-                <Text key={item} style={[styles.previewItem, { color: colors.mutedForeground }]}>{item}</Text>
+                ["check-circle", "Overview & key concepts"],
+                ["check-circle", "Structured headings & sections"],
+                ["check-circle", "Detailed bullet points & examples"],
+                ["check-circle", "Bold key terms & definitions"],
+                ["check-circle", "Quick-review summary"],
+              ].map(([icon, text]) => (
+                <View key={text} style={styles.previewRow}>
+                  <Icon name={icon} size={13} color={colors.primary} />
+                  <Text style={[styles.previewItem, { color: colors.mutedForeground }]}>{text}</Text>
+                </View>
               ))}
             </View>
 
             {/* Generate button */}
             <TouchableOpacity
-              style={[styles.generateBtn, { opacity: generating ? 0.7 : 1 }]}
               onPress={generateNotes}
-              disabled={generating}
+              disabled={generating || !topic.trim()}
               activeOpacity={0.85}
+              style={{ opacity: generating || !topic.trim() ? 0.55 : 1 }}
             >
               <LinearGradient
-                colors={["#D97706", "#B45309"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.generateBtnInner}
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.generateBtn}
               >
                 {generating ? (
                   <>
@@ -369,24 +333,26 @@ export default function NotesScreen() {
                     <Text style={styles.generateBtnText}>Generating notes…</Text>
                   </>
                 ) : (
-                  <Text style={styles.generateBtnText}>✦  Generate Notes</Text>
+                  <>
+                    <Icon name="zap" size={18} color="#fff" />
+                    <Text style={styles.generateBtnText}>Generate Notes</Text>
+                  </>
                 )}
               </LinearGradient>
             </TouchableOpacity>
 
             {generating && (
               <Text style={[styles.generatingHint, { color: colors.mutedForeground }]}>
-                AI is writing your notes — this takes 5–10 seconds…
+                AI is writing your notes — this usually takes 5–10 seconds…
               </Text>
             )}
           </ScrollView>
         </KeyboardAvoidingView>
       )}
 
-      {/* ── Saved tab ── */}
+      {/* ── Saved tab ─────────────────────────────── */}
       {activeTab === "saved" && (
         <View style={{ flex: 1 }}>
-          {/* Search */}
           <View style={[styles.searchWrap, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <Icon name="search" size={16} color={colors.mutedForeground} />
             <TextInput
@@ -404,31 +370,30 @@ export default function NotesScreen() {
           </View>
 
           {loadingNotes ? (
-            <View style={styles.center}>
-              <ActivityIndicator color={colors.primary} size="large" />
-            </View>
+            <View style={styles.center}><ActivityIndicator color={colors.primary} size="large" /></View>
           ) : filtered.length === 0 ? (
             <View style={styles.center}>
-              <Text style={{ fontSize: 48 }}>📒</Text>
+              <View style={[styles.emptyIcon, { backgroundColor: colors.secondary }]}>
+                <Icon name="file-text" size={28} color={colors.mutedForeground} />
+              </View>
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
                 {searchQuery ? "No matches" : "No notes yet"}
               </Text>
               <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
-                {searchQuery ? "Try a different search" : "Generate your first note with AI"}
+                {searchQuery ? "Try a different search term" : "Generate your first AI-powered study note"}
               </Text>
               {!searchQuery && (
                 <TouchableOpacity
                   style={[styles.goGenerateBtn, { backgroundColor: colors.primary }]}
                   onPress={() => setActiveTab("generate")}
                 >
-                  <Text style={[styles.goGenerateBtnText, { color: colors.primaryForeground }]}>
-                    ✦  Generate Note
-                  </Text>
+                  <Icon name="zap" size={15} color={colors.primaryForeground} />
+                  <Text style={[styles.goGenerateBtnText, { color: colors.primaryForeground }]}>Generate Note</Text>
                 </TouchableOpacity>
               )}
             </View>
           ) : (
-            <ScrollView contentContainerStyle={[styles.list, { paddingBottom: botPad }]}>
+            <ScrollView contentContainerStyle={[styles.list, { paddingBottom: botPad }]} showsVerticalScrollIndicator={false}>
               {filtered.map((note) => {
                 const subjectColor = SUBJECT_COLORS[note.subject] ?? "#6B7280";
                 return (
@@ -439,28 +404,19 @@ export default function NotesScreen() {
                     activeOpacity={0.8}
                   >
                     <View style={styles.noteHeader}>
-                      <View style={[styles.subjectPill, { backgroundColor: subjectColor + "22" }]}>
+                      <View style={[styles.subjectPill, { backgroundColor: subjectColor + "18" }]}>
                         <Text style={[styles.subjectText, { color: subjectColor }]}>{note.subject}</Text>
                       </View>
-                      <Text style={[styles.noteTime, { color: colors.mutedForeground }]}>
-                        {timeAgo(note.updatedAt)}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={() => deleteNote(note)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Icon name="trash-2" size={15} color={colors.destructive} />
+                      <Text style={[styles.noteTime, { color: colors.mutedForeground }]}>{timeAgo(note.updatedAt)}</Text>
+                      <TouchableOpacity onPress={() => deleteNote(note)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Icon name="trash-2" size={15} color={colors.destructive ?? "#EF4444"} />
                       </TouchableOpacity>
                     </View>
-                    <Text style={[styles.noteTitle, { color: colors.foreground }]} numberOfLines={1}>
-                      {note.title}
-                    </Text>
+                    <Text style={[styles.noteTitle, { color: colors.foreground }]} numberOfLines={1}>{note.title}</Text>
                     <Text style={[styles.notePreview, { color: colors.mutedForeground }]} numberOfLines={2}>
                       {note.content.replace(/#{1,3} /g, "").replace(/\*\*/g, "")}
                     </Text>
-                    <Text style={[styles.noteWords, { color: colors.mutedForeground }]}>
-                      {wordCount(note.content)} words
-                    </Text>
+                    <Text style={[styles.noteWords, { color: colors.mutedForeground }]}>{wordCount(note.content)} words</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -469,17 +425,9 @@ export default function NotesScreen() {
         </View>
       )}
 
-      {/* ── Editor / Viewer Modal ── */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: colors.background }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
+      {/* ── Editor Modal ──────────────────────────── */}
+      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={[styles.modalHeader, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalClose}>
               <Icon name="x" size={20} color={colors.foreground} />
@@ -492,17 +440,14 @@ export default function NotesScreen() {
               onPress={saveNote}
               disabled={saving}
             >
-              {saving ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
-              ) : (
-                <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>
-                  {editingNote ? "Update" : "Save  ✦+12"}
-                </Text>
-              )}
+              {saving
+                ? <ActivityIndicator size="small" color={colors.primaryForeground} />
+                : <Text style={[styles.saveBtnText, { color: colors.primaryForeground }]}>{editingNote ? "Update" : "Save +12 XP"}</Text>
+              }
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <TextInput
               style={[styles.editTitle, { color: colors.foreground, borderBottomColor: colors.border }]}
               value={editTitle}
@@ -513,21 +458,17 @@ export default function NotesScreen() {
               onSubmitEditing={() => contentRef.current?.focus()}
             />
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipRow, { paddingHorizontal: 16, paddingVertical: 8 }]}>
               {SUBJECTS.map((s) => {
                 const active = editSubject === s;
                 const col = SUBJECT_COLORS[s] ?? "#6B7280";
                 return (
                   <TouchableOpacity
                     key={s}
-                    style={[styles.chip, { borderColor: col, backgroundColor: active ? col : "transparent" }]}
+                    style={[styles.chip, { borderColor: active ? col : colors.border, backgroundColor: active ? col + "18" : "transparent" }]}
                     onPress={() => setEditSubject(s)}
                   >
-                    <Text style={[styles.chipText, { color: active ? "#fff" : col }]}>{s}</Text>
+                    <Text style={[styles.chipText, { color: active ? col : colors.mutedForeground }]}>{s}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -544,29 +485,23 @@ export default function NotesScreen() {
               placeholder="Note content…"
               placeholderTextColor={colors.mutedForeground}
             />
-            <Text style={[styles.wordBar, { color: colors.mutedForeground }]}>
-              {wordCount(editContent)} words
-            </Text>
+            <Text style={[styles.wordBar, { color: colors.mutedForeground }]}>{wordCount(editContent)} words</Text>
 
             <TouchableOpacity
-              style={[styles.bigSaveBtn, { opacity: saving ? 0.6 : 1 }]}
               onPress={saveNote}
               disabled={saving}
               activeOpacity={0.85}
+              style={[styles.bigSaveBtnWrap, { opacity: saving ? 0.6 : 1 }]}
             >
               <LinearGradient
-                colors={["#D97706", "#B45309"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.bigSaveBtnInner}
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.bigSaveBtn}
               >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.bigSaveBtnText}>
-                    {editingNote ? "✓  Update Note" : "✦  Save Note  (+12 XP)"}
-                  </Text>
-                )}
+                {saving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.bigSaveBtnText}>{editingNote ? "Update Note" : "Save Note (+12 XP)"}</Text>
+                }
               </LinearGradient>
             </TouchableOpacity>
           </ScrollView>
@@ -578,162 +513,85 @@ export default function NotesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 16 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-  backBtn: { padding: 4 },
-  headerTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
-  headerSub: { color: "rgba(255,255,255,0.75)", fontSize: 13, marginTop: 2 },
-  xpPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  xpPillText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
-  tabSwitcher: {
-    flexDirection: "row",
-    backgroundColor: "rgba(0,0,0,0.2)",
-    borderRadius: 14,
-    padding: 4,
-    gap: 4,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  tabActive: { backgroundColor: "#FFFFFF" },
-  tabText: { fontSize: 13, fontWeight: "600" },
-  tabTextActive: { color: "#B45309" },
-  tabTextInactive: { color: "rgba(255,255,255,0.8)" },
 
-  generateContent: { padding: 20, gap: 4 },
+  // Header
+  header: { borderBottomWidth: 1, paddingBottom: 0 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingBottom: 12 },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  toolIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 17 },
+  xpPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  xpText: { fontFamily: "Inter_600SemiBold", fontSize: 11 },
+  tabBar: { flexDirection: "row", paddingHorizontal: 14 },
+  tabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+
+  // Generate scroll
+  scrollContent: { padding: 14, gap: 12 },
   aiBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: 12,
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 13, paddingVertical: 9, borderRadius: 12, borderWidth: 1,
   },
-  aiBadgeEmoji: { fontSize: 16 },
-  aiBadgeText: { fontSize: 13, fontWeight: "600" },
-  label: { fontSize: 14, fontWeight: "600", marginBottom: 8, marginTop: 12 },
+  aiBadgeText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
+
+  inputCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 8 },
+  inputLabel: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
   topicInput: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    minHeight: 80,
-    textAlignVertical: "top",
-    marginBottom: 4,
+    fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 22,
+    minHeight: 70, textAlignVertical: "top",
   },
-  chipRow: { gap: 8, paddingVertical: 4, paddingHorizontal: 2 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1.5,
-  },
-  chipText: { fontSize: 13, fontWeight: "600" },
-  levelRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  levelChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  levelChipText: { fontSize: 13, fontWeight: "500" },
-  previewCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    gap: 6,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  previewTitle: { fontSize: 14, fontWeight: "600", marginBottom: 4 },
-  previewItem: { fontSize: 13, lineHeight: 20 },
-  generateBtn: { marginTop: 16, borderRadius: 16, overflow: "hidden" },
-  generateBtnInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  generateBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
-  generatingHint: { textAlign: "center", fontSize: 13, marginTop: 12, lineHeight: 20 },
 
-  searchWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  searchInput: { flex: 1, fontSize: 15 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 8, padding: 32 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", textAlign: "center" },
-  emptySub: { fontSize: 14, textAlign: "center", lineHeight: 20 },
-  goGenerateBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  goGenerateBtnText: { fontSize: 15, fontWeight: "700" },
-  list: { padding: 16, gap: 12 },
-  noteCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 6,
-  },
+  sectionLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, paddingHorizontal: 2, marginTop: 4, marginBottom: 4 },
+  chipRow: { gap: 8, paddingVertical: 4 },
+  chip: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
+  chipText: { fontFamily: "Inter_500Medium", fontSize: 12 },
+
+  levelRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  levelChip: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  levelChipText: { fontFamily: "Inter_500Medium", fontSize: 12 },
+
+  previewCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 8 },
+  previewHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 4 },
+  previewTitle: { fontFamily: "Inter_700Bold", fontSize: 13 },
+  previewRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  previewItem: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1 },
+
+  generateBtn: { borderRadius: 13, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
+  generateBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
+  generatingHint: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", marginTop: 4 },
+
+  // Saved tab
+  searchWrap: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 1 },
+  searchInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 14 },
+
+  center: { flex: 1, justifyContent: "center", alignItems: "center", gap: 12, padding: 32 },
+  emptyIcon: { width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18, textAlign: "center" },
+  emptySub: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 20 },
+  goGenerateBtn: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 20, paddingVertical: 11, borderRadius: 11, marginTop: 4 },
+  goGenerateBtnText: { fontFamily: "Inter_700Bold", fontSize: 14 },
+
+  list: { padding: 14, gap: 11 },
+  noteCard: { borderRadius: 14, borderWidth: 1, padding: 14, gap: 6 },
   noteHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  subjectPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  subjectText: { fontSize: 11, fontWeight: "700" },
-  noteTime: { flex: 1, fontSize: 11 },
-  noteTitle: { fontSize: 16, fontWeight: "700" },
-  notePreview: { fontSize: 13, lineHeight: 19 },
-  noteWords: { fontSize: 11 },
+  subjectPill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20 },
+  subjectText: { fontFamily: "Inter_700Bold", fontSize: 11 },
+  noteTime: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 11 },
+  noteTitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  notePreview: { fontFamily: "Inter_400Regular", fontSize: 12, lineHeight: 18 },
+  noteWords: { fontFamily: "Inter_400Regular", fontSize: 11 },
 
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 12,
-  },
+  // Editor modal
+  modalHeader: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, gap: 12 },
   modalClose: { padding: 2 },
-  modalTitle: { flex: 1, fontSize: 17, fontWeight: "700" },
-  saveBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  saveBtnText: { fontSize: 14, fontWeight: "700" },
-  editTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  editContent: {
-    fontSize: 15,
-    lineHeight: 24,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
-    minHeight: 300,
-  },
-  wordBar: { fontSize: 12, paddingHorizontal: 20, paddingBottom: 8 },
-  bigSaveBtn: { margin: 20, borderRadius: 16, overflow: "hidden" },
-  bigSaveBtnInner: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  bigSaveBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  modalTitle: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 17 },
+  saveBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  saveBtnText: { fontFamily: "Inter_700Bold", fontSize: 13 },
+
+  editTitle: { fontFamily: "Inter_700Bold", fontSize: 20, paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
+  editContent: { fontFamily: "Inter_400Regular", fontSize: 15, lineHeight: 24, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8, minHeight: 300 },
+  wordBar: { fontFamily: "Inter_400Regular", fontSize: 12, paddingHorizontal: 20, paddingBottom: 8 },
+  bigSaveBtnWrap: { margin: 20, borderRadius: 13, overflow: "hidden" },
+  bigSaveBtn: { alignItems: "center", justifyContent: "center", paddingVertical: 15, flexDirection: "row", gap: 10 },
+  bigSaveBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
 });
