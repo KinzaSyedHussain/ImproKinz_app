@@ -2,6 +2,7 @@ import { Icon } from "@/components/Icon";
 import { PressableScale } from "@/components/PressableScale";
 import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { VideoView, useVideoPlayer } from "expo-video";
 import {
@@ -17,6 +18,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
+  Animated as RNAnimated,
   Image,
   Modal,
   Pressable,
@@ -663,6 +665,31 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
   });
   const [deleted, setDeleted] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [showHeartBurst, setShowHeartBurst] = useState(false);
+
+  // Double-tap detection
+  const lastTapRef = useRef<number>(0);
+  // Heart burst animation
+  const heartBurstScale = useRef(new RNAnimated.Value(0)).current;
+  const heartBurstOpacity = useRef(new RNAnimated.Value(0)).current;
+
+  const triggerHeartBurst = () => {
+    heartBurstScale.setValue(0);
+    heartBurstOpacity.setValue(1);
+    setShowHeartBurst(true);
+    RNAnimated.parallel([
+      RNAnimated.spring(heartBurstScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 120,
+        useNativeDriver: true,
+      }),
+      RNAnimated.sequence([
+        RNAnimated.delay(450),
+        RNAnimated.timing(heartBurstOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
+      ]),
+    ]).start(() => setShowHeartBurst(false));
+  };
 
   const activeReaction = user
     ? (Object.keys(reactionState) as ReactionKey[]).find((k) => reactionState[k].includes(user.uid))
@@ -674,8 +701,20 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
       Alert.alert("Sign in to react", "Create an account or sign in to react to posts.");
       return;
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    handleReaction("like");
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      // Double-tap: like + big heart burst
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerHeartBurst();
+      // Auto-like if not already liked
+      const alreadyLiked = user && reactionState.like.includes(user.uid);
+      if (!alreadyLiked) handleReaction("like");
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      handleReaction("like");
+    }
   };
 
   const handleLikeLongPress = () => {
@@ -933,13 +972,36 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
         <Text style={[styles.subject, { color: colors.primary }]}>#{post.subject}</Text>
       )}
 
-      {/* Image */}
+      {/* Image — double-tap triggers heart burst */}
       {!!imageSource && (
-        <Image
-          source={{ uri: imageSource }}
-          style={{ width: imageWidth, height: IMAGE_HEIGHT }}
-          resizeMode="cover"
-        />
+        <TouchableOpacity onPress={handleLikeTap} activeOpacity={1} style={{ position: "relative" }}>
+          <Image
+            source={{ uri: imageSource }}
+            style={{ width: imageWidth, height: IMAGE_HEIGHT }}
+            resizeMode="cover"
+          />
+          {showHeartBurst && (
+            <RNAnimated.View
+              style={[
+                styles.heartBurst,
+                {
+                  transform: [{ scale: heartBurstScale }],
+                  opacity: heartBurstOpacity,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <LinearGradient
+                colors={["#7C3AED", "#F59E0B"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heartBurstGradient}
+              >
+                <Icon name="heart" size={62} color="#fff" />
+              </LinearGradient>
+            </RNAnimated.View>
+          )}
+        </TouchableOpacity>
       )}
 
       {/* Video */}
@@ -970,8 +1032,16 @@ export function PostCard({ post, onRefresh, onDelete }: Props) {
           activeOpacity={0.7}
         >
           {activeReaction === "like" ? (
-            // Filled heart when "Like" is active
-            <Icon name="heart" size={20} color={colors.primary} />
+            // Purple-to-gold gradient pill with white heart
+            <View style={styles.gradientHeartWrap}>
+              <LinearGradient
+                colors={[colors.purpleStart, colors.primary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Icon name="heart" size={14} color="#fff" />
+            </View>
           ) : activeReaction ? (
             // Emoji for Insightful / Congrats
             <Text style={styles.activeReactionEmoji}>
@@ -1119,6 +1189,33 @@ const styles = StyleSheet.create({
 
   // Active reaction emoji in action bar
   activeReactionEmoji: { fontSize: 18 },
+
+  // Gradient heart button (when "like" is active)
+  gradientHeartWrap: {
+    width: 28,
+    height: 24,
+    borderRadius: 12,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Double-tap heart burst overlay
+  heartBurst: {
+    position: "absolute",
+    top: "50%" as any,
+    left: "50%" as any,
+    marginTop: -50,
+    marginLeft: -50,
+    zIndex: 10,
+  },
+  heartBurstGradient: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // Reaction picker modal
   pickerBackdrop: {

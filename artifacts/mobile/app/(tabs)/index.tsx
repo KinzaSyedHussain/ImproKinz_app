@@ -1,22 +1,10 @@
 import { Icon } from "@/components/Icon";
-import { SkeletonCard } from "@/components/SkeletonCard";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  collection,
-  getDocs,
-  limit,
-  query,
-  startAfter,
-  QueryDocumentSnapshot,
-  DocumentData,
-} from "firebase/firestore";
-import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Image,
+  Dimensions,
   Platform,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,356 +12,308 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Sidebar } from "@/components/Sidebar";
-import { Post, PostCard, normalizePost } from "@/components/PostCard";
-import { UserAvatar } from "@/components/UserAvatar";
-import { useColors } from "@/hooks/useColors";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
-import { AdBanner } from "@/components/AdBanner";
+import { useColors } from "@/hooks/useColors";
+import { UserAvatar } from "@/components/UserAvatar";
+import { CreditBalancePill } from "@/components/CreditUI";
 
-const POOL_SIZE = 60;
-const PAGE_SIZE = 12;
+const { width: W } = Dimensions.get("window");
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+const SUBJECT_COLORS: Record<string, [string, string]> = {
+  Math: ["#4F46E5", "#818CF8"],
+  Science: ["#059669", "#34D399"],
+  Biology: ["#16A34A", "#4ADE80"],
+  Physics: ["#0891B2", "#22D3EE"],
+  Chemistry: ["#D97706", "#FCD34D"],
+  History: ["#B45309", "#F59E0B"],
+  "Computer Science": ["#7C3AED", "#A78BFA"],
+  CS: ["#7C3AED", "#A78BFA"],
+  English: ["#DB2777", "#F472B6"],
+  Languages: ["#BE185D", "#F9A8D4"],
+  Art: ["#9333EA", "#C084FC"],
+  Business: ["#0369A1", "#38BDF8"],
+  Medicine: ["#DC2626", "#F87171"],
+};
+
+const SUBJECT_ICONS: Record<string, string> = {
+  Math: "calculator",
+  Science: "flask-conical",
+  Biology: "leaf",
+  Physics: "atom",
+  Chemistry: "test-tube",
+  History: "book-open",
+  "Computer Science": "code-2",
+  CS: "code-2",
+  English: "type",
+  Languages: "languages",
+  Art: "palette",
+  Business: "briefcase",
+  Medicine: "heart-pulse",
+};
+
+const TOOLS = [
+  { icon: "layers", label: "Flashcards", route: "/flashcards", color: "#4F46E5" },
+  { icon: "align-left", label: "Summarizer", route: "/summarizer", color: "#7C3AED" },
+  { icon: "check-square", label: "Quiz", route: "/quiz", color: "#D97706" },
+  { icon: "file-text", label: "Notes", route: "/notes", color: "#0891B2" },
+  { icon: "message-circle", label: "Chatbot", route: "/chatbot", color: "#059669" },
+  { icon: "calculator", label: "Calculator", route: "/calculator", color: "#DB2777" },
+];
+
+function greeting(name: string) {
+  const h = new Date().getHours();
+  const time = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  return `${time}, ${name.split(" ")[0]} 👋`;
+}
+
+function StudyGoalBar({ goal, done }: { goal: number; done: number }) {
+  const colors = useColors();
+  const pct = Math.min(1, goal > 0 ? done / goal : 0);
+  return (
+    <View style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={styles.goalHeader}>
+        <Icon name="target" size={16} color={colors.primary} />
+        <Text style={[styles.goalTitle, { color: colors.foreground }]}>Daily Goal</Text>
+        <Text style={[styles.goalCount, { color: colors.primary }]}>{done}/{goal} min</Text>
+      </View>
+      <View style={[styles.goalTrack, { backgroundColor: colors.secondary }]}>
+        <LinearGradient
+          colors={[colors.purpleStart, colors.primary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[styles.goalFill, { width: `${Math.round(pct * 100)}%` as any }]}
+        />
+      </View>
+      <Text style={[styles.goalSub, { color: colors.mutedForeground }]}>
+        {pct >= 1 ? "🎉 Goal reached! Keep going!" : `${goal - done} min left to hit your goal`}
+      </Text>
+    </View>
+  );
 }
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [feedAttempt, setFeedAttempt] = useState(0);
-  const [feedFilter, setFeedFilter] = useState<"all" | "question" | "note" | "progress" | "poll" | "subject">("all");
-  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const poolRef = useRef<Post[]>([]);
+  const { profile, user } = useAuth();
 
-  const loadPosts = () => {
-    setLoading(true);
-    setLoadError(null);
-    setFeedAttempt((attempt) => attempt + 1);
-  };
+  const [studiedToday, setStudiedToday] = useState(0); // will grow as user uses Focus
 
-  // Simple feed load: getDocs directly in useEffect
-  const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "";
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const res = await fetch(`${API_BASE}/api/posts`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const raw: any[] = json.posts || [];
-        const all: Post[] = raw.map((p) => {
-          try { return normalizePost(p.id || "", p); } catch { return null; }
-        }).filter((p): p is Post => p !== null);
-        all.sort((a, b) => b.createdAt - a.createdAt);
-        // Keep the feed intentional and study-first. Apply filters before paging.
-        const filtered = feedFilter === "all"
-          ? all
-          : feedFilter === "subject"
-          ? all.filter((post) => !!post.subject && (profile?.subjects || []).includes(post.subject))
-          : all.filter((post) => post.type === feedFilter);
-        const firstPage = filtered.slice(0, PAGE_SIZE);
-        poolRef.current = filtered.slice(PAGE_SIZE);
-        if (!cancelled) {
-          setPosts(firstPage);
-          setHasMore(filtered.length > PAGE_SIZE);
-          setLoadError(null);
-          setLoading(false);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setLoadError(e?.message || "Failed to load feed");
-          setLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    const timer = setTimeout(() => {
-      if (!cancelled) {
-        setLoadError("Feed load timed out.");
-        setLoading(false);
-      }
-    }, 8000);
-
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [feedAttempt, feedFilter, profile?.subjects?.join("|")]);
-
-  const loadMore = async () => {
-    if (!hasMore || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      if (poolRef.current.length > 0) {
-        const next = poolRef.current.slice(0, PAGE_SIZE);
-        poolRef.current = poolRef.current.slice(PAGE_SIZE);
-        setPosts((prev) => [...prev, ...next]);
-        setHasMore(poolRef.current.length > 0 || !!lastDocRef.current);
-        return;
-      }
-      // The API feed is intentionally capped and already filtered above.
-      // Do not append an unfiltered Firestore page to a filtered feed.
-      if (feedFilter !== "all") {
-        setHasMore(false);
-        return;
-      }
-      if (!lastDocRef.current) { setHasMore(false); return; }
-      const q = query(
-        collection(db, "community_posts"),
-        startAfter(lastDocRef.current),
-        limit(POOL_SIZE)
-      );
-      const snap = await getDocs(q);
-      if (!snap.docs.length) { setHasMore(false); return; }
-      lastDocRef.current = snap.docs[snap.docs.length - 1];
-      const more: Post[] = snap.docs.map((d) => normalizePost(d.id, d.data()));
-      const shuffled = shuffle(more);
-      const next = shuffled.slice(0, PAGE_SIZE);
-      poolRef.current = shuffled.slice(PAGE_SIZE);
-      setPosts((prev) => [...prev, ...next]);
-      setHasMore(shuffled.length > PAGE_SIZE || snap.docs.length === POOL_SIZE);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    // onSnapshot listener auto-refreshes; just briefly show spinner
-    setTimeout(() => setRefreshing(false), 800);
-  };
-
-  const topPad =
-    insets.top + (Platform.OS === "web" ? 67 : 0);
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: topPad,
-            backgroundColor: colors.card,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <TouchableOpacity onPress={() => setSidebarVisible(true)} style={styles.headerBtn}>
-          <Icon name="menu" size={22} color={colors.foreground} />
-        </TouchableOpacity>
-        <View style={styles.logoBrand}>
-          <Image
-            source={require("../../assets/images/logo_nobg.png")}
-            style={styles.logoImg}
-            resizeMode="contain"
-          />
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>ImproKinz</Text>
-        </View>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity
-          onPress={() => router.push("/search")}
-          style={styles.headerBtn}
-        >
-          <Icon name="search" size={22} color={colors.foreground} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => router.push("/create-post")}
-          style={[styles.createBtn, { backgroundColor: colors.primary }]}
-        >
-          <Icon name="plus" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+  const displayName = profile?.displayName || user?.displayName || "Learner";
+  const streak = (profile as any)?.streak ?? 0;
+  const xp = profile?.xp ?? 0;
+  const studyGoal: number = parseInt(String((profile as any)?.studyGoal ?? "30"), 10) || 30;
 
-      {loading ? (
-        <View style={{ paddingTop: 8 }}>
-          {loadError ? (
-            <View style={{ alignItems: "center", paddingVertical: 40, gap: 12 }}>
-              <Icon name="alert-circle" size={36} color="#EF4444" />
-              <Text style={{ color: colors.foreground, fontSize: 14, textAlign: "center" }}>
-                {loadError}
-              </Text>
-              <TouchableOpacity
-                style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => { setLoading(true); loadPosts(); }}
-              >
-                <Text style={{ color: "#fff" }}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            [1, 2, 3].map((i) => <SkeletonCard key={i} />)
-          )}
+  // Subjects — could be array (new) or single string (old)
+  const rawSubjects = (profile as any)?.subjects;
+  const subjects: string[] = Array.isArray(rawSubjects)
+    ? rawSubjects
+    : typeof rawSubjects === "string" && rawSubjects
+    ? [rawSubjects]
+    : ["Science", "Math", "History"]; // friendly default
+
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      contentContainerStyle={{ paddingBottom: botPad }}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Header ───────────────────────────────────────────── */}
+      <LinearGradient
+        colors={[colors.purpleEnd, colors.purpleStart]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.heroBg, { paddingTop: topPad + 16 }]}
+      >
+        <View style={styles.heroRow}>
+          <TouchableOpacity onPress={() => router.push("/profile" as any)}>
+            <UserAvatar photoURL={profile?.photoURL} displayName={displayName} size={44} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, paddingLeft: 12 }}>
+            <Text style={styles.heroGreeting} numberOfLines={1}>{greeting(displayName)}</Text>
+            <Text style={styles.heroSub}>Ready to study today?</Text>
+          </View>
+          <CreditBalancePill />
         </View>
-      ) : (
-        <FlatList
-          data={posts}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PostCard
-              post={item}
-              onRefresh={handleRefresh}
-              onDelete={(deletedId) => setPosts((prev) => prev.filter((p) => p.id !== deletedId))}
-            />
-          )}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: botPad }}
-          ListHeaderComponent={
-            <View>
+
+        {/* Stats row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statPill}>
+            <Text style={styles.statEmoji}>🔥</Text>
+            <Text style={styles.statVal}>{streak}</Text>
+            <Text style={styles.statLbl}>day streak</Text>
+          </View>
+          <View style={[styles.statDivider]} />
+          <View style={styles.statPill}>
+            <Text style={styles.statEmoji}>⭐</Text>
+            <Text style={styles.statVal}>{xp.toLocaleString()}</Text>
+            <Text style={styles.statLbl}>XP earned</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statPill}>
+            <Icon name="trophy" size={16} color="#F59E0B" />
+            <Text style={styles.statVal}>{Math.floor(xp / 100)}</Text>
+            <Text style={styles.statLbl}>treasures</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      <View style={styles.body}>
+        {/* Daily goal bar */}
+        <StudyGoalBar goal={studyGoal} done={studiedToday} />
+
+        {/* Subject bubbles */}
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Subjects</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bubblesRow}>
+          {subjects.map((subj) => {
+            const gradColors = SUBJECT_COLORS[subj] ?? (["#7C3AED", "#A78BFA"] as [string, string]);
+            const iconName = SUBJECT_ICONS[subj] ?? "book-open";
+            return (
               <TouchableOpacity
-                style={[styles.composer, { backgroundColor: colors.card, borderColor: colors.border }]}
-                onPress={() => router.push("/create-post")}
-                activeOpacity={0.7}
+                key={subj}
+                style={styles.bubbleWrap}
+                onPress={() => router.push({ pathname: "/(tabs)/community", params: { community: subj } })}
+                activeOpacity={0.8}
               >
-                <View style={styles.composerTop}>
-                  <UserAvatar photoURL={profile?.photoURL} displayName={profile?.displayName} size={38} />
-                  <Text style={[styles.composerPrompt, { color: colors.mutedForeground }]}>
-                    Share your study progress, notes, or ideas...
-                  </Text>
-                </View>
-                <View style={styles.composerFooter}>
-                  <View style={styles.composerActions}>
-                    <Icon name="image" size={18} color={colors.mutedForeground} />
-                    <Icon name="video" size={18} color={colors.mutedForeground} />
-                    <Icon name="file-text" size={18} color={colors.mutedForeground} />
-                    <Icon name="bar-chart-2" size={18} color={colors.mutedForeground} />
-                  </View>
-                  <View style={[styles.postMiniBtn, { backgroundColor: colors.primary }]}>
-                    <Text style={[styles.postMiniText, { color: colors.primaryForeground }]}>Post</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-                {([
-                  ["all", "For you"],
-                  ["question", "Questions"],
-                  ["note", "Notes"],
-                  ["progress", "Study logs"],
-                  ["poll", "Polls"],
-                  ["subject", "My subjects"],
-                ] as const).map(([value, label]) => (
-                  <TouchableOpacity
-                    key={value}
-                    onPress={() => setFeedFilter(value)}
-                    style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: feedFilter === value ? colors.primary : colors.muted,
-                        borderColor: feedFilter === value ? colors.primary : colors.border,
-                      },
-                    ]}
+                <View style={[styles.bubbleRing, { borderColor: gradColors[0] + "60" }]}>
+                  <LinearGradient
+                    colors={gradColors}
+                    style={styles.bubble}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                   >
-                    <Text style={{ color: feedFilter === value ? colors.primaryForeground : colors.mutedForeground, fontSize: 12, fontWeight: "600" }}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-              <AdBanner />
-            </View>
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.primary}
-            />
-          }
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.5}
-          scrollEnabled={!!posts.length}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Icon name="book-open" size={48} color={colors.mutedForeground} />
-              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
-                No posts yet
-              </Text>
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                Be the first to share a study note!
-              </Text>
-              <TouchableOpacity
-                style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
-                onPress={() => router.push("/create-post")}
-              >
-                <Text style={{ color: "#fff", fontFamily: undefined }}>
-                  Create Post
+                    <Icon name={iconName as any} size={24} color="#fff" />
+                  </LinearGradient>
+                </View>
+                <Text style={[styles.bubbleLabel, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {subj}
                 </Text>
               </TouchableOpacity>
+            );
+          })}
+          {/* Add subjects */}
+          <TouchableOpacity
+            style={styles.bubbleWrap}
+            onPress={() => router.push("/onboarding")}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.bubbleRing, { borderColor: colors.border }]}>
+              <View style={[styles.bubble, { backgroundColor: colors.card }]}>
+                <Icon name="plus" size={22} color={colors.mutedForeground} />
+              </View>
             </View>
-          }
-          ListFooterComponent={
-            loadingMore ? (
-              <ActivityIndicator
-                color={colors.primary}
-                style={{ paddingVertical: 16 }}
-              />
-            ) : null
-          }
-        />
-      )}
+            <Text style={[styles.bubbleLabel, { color: colors.mutedForeground }]}>Add</Text>
+          </TouchableOpacity>
+        </ScrollView>
 
-      <Sidebar visible={sidebarVisible} onClose={() => setSidebarVisible(false)} />
-    </View>
+        {/* Quick Start Focus */}
+        <TouchableOpacity
+          style={[styles.focusCTA, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push("/(tabs)/focus" as any)}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={[colors.purpleStart, colors.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.focusCTAIcon}
+          >
+            <Icon name="timer" size={20} color="#fff" />
+          </LinearGradient>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.focusCTATitle, { color: colors.foreground }]}>Start a Focus Session</Text>
+            <Text style={[styles.focusCTASub, { color: colors.mutedForeground }]}>
+              Set your timer, earn coins on completion
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
+
+        {/* AI Study Tools */}
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>AI Study Tools</Text>
+        <View style={styles.toolsGrid}>
+          {TOOLS.map((tool) => (
+            <TouchableOpacity
+              key={tool.label}
+              style={[styles.toolCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => router.push(tool.route as any)}
+              activeOpacity={0.78}
+            >
+              <View style={[styles.toolIcon, { backgroundColor: tool.color + "22" }]}>
+                <Icon name={tool.icon as any} size={22} color={tool.color} />
+              </View>
+              <Text style={[styles.toolLabel, { color: colors.foreground }]}>{tool.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Community CTA */}
+        <TouchableOpacity
+          style={[styles.communityCTA, { backgroundColor: colors.secondary }]}
+          onPress={() => router.push("/(tabs)/community" as any)}
+          activeOpacity={0.85}
+        >
+          <Icon name="users" size={20} color={colors.primary} />
+          <Text style={[styles.communityCTAText, { color: colors.primary }]}>
+            See what the community is studying →
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
+  heroBg: { paddingHorizontal: 18, paddingBottom: 22 },
+  heroRow: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
+  heroGreeting: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18 },
+  heroSub: { color: "rgba(255,255,255,0.7)", fontFamily: "Inter_400Regular", fontSize: 13, marginTop: 2 },
+  statsRow: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16 },
+  statPill: { flex: 1, alignItems: "center", gap: 2 },
+  statEmoji: { fontSize: 16 },
+  statVal: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16 },
+  statLbl: { color: "rgba(255,255,255,0.65)", fontFamily: "Inter_400Regular", fontSize: 10 },
+  statDivider: { width: 1, height: 32, backgroundColor: "rgba(255,255,255,0.2)" },
+
+  body: { paddingHorizontal: 16, paddingTop: 18, gap: 18 },
+
+  goalCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
+  goalHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  goalTitle: { fontFamily: "Inter_700Bold", fontSize: 14, flex: 1 },
+  goalCount: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  goalTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
+  goalFill: { height: 8, borderRadius: 4 },
+  goalSub: { fontFamily: "Inter_400Regular", fontSize: 12 },
+
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, marginBottom: -8 },
+
+  bubblesRow: { gap: 16, paddingVertical: 4, paddingHorizontal: 2 },
+  bubbleWrap: { alignItems: "center", gap: 7, width: 70 },
+  bubbleRing: { width: 64, height: 64, borderRadius: 32, borderWidth: 2.5, padding: 4 },
+  bubble: { flex: 1, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  bubbleLabel: { fontFamily: "Inter_500Medium", fontSize: 11, textAlign: "center" },
+
+  focusCTA: { flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 16, borderWidth: 1, padding: 15 },
+  focusCTAIcon: { width: 46, height: 46, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  focusCTATitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  focusCTASub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
+
+  toolsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  toolCard: {
+    width: (W - 32 - 10) / 2 - 0.5,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    gap: 8,
+    gap: 12,
   },
-  headerBtn: { padding: 4 },
-  logoBrand: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-  logoImg: {
-    width: 56,
-    height: 56,
-  },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 19 },
-  createBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  composer: { marginHorizontal: 12, marginBottom: 8, padding: 14, borderRadius: 16, borderWidth: 1 },
-  filterRow: { paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
-  filterChip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, borderWidth: 1 },
-  composerTop: { flexDirection: "row", alignItems: "center", gap: 10 },
-  composerPrompt: { flex: 1, fontSize: 13 },
-  composerFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 12 },
-  composerActions: { flexDirection: "row", gap: 14 },
-  postMiniBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
-  postMiniText: { fontSize: 12, fontWeight: "700" },
-  empty: { alignItems: "center", paddingTop: 80, gap: 12 },
-  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", paddingHorizontal: 32 },
-  emptyBtn: { marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  toolIcon: { width: 42, height: 42, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  toolLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, flex: 1 },
+
+  communityCTA: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 4 },
+  communityCTAText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
 });

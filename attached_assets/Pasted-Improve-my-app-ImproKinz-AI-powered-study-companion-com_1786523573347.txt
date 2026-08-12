@@ -1,0 +1,64 @@
+Improve my app "ImproKinz" (AI-powered study companion, companion app for
+my website improkinz.com). Brand meaning: "Kinz" = treasure. Design identity:
+royal purple + gold treasure theme, layout clean and minimal like Instagram.
+Work step by step and fix ALL errors before finishing.
+
+PART 1 — SIGNUP QUESTIONS + PAYWALL (new users)
+1. Welcome screen: ImproKinz logo, tagline "Your AI-Powered Study
+   Companion", Sign Up / Log In buttons.
+2. After signup, ask 4 personalization questions, one per screen with a
+   progress bar:
+   - What should we call you?
+   - Your level? (School / College / Self-learner)
+   - Favorite subjects? (multi-select chips: Math, Science, English, etc.)
+   - Daily study goal? (15 / 30 / 60 minutes)
+   Use answers to personalize home and suggest communities.
+3. After the questions, show the PAYWALL screen: premium benefits with
+   icons, big gold "Go Pro" price button, free plan note (limited sessions
+   + ads), "Restore purchases", "Maybe later", Terms + Privacy links.
+
+PART 2 — REVENUECAT
+1. Install RevenueCat SDK; ONE config file with placeholder
+   REVENUECAT_API_KEY for me to replace later.
+2. Initialize at launch with anonymous ID, link to account after signup.
+3. Products: "ImproKinz Pro" monthly + weekly option.
+4. Entitlements: Free = limited AI sessions + RevenueCat Ads banner;
+   Pro = unlimited, no ads, all AI tools.
+5. Purchase states: loading, success (gold coin confetti), error retry,
+   working restore purchases.
+
+PART 3 — COMMUNITY (study & learn together)
+1. Community tab: feed of posts where users share study tips, progress and
+   "study together" moments, organized by subject communities
+   (Math, Biology, English, etc.) that users can join.
+2. Post card: avatar, name, time, topic tag, text, optional image.
+3. GREAT LIKE BUTTON: heart fills with purple-to-gold gradient, small gold
+   sparkle burst + haptic on tap, animated count-up; double-tap a post =
+   big heart burst. Simple comment button too.
+4. Create post (+ button): text + optional image + topic tag picker.
+5. NO LEADERBOARD, no rankings, no follower counts anywhere. The community
+   is for encouragement, not competition.
+
+PART 4 — CUSTOM FOCUS TIMER
+1. Focus tab: user chooses their OWN time limit to focus: preset chips
+   (5 / 10 / 25 / 50 min) + custom minute picker.
+2. Clean circular countdown with gold progress ring, pause / resume /
+   end buttons.
+3. On completion: gold coin reward + small confetti + streak update.
+
+PART 5 — PURPLE + GOLD UI + PERSONAL PROGRESS
+1. Colors: warm white/ivory background; deep royal purple (#4C1D95-ish)
+   headers/primary buttons; gold (#D4AF37 / #F59E0B) accents, icons,
+   badges, sparing purple-to-gold gradients. Dark mode: purple-black + gold.
+2. Bottom tab bar, 5 line-icon tabs: Home, Community, + (create), Focus,
+   Profile.
+3. Home: circular subject bubbles with gold gradient rings, recent
+   sessions, coin balance + daily streak (treasure-chest icon).
+4. Profile: personal weekly study chart with gold bars, subscription
+   management, link to improkinz.com.
+5. 8pt spacing grid, 16px rounded cards, 1px light borders, skeleton
+   loaders, smooth transitions, friendly empty states.
+
+When done: run the app, fix all build/runtime errors, then give me a
+checklist of manual steps left (RevenueCat account + API key, store
+products, store submission).
