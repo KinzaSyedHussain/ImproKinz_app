@@ -1,6 +1,6 @@
 import { Icon } from "@/components/Icon";
 import { useRouter } from "expo-router";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,6 +20,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { db } from "@/lib/firebase";
 import { useColors } from "@/hooks/useColors";
 import { useSubscription } from "@/lib/revenuecat";
+import { useUser } from "@clerk/clerk-expo";
 
 const ALL_SUBJECTS = [
   "Math", "Science", "History", "English", "Physics",
@@ -38,9 +39,10 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile, user, logOut, refreshProfile } = useAuth();
   const { isConfigured, isSubscribed } = useSubscription();
   const { isDark, toggleTheme } = useTheme();
+  const { user: clerkUser } = useUser();
 
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
@@ -49,6 +51,7 @@ export default function SettingsScreen() {
   const [selectedLevel, setSelectedLevel] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -103,6 +106,41 @@ export default function SettingsScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This will permanently delete your account, profile, and all your data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Forever",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              // Remove Firestore profile
+              if (user?.uid) {
+                await deleteDoc(doc(db, "profiles", user.uid)).catch(() => {});
+              }
+              // Delete Clerk account (also invalidates session)
+              await clerkUser?.delete();
+              // Sign out local state
+              await logOut().catch(() => {});
+              router.replace("/auth");
+            } catch (e: any) {
+              Alert.alert(
+                "Delete failed",
+                e?.message || "Could not delete account. Please contact support@improkinz.com.",
+              );
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const S = StyleSheet.create({
@@ -399,6 +437,47 @@ export default function SettingsScreen() {
                   ]}
                 />
               </View>
+            </TouchableOpacity>
+          </View>
+
+          {/* Legal */}
+          <Text style={S.sectionTitle}>LEGAL</Text>
+          <View style={S.card}>
+            <TouchableOpacity style={S.themeRow} onPress={() => router.push("/privacy" as any)}>
+              <View style={S.themeLeft}>
+                <Icon name="shield" size={20} color={colors.primary} />
+                <Text style={S.themeLabel}>Privacy Policy</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 16 }} />
+            <TouchableOpacity style={S.themeRow} onPress={() => router.push("/terms" as any)}>
+              <View style={S.themeLeft}>
+                <Icon name="file-text" size={20} color={colors.primary} />
+                <Text style={S.themeLabel}>Terms of Service</Text>
+              </View>
+              <Icon name="chevron-right" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Danger Zone */}
+          <Text style={[S.sectionTitle, { color: "#EF4444" }]}>DANGER ZONE</Text>
+          <View style={[S.card, { borderColor: "#EF444433", borderWidth: 1 }]}>
+            <TouchableOpacity style={S.themeRow} onPress={handleDeleteAccount} disabled={deleting}>
+              <View style={S.themeLeft}>
+                <Icon name="trash-2" size={20} color="#EF4444" />
+                <View>
+                  <Text style={[S.themeLabel, { color: "#EF4444" }]}>
+                    {deleting ? "Deleting…" : "Delete Account"}
+                  </Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 11, marginTop: 2 }}>
+                    Permanently removes your account and all data
+                  </Text>
+                </View>
+              </View>
+              {deleting
+                ? <ActivityIndicator size="small" color="#EF4444" />
+                : <Icon name="chevron-right" size={20} color={colors.mutedForeground} />}
             </TouchableOpacity>
           </View>
 

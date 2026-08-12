@@ -1,5 +1,6 @@
 import { Icon } from "@/components/Icon";
 import * as Haptics from "expo-haptics";
+import { playSound } from "@/lib/sounds";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -138,6 +139,7 @@ export default function FocusScreen() {
     setCoinsEarned(coins);
     addXP(xpGain).catch(() => {});
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    playSound("focusComplete").catch(() => {});
 
     Animated.sequence([
       Animated.timing(coinAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
