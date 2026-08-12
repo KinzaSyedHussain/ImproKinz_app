@@ -15,259 +15,274 @@ import {
 import { useRouter } from "expo-router";
 import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
-import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
+import { LinearGradient } from "expo-linear-gradient";
 
 const { width: W } = Dimensions.get("window");
-const GOLD = "#F59E0B";
-const DARK = "#0D0B2B";
-const CARD = "#1A1740";
+
+const PURPLE = "#7C3AED";
+const GOLD   = "#F59E0B";
+const DARK   = "#0D0B2B";
+const CARD   = "#1A1740";
 const BORDER = "#2A2560";
-const TEXT = "#FFFFFF";
-const MUTED = "#9CA3AF";
+const TEXT   = "#FFFFFF";
+const MUTED  = "#9CA3AF";
 
-/* ── Data ──────────────────────────────────────────────────── */
-const FIELDS = [
-  { label: "Science", icon: "flask" as const },
-  { label: "Mathematics", icon: "calculator" as const },
-  { label: "Computer Science", icon: "code-slash" as const },
-  { label: "Medicine", icon: "medkit" as const },
-  { label: "Engineering", icon: "construct" as const },
-  { label: "Business", icon: "briefcase" as const },
-  { label: "Languages", icon: "language" as const },
-  { label: "History", icon: "library" as const },
-  { label: "Art & Design", icon: "color-palette" as const },
-  { label: "Law", icon: "scale" as const },
-  { label: "Psychology", icon: "bulb" as const },
-  { label: "Other", icon: "ellipsis-horizontal-circle" as const },
-];
-
+/* ── Data ─────────────────────────────────────────────────── */
 const LEVELS = [
-  { label: "High School", icon: "school" as const },
-  { label: "Undergraduate", icon: "book" as const },
-  { label: "Postgraduate", icon: "ribbon" as const },
-  { label: "Self-Learner", icon: "bulb" as const },
-  { label: "Professional", icon: "briefcase" as const },
+  { label: "School",       sub: "Middle / High school",     emoji: "🏫" },
+  { label: "College",      sub: "University / College",     emoji: "🎓" },
+  { label: "Self-learner", sub: "Learning on my own",       emoji: "🌱" },
 ];
 
-const GOALS = [
-  { label: "Pass my exams", icon: "checkmark-circle" as const },
-  { label: "Get better grades", icon: "trending-up" as const },
-  { label: "Learn a new skill", icon: "rocket" as const },
-  { label: "Prepare for a career", icon: "briefcase" as const },
-  { label: "Stay curious", icon: "star" as const },
+const ALL_SUBJECTS = [
+  "Math", "Science", "Biology", "Physics", "Chemistry",
+  "History", "Computer Science", "English", "Languages",
+  "Art & Design", "Business", "Medicine", "Law", "Psychology",
 ];
 
-const REASONS = [
-  { label: "Pass my exams", icon: "school" as const },
-  { label: "Improve my grades", icon: "trending-up" as const },
-  { label: "Build better study habits", icon: "time" as const },
-  { label: "Learn faster with AI", icon: "sparkles" as const },
-  { label: "Prepare for my career", icon: "briefcase" as const },
+const DAILY_GOALS = [
+  { label: "15 min", value: "15", emoji: "⚡" },
+  { label: "30 min", value: "30", emoji: "🎯" },
+  { label: "60 min", value: "60", emoji: "🔥" },
+  { label: "2+ hrs",  value: "120", emoji: "🏆" },
 ];
 
-const STUDY_TIMES = [
-  { label: "Less than 30 minutes", icon: "flash" as const },
-  { label: "30–60 minutes", icon: "time" as const },
-  { label: "1–2 hours", icon: "hourglass" as const },
-  { label: "More than 2 hours", icon: "trophy" as const },
-];
+const TOTAL = 4;
 
-/* ── Step indicator ──────────────────────────────────────────── */
-function StepDots({ total, current }: { total: number; current: number }) {
+/* ── Progress bar ─────────────────────────────────────────── */
+function ProgressBar({ step }: { step: number }) {
+  const pct = ((step + 1) / TOTAL) * 100;
   return (
-    <View style={styles.dots}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[
-            styles.dot,
-            i === current && styles.dotActive,
-            i < current && styles.dotDone,
-          ]}
-        />
-      ))}
+    <View style={styles.progressTrack}>
+      <LinearGradient
+        colors={[PURPLE, GOLD]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[styles.progressFill, { width: `${pct}%` as any }]}
+      />
     </View>
   );
 }
 
-/* ── Option pill ─────────────────────────────────────────────── */
-function Pill({
-  label,
-  icon,
-  selected,
-  onPress,
-}: {
-  label: string;
-  icon: React.ComponentProps<typeof Ionicons>["name"];
-  selected: boolean;
-  onPress: () => void;
-}) {
+/* ── Chip ──────────────────────────────────────────────────── */
+function Chip({ label, selected, onPress, emoji }: { label: string; selected: boolean; onPress: () => void; emoji?: string }) {
   return (
     <TouchableOpacity
-      style={[styles.pill, selected && styles.pillSelected]}
+      style={[styles.chip, selected && styles.chipSelected]}
       onPress={onPress}
-      activeOpacity={0.75}
+      activeOpacity={0.78}
     >
-      <Ionicons name={icon} size={18} color={selected ? DARK : GOLD} />
-      <Text style={[styles.pillText, selected && styles.pillTextSelected]}>
-        {label}
-      </Text>
+      {emoji && <Text style={styles.chipEmoji}>{emoji}</Text>}
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-/* ── Main ────────────────────────────────────────────────────── */
+/* ── Step 0: Name ──────────────────────────────────────────── */
+function StepName({ nickname, setNickname }: { nickname: string; setNickname: (v: string) => void }) {
+  return (
+    <View style={styles.stepWrap}>
+      <Text style={styles.stepEmoji}>👋</Text>
+      <Text style={styles.stepTitle}>Hey there!</Text>
+      <Text style={styles.stepSub}>What should we call you?</Text>
+      <TextInput
+        style={styles.textInput}
+        placeholder="Your name or nickname"
+        placeholderTextColor={MUTED}
+        value={nickname}
+        onChangeText={setNickname}
+        autoFocus
+        maxLength={30}
+        returnKeyType="done"
+        selectionColor={GOLD}
+      />
+    </View>
+  );
+}
+
+/* ── Step 1: Level ─────────────────────────────────────────── */
+function StepLevel({ level, setLevel }: { level: string; setLevel: (v: string) => void }) {
+  return (
+    <View style={styles.stepWrap}>
+      <Text style={styles.stepEmoji}>🎓</Text>
+      <Text style={styles.stepTitle}>Your level?</Text>
+      <Text style={styles.stepSub}>We'll tailor your experience to match.</Text>
+      <View style={styles.levelGrid}>
+        {LEVELS.map((l) => (
+          <TouchableOpacity
+            key={l.label}
+            style={[styles.levelCard, level === l.label && styles.levelCardSelected]}
+            onPress={() => setLevel(l.label)}
+            activeOpacity={0.78}
+          >
+            <Text style={styles.levelEmoji}>{l.emoji}</Text>
+            <Text style={[styles.levelLabel, level === l.label && styles.levelLabelSelected]}>{l.label}</Text>
+            <Text style={styles.levelSub}>{l.sub}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/* ── Step 2: Subjects ──────────────────────────────────────── */
+function StepSubjects({ subjects, toggle }: { subjects: string[]; toggle: (s: string) => void }) {
+  return (
+    <View style={styles.stepWrap}>
+      <Text style={styles.stepEmoji}>📚</Text>
+      <Text style={styles.stepTitle}>Favorite subjects?</Text>
+      <Text style={styles.stepSub}>Pick everything you study. We'll personalise your feed.</Text>
+      <View style={styles.chipGrid}>
+        {ALL_SUBJECTS.map((s) => (
+          <Chip key={s} label={s} selected={subjects.includes(s)} onPress={() => toggle(s)} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/* ── Step 3: Daily goal ─────────────────────────────────────── */
+function StepGoal({ goal, setGoal }: { goal: string; setGoal: (v: string) => void }) {
+  return (
+    <View style={styles.stepWrap}>
+      <Text style={styles.stepEmoji}>⏱️</Text>
+      <Text style={styles.stepTitle}>Daily study goal?</Text>
+      <Text style={styles.stepSub}>How long do you want to study each day?</Text>
+      <View style={styles.goalGrid}>
+        {DAILY_GOALS.map((g) => (
+          <TouchableOpacity
+            key={g.value}
+            style={[styles.goalCard, goal === g.value && styles.goalCardSelected]}
+            onPress={() => setGoal(g.value)}
+            activeOpacity={0.78}
+          >
+            <Text style={styles.goalEmoji}>{g.emoji}</Text>
+            <Text style={[styles.goalLabel, goal === g.value && styles.goalLabelSelected]}>{g.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/* ── Main ─────────────────────────────────────────────────── */
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user, profile, refreshProfile, loadProfileByClerkId } = useAuth();
+  const { user, profile, loadProfileByClerkId } = useAuth();
   const { userId: clerkUserId } = useClerkAuth();
 
   const [step, setStep] = useState(0);
-  const [field, setField] = useState("");
-  const [level, setLevel] = useState("");
-  const [goal, setGoal] = useState("");
   const [nickname, setNickname] = useState("");
-  const [surveyReason, setSurveyReason] = useState("");
-  const [studyTime, setStudyTime] = useState("");
+  const [level, setLevel] = useState("");
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [dailyGoal, setDailyGoal] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  const TOTAL = 6;
-
   React.useEffect(() => {
-    AsyncStorage.getItem("pending_onboarding_nickname").then((value) => {
-      if (value) setNickname(value);
-    }).catch(() => {});
+    AsyncStorage.getItem("pending_onboarding_nickname").then((v) => { if (v) setNickname(v); }).catch(() => {});
   }, []);
 
   const animateStep = (next: () => void) => {
     Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start();
-    setTimeout(next, 180);
+    setTimeout(next, 150);
   };
 
-  const goNext = () => {
-    if (step < TOTAL - 1) animateStep(() => setStep((s) => s + 1));
-  };
+  const goNext = () => { if (step < TOTAL - 1) animateStep(() => setStep((s) => s + 1)); };
+  const goBack = () => { if (step > 0) animateStep(() => setStep((s) => s - 1)); };
 
-  const goBack = () => {
-    if (step > 0) animateStep(() => setStep((s) => s - 1));
+  const toggleSubject = (s: string) => {
+    setSubjects((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
   };
 
   const canContinue = () => {
     if (step === 0) return nickname.trim().length > 0;
-    if (step === 1) return field !== "";
-    if (step === 2) return level !== "";
-    if (step === 3) return goal !== "";
-    if (step === 4) return surveyReason !== "";
-    if (step === 5) return studyTime !== "";
+    if (step === 1) return level !== "";
+    if (step === 2) return subjects.length > 0;
+    if (step === 3) return dailyGoal !== "";
     return false;
   };
 
   const handleFinish = async () => {
     const uid = user?.uid ?? profile?.uid ?? clerkUserId;
-    if (!uid) {
-      setSaveError("Your account is still loading. Please wait a moment and try again.");
-      return;
-    }
+    if (!uid) { setSaveError("Account still loading. Wait a moment and try again."); return; }
     setSaving(true);
     setSaveError("");
     try {
-      // Always provide a concrete displayName — never undefined/empty
       const displayName = nickname.trim() || profile?.displayName || "Learner";
-      const payload = {
+      await setDoc(doc(db, "profiles", uid), {
         displayName,
-        subjects: [field],
         level,
-        goal,
-        surveyReason,
-        studyTime,
+        subjects,
+        studyGoal: dailyGoal,
         onboardingComplete: true,
         updatedAt: serverTimestamp(),
-      };
-      await setDoc(doc(db, "profiles", uid), payload, { merge: true });
+      }, { merge: true });
       await AsyncStorage.removeItem("pending_onboarding_nickname").catch(() => {});
-      // loadProfileByClerkId works regardless of Firebase auth state
-      // (refreshProfile silently does nothing when Firebase user is null)
       await loadProfileByClerkId(uid);
       router.replace("/paywall?fromOnboarding=1");
     } catch (e) {
       console.error("Onboarding save error:", e);
-      setSaveError("We couldn't save your preferences. Please try again.");
+      setSaveError("Couldn't save preferences. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
+  const isLast = step === TOTAL - 1;
+
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Top bar */}
+          {/* Top nav */}
           <View style={styles.topBar}>
             {step > 0 ? (
               <TouchableOpacity onPress={goBack} style={styles.backBtn}>
-                <Ionicons name="arrow-back" size={22} color={MUTED} />
+                <Text style={{ color: MUTED, fontSize: 24 }}>‹</Text>
               </TouchableOpacity>
             ) : (
-              <View style={{ width: 38 }} />
+              <View style={{ width: 36 }} />
             )}
-            <StepDots total={TOTAL} current={step} />
-            <View style={{ width: 38 }} />
+            <ProgressBar step={step} />
+            <Text style={styles.stepCount}>{step + 1}/{TOTAL}</Text>
           </View>
 
-          {/* Content */}
+          {/* Step content */}
           <Animated.View style={{ opacity: fadeAnim }}>
-            {step === 0 && (
-              <StepName nickname={nickname} setNickname={setNickname} />
-            )}
-            {step === 1 && (
-              <StepField field={field} setField={setField} />
-            )}
-            {step === 2 && (
-              <StepLevel level={level} setLevel={setLevel} />
-            )}
-            {step === 3 && (
-              <StepGoal goal={goal} setGoal={setGoal} />
-            )}
-            {step === 4 && (
-              <StepSurveyReason reason={surveyReason} setReason={setSurveyReason} />
-            )}
-            {step === 5 && (
-              <StepStudyTime studyTime={studyTime} setStudyTime={setStudyTime} />
-            )}
+            {step === 0 && <StepName nickname={nickname} setNickname={setNickname} />}
+            {step === 1 && <StepLevel level={level} setLevel={setLevel} />}
+            {step === 2 && <StepSubjects subjects={subjects} toggle={toggleSubject} />}
+            {step === 3 && <StepGoal goal={dailyGoal} setGoal={setDailyGoal} />}
           </Animated.View>
 
           {/* CTA */}
           <TouchableOpacity
             style={[styles.cta, !canContinue() && styles.ctaDisabled]}
-            onPress={step === TOTAL - 1 ? handleFinish : goNext}
+            onPress={isLast ? handleFinish : goNext}
             disabled={!canContinue() || saving}
             activeOpacity={0.85}
           >
             {saving ? (
               <ActivityIndicator color={DARK} />
             ) : (
-              <Text style={styles.ctaText}>
-                {step === TOTAL - 1 ? "Let's go! 🚀" : "Continue"}
-              </Text>
+              <Text style={styles.ctaText}>{isLast ? "Let's go! 🚀" : "Continue"}</Text>
             )}
           </TouchableOpacity>
+
           {!!saveError && <Text style={styles.saveError}>{saveError}</Text>}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -275,342 +290,91 @@ export default function OnboardingScreen() {
   );
 }
 
-/* ── Step 0: Name ──────────────────────────────────────────── */
-function StepName({
-  nickname,
-  setNickname,
-}: {
-  nickname: string;
-  setNickname: (v: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="hand-right" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>Hey there! 👋</Text>
-      <Text style={styles.stepSub}>
-        What should we call you? You can always change this later.
-      </Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Your nickname or name"
-        placeholderTextColor={MUTED}
-        value={nickname}
-        onChangeText={setNickname}
-        autoFocus
-        maxLength={30}
-        returnKeyType="done"
-      />
-    </View>
-  );
-}
-
-/* ── Step 1: Field ─────────────────────────────────────────── */
-function StepField({
-  field,
-  setField,
-}: {
-  field: string;
-  setField: (v: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="school" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>What do you study?</Text>
-      <Text style={styles.stepSub}>Pick your main field of study.</Text>
-      <View style={styles.pillGrid}>
-        {FIELDS.map((f) => (
-          <Pill
-            key={f.label}
-            label={f.label}
-            icon={f.icon}
-            selected={field === f.label}
-            onPress={() => setField(f.label)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ── Step 2: Level ─────────────────────────────────────────── */
-function StepLevel({
-  level,
-  setLevel,
-}: {
-  level: string;
-  setLevel: (v: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="bar-chart" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>What's your level?</Text>
-      <Text style={styles.stepSub}>We'll personalise your experience accordingly.</Text>
-      <View style={styles.levelList}>
-        {LEVELS.map((l) => (
-          <TouchableOpacity
-            key={l.label}
-            style={[styles.levelRow, level === l.label && styles.levelRowSelected]}
-            onPress={() => setLevel(l.label)}
-            activeOpacity={0.75}
-          >
-            <View
-              style={[
-                styles.levelIcon,
-                level === l.label && styles.levelIconSelected,
-              ]}
-            >
-              <Ionicons
-                name={l.icon}
-                size={20}
-                color={level === l.label ? DARK : GOLD}
-              />
-            </View>
-            <Text
-              style={[
-                styles.levelLabel,
-                level === l.label && styles.levelLabelSelected,
-              ]}
-            >
-              {l.label}
-            </Text>
-            {level === l.label && (
-              <Ionicons name="checkmark-circle" size={20} color={GOLD} />
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ── Step 3: Goal ──────────────────────────────────────────── */
-function StepGoal({
-  goal,
-  setGoal,
-}: {
-  goal: string;
-  setGoal: (v: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="trophy" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>What's your main goal?</Text>
-      <Text style={styles.stepSub}>Tell us what you're aiming for.</Text>
-      <View style={styles.levelList}>
-        {GOALS.map((g) => (
-          <TouchableOpacity
-            key={g.label}
-            style={[styles.levelRow, goal === g.label && styles.levelRowSelected]}
-            onPress={() => setGoal(g.label)}
-            activeOpacity={0.75}
-          >
-            <View
-              style={[
-                styles.levelIcon,
-                goal === g.label && styles.levelIconSelected,
-              ]}
-            >
-              <Ionicons
-                name={g.icon}
-                size={20}
-                color={goal === g.label ? DARK : GOLD}
-              />
-            </View>
-            <Text
-              style={[
-                styles.levelLabel,
-                goal === g.label && styles.levelLabelSelected,
-              ]}
-            >
-              {g.label}
-            </Text>
-            {goal === g.label && (
-              <Ionicons name="checkmark-circle" size={20} color={GOLD} />
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function StepSurveyReason({
-  reason,
-  setReason,
-}: {
-  reason: string;
-  setReason: (value: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="sparkles" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>Why are you here?</Text>
-      <Text style={styles.stepSub}>This helps us make your study space more useful.</Text>
-      <View style={styles.levelList}>
-        {REASONS.map((item) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[styles.levelRow, reason === item.label && styles.levelRowSelected]}
-            onPress={() => setReason(item.label)}
-            activeOpacity={0.75}
-          >
-            <View style={[styles.levelIcon, reason === item.label && styles.levelIconSelected]}>
-              <Ionicons name={item.icon} size={20} color={reason === item.label ? DARK : GOLD} />
-            </View>
-            <Text style={[styles.levelLabel, reason === item.label && styles.levelLabelSelected]}>
-              {item.label}
-            </Text>
-            {reason === item.label && <Ionicons name="checkmark-circle" size={20} color={GOLD} />}
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function StepStudyTime({
-  studyTime,
-  setStudyTime,
-}: {
-  studyTime: string;
-  setStudyTime: (value: string) => void;
-}) {
-  return (
-    <View style={styles.stepWrap}>
-      <View style={styles.iconCircle}>
-        <Ionicons name="time" size={34} color={GOLD} />
-      </View>
-      <Text style={styles.stepTitle}>How much do you study?</Text>
-      <Text style={styles.stepSub}>We'll use this to shape your daily study rhythm.</Text>
-      <View style={styles.levelList}>
-        {STUDY_TIMES.map((item) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[styles.levelRow, studyTime === item.label && styles.levelRowSelected]}
-            onPress={() => setStudyTime(item.label)}
-            activeOpacity={0.75}
-          >
-            <View style={[styles.levelIcon, studyTime === item.label && styles.levelIconSelected]}>
-              <Ionicons name={item.icon} size={20} color={studyTime === item.label ? DARK : GOLD} />
-            </View>
-            <Text style={[styles.levelLabel, studyTime === item.label && styles.levelLabelSelected]}>
-              {item.label}
-            </Text>
-            {studyTime === item.label && <Ionicons name="checkmark-circle" size={20} color={GOLD} />}
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/* ── Styles ─────────────────────────────────────────────────── */
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: DARK },
-  scroll: { paddingHorizontal: 20, paddingBottom: 40 },
+  scroll: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 40, gap: 24 },
 
-  topBar: {
+  topBar: { flexDirection: "row", alignItems: "center", gap: 12 },
+  backBtn: { width: 36, alignItems: "center" },
+  progressTrack: { flex: 1, height: 6, backgroundColor: BORDER, borderRadius: 3, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3 },
+  stepCount: { color: MUTED, fontSize: 12, fontFamily: undefined, minWidth: 30, textAlign: "right" },
+
+  stepWrap: { gap: 12 },
+  stepEmoji: { fontSize: 44, textAlign: "center" },
+  stepTitle: { color: TEXT, fontSize: 28, fontWeight: "700", textAlign: "center" },
+  stepSub: { color: MUTED, fontSize: 15, textAlign: "center", lineHeight: 22 },
+
+  textInput: {
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: TEXT,
+    fontSize: 16,
+    marginTop: 8,
+  },
+
+  levelGrid: { gap: 12, marginTop: 4 },
+  levelCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    marginBottom: 8,
+    gap: 14,
+    backgroundColor: CARD,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    padding: 16,
   },
-  backBtn: { padding: 6 },
-  skipBtn: { padding: 6 },
-  skipText: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 14 },
+  levelCardSelected: { borderColor: GOLD, backgroundColor: GOLD + "18" },
+  levelEmoji: { fontSize: 26 },
+  levelLabel: { color: TEXT, fontSize: 16, fontWeight: "700", flex: 1 },
+  levelLabelSelected: { color: GOLD },
+  levelSub: { color: MUTED, fontSize: 12 },
 
-  dots: { flexDirection: "row", gap: 6 },
-  dot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: BORDER,
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    backgroundColor: CARD,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  dotActive: { backgroundColor: GOLD, width: 20 },
-  dotDone: { backgroundColor: "#4C3FA0" },
+  chipSelected: { borderColor: GOLD, backgroundColor: GOLD + "22" },
+  chipEmoji: { fontSize: 14 },
+  chipText: { color: MUTED, fontSize: 13, fontWeight: "600" },
+  chipTextSelected: { color: GOLD },
 
-  stepWrap: { paddingTop: 24, paddingBottom: 24 },
-  iconCircle: {
-    width: 68, height: 68, borderRadius: 34,
-    backgroundColor: "#2A1F5E",
-    borderWidth: 2, borderColor: GOLD,
-    alignItems: "center", justifyContent: "center",
-    marginBottom: 20, alignSelf: "center",
+  goalGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4, justifyContent: "center" },
+  goalCard: {
+    width: (W - 44 - 12) / 2,
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: CARD,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    paddingVertical: 20,
   },
-  stepTitle: {
-    color: TEXT, fontFamily: "Inter_700Bold",
-    fontSize: 26, textAlign: "center", marginBottom: 8,
-  },
-  stepSub: {
-    color: MUTED, fontFamily: "Inter_400Regular",
-    fontSize: 14, textAlign: "center", lineHeight: 20,
-    marginBottom: 24,
-  },
-
-  input: {
-    backgroundColor: CARD, borderRadius: 14,
-    borderWidth: 1.5, borderColor: BORDER,
-    color: TEXT, fontFamily: "Inter_400Regular",
-    fontSize: 16, paddingHorizontal: 16, paddingVertical: 14,
-  },
-
-  pillGrid: {
-    flexDirection: "row", flexWrap: "wrap", gap: 10,
-    justifyContent: "center",
-  },
-  pill: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    borderRadius: 24, paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: CARD, borderWidth: 1.5, borderColor: BORDER,
-  },
-  pillSelected: { backgroundColor: GOLD, borderColor: GOLD },
-  pillText: {
-    color: TEXT, fontFamily: "Inter_500Medium", fontSize: 13,
-  },
-  pillTextSelected: { color: DARK, fontFamily: "Inter_600SemiBold" },
-
-  levelList: { gap: 10 },
-  levelRow: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: CARD, borderRadius: 14,
-    borderWidth: 1.5, borderColor: BORDER,
-    paddingHorizontal: 16, paddingVertical: 14,
-  },
-  levelRowSelected: { borderColor: GOLD, backgroundColor: "#1C1550" },
-  levelIcon: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: "#2A1F5E",
-    alignItems: "center", justifyContent: "center",
-  },
-  levelIconSelected: { backgroundColor: GOLD },
-  levelLabel: {
-    flex: 1, color: TEXT,
-    fontFamily: "Inter_500Medium", fontSize: 15,
-  },
-  levelLabelSelected: { fontFamily: "Inter_600SemiBold" },
+  goalCardSelected: { borderColor: GOLD, backgroundColor: GOLD + "18" },
+  goalEmoji: { fontSize: 30 },
+  goalLabel: { color: TEXT, fontSize: 16, fontWeight: "700" },
+  goalLabelSelected: { color: GOLD },
 
   cta: {
-    backgroundColor: GOLD, borderRadius: 14,
-    paddingVertical: 16, alignItems: "center",
+    backgroundColor: GOLD,
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: "center",
     marginTop: 8,
   },
   ctaDisabled: { opacity: 0.4 },
-  ctaText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 17 },
-  saveError: {
-    color: "#FCA5A5",
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-    marginTop: 12,
-  },
+  ctaText: { color: DARK, fontSize: 17, fontWeight: "700" },
+  saveError: { color: "#EF4444", fontSize: 13, textAlign: "center" },
 });
