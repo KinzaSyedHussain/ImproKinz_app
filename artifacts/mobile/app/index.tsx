@@ -39,22 +39,28 @@ const MESSAGES = [
 ];
 
 export default function Root() {
-  const { user, loading, configured } = useAuth();
+  const { user, profile, loading, configured } = useAuth();
   const { isSignedIn } = useClerkAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (loading) return;
     if (!configured) return;
+    // If authenticated but profile hasn't loaded from Firestore yet, wait a bit more
+    const isAuthenticated = !!user || !!isSignedIn;
+    if (isAuthenticated && profile === undefined) return;
 
     const t = setTimeout(() => {
       // Clerk session exists but Firebase hasn't bridged yet — still signed in
       const isAuthenticated = !!user || !!isSignedIn;
       if (isAuthenticated) {
-        // Onboarding belongs to the completed signup flow. Existing sign-ins
-        // should always go directly to the app, even if their profile is old
-        // or still loading from Firestore.
-        router.replace("/(tabs)");
+        // Route new accounts (profile loaded, onboarding not done) to onboarding.
+        // Null profile means Firebase isn't configured or still loading — go to app.
+        if (profile !== null && !profile.onboardingComplete) {
+          router.replace("/onboarding");
+        } else {
+          router.replace("/(tabs)");
+        }
       } else {
         router.replace("/auth");
       }

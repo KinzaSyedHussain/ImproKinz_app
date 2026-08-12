@@ -61,6 +61,8 @@ function RootLayoutNav() {
       <Stack.Screen name="onboarding" options={{ animation: "fade" }} />
       <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="study-hub" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }

@@ -561,20 +561,33 @@ export default function RegisterScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  style={styles.legalConsent}
-                  onPress={() => setLegalAccepted((accepted) => !accepted)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.checkbox, legalAccepted && styles.checkboxSelected]}>
-                    {legalAccepted && <Text style={styles.checkboxMark}>✓</Text>}
-                  </View>
+                <View style={styles.legalConsent}>
+                  <TouchableOpacity
+                    onPress={() => setLegalAccepted((accepted) => !accepted)}
+                    activeOpacity={0.8}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <View style={[styles.checkbox, legalAccepted && styles.checkboxSelected]}>
+                      {legalAccepted && <Text style={styles.checkboxMark}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
                   <Text style={styles.legalConsentText}>
-                    I agree to the <Text style={styles.legalLink}>Terms of Service</Text>
+                    I agree to the{" "}
+                    <Text
+                      style={styles.legalLink}
+                      onPress={() => router.push("/terms" as any)}
+                    >
+                      Terms of Service
+                    </Text>
                     {" "}and{" "}
-                    <Text style={styles.legalLink}>Privacy Policy</Text>.
+                    <Text
+                      style={styles.legalLink}
+                      onPress={() => router.push("/privacy" as any)}
+                    >
+                      Privacy Policy
+                    </Text>.
                   </Text>
-                </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   onPress={handleRegister}
