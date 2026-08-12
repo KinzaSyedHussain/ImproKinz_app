@@ -60,10 +60,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="community"
+        name="groups"
         options={{
-          title: "Community",
-          tabBarIcon: lucideTab("users"),
+          title: "Groups",
+          tabBarIcon: lucideTab("users-round"),
         }}
       />
       {/* Centre create button */}
@@ -90,10 +90,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="focus"
+        name="youtube"
         options={{
-          title: "Focus",
-          tabBarIcon: lucideTab("timer"),
+          title: "YouTube",
+          tabBarIcon: lucideTab("youtube"),
         }}
       />
       <Tabs.Screen
@@ -103,7 +103,9 @@ export default function TabLayout() {
           tabBarIcon: lucideTab("user"),
         }}
       />
-      {/* Keep old screens accessible but hidden from tab bar */}
+      {/* Hidden from tab bar — accessible via router.push */}
+      <Tabs.Screen name="focus" options={{ href: null }} />
+      <Tabs.Screen name="community" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
