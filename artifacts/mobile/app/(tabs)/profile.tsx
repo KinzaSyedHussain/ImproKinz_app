@@ -45,7 +45,7 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile, isAdmin } = useAuth();
 
   const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -306,6 +306,18 @@ export default function ProfileScreen() {
                   <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Posts</Text>
                 </View>
               </View>
+
+              {/* Admin Panel — only visible to admins */}
+              {isAdmin && (
+                <TouchableOpacity
+                  style={[styles.adminPanelBtn, { backgroundColor: "#EF444422", borderColor: "#EF444444" }]}
+                  onPress={() => router.push("/admin")}
+                >
+                  <Icon name="shield" size={15} color="#EF4444" />
+                  <Text style={[styles.adminPanelText, { color: "#EF4444" }]}>Admin Panel</Text>
+                  <Icon name="chevron-right" size={14} color="#EF444488" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* ── XP / Streak ── */}
@@ -489,4 +501,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  adminPanelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  adminPanelText: { fontFamily: "Inter_600SemiBold", fontSize: 14, flex: 1 },
 });

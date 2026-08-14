@@ -71,6 +71,8 @@ function RootLayoutNav() {
         name="create-opportunity"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+      <Stack.Screen name="group/[id]" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen name="admin" options={{ animation: "slide_from_right" }} />
     </Stack>
   );
 }
