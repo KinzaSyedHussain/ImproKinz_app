@@ -151,6 +151,17 @@ service cloud.firestore {
       allow read, create, update, delete: if false;
     }
 
+    // ── Opportunities ────────────────────────────────────────────────────────
+    //
+    // Authenticated users may read the feed. All writes (create/update/delete)
+    // go through the API server, which verifies the RevenueCat "verified"
+    // entitlement server-side before stamping author fields and creating the doc.
+
+    match /opportunities/{opportunityId} {
+      allow read: if isAuthed();
+      allow create, update, delete: if false;
+    }
+
     // ── Community posts (existing collection — unchanged) ───────────────────
 
     match /community_posts/{postId} {

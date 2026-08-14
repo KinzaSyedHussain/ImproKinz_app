@@ -6,6 +6,7 @@ import authRouter from "./auth";
 import postsRouter from "./posts";
 import studyRouter from "./study";
 import groupsRouter from "./groups";
+import opportunitiesRouter from "./opportunities";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(authRouter);
 router.use(postsRouter);
 router.use(studyRouter);
 router.use(groupsRouter);
+router.use(opportunitiesRouter);
 
 export default router;

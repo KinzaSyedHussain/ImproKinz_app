@@ -10,6 +10,7 @@ const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
 const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
 
 export const REVENUECAT_ENTITLEMENT_IDENTIFIER = "premium";
+export const VERIFICATION_ENTITLEMENT_ID = "verified";
 
 let revenueCatConfigured = false;
 
@@ -130,10 +131,14 @@ function useSubscriptionContext() {
   const isSubscribed =
     customerInfoQuery.data?.entitlements.active?.[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
 
+  const isVerified =
+    customerInfoQuery.data?.entitlements.active?.[VERIFICATION_ENTITLEMENT_ID] !== undefined;
+
   return {
     customerInfo: customerInfoQuery.data,
     offerings: offeringsQuery.data,
     isSubscribed,
+    isVerified,
     isConfigured: revenueCatConfigured,
     error: customerError || customerInfoQuery.error || offeringsQuery.error,
     isLoading: revenueCatConfigured && (customerInfoQuery.isLoading || offeringsQuery.isLoading),
