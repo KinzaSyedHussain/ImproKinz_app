@@ -1,0 +1,172 @@
+rules_version = '2';
+// ──────────────────────────────────────────────────────────────────────────────
+// StudySpace Firestore Security Rules
+//
+// HOW TO DEPLOY:
+//   1. Install Firebase CLI: npm install -g firebase-tools
+//   2. Login: firebase login
+//   3. Set your project: firebase use <your-project-id>
+//   4. Deploy: firebase deploy --only firestore:rules
+//
+// Or paste the contents of this file into:
+//   Firebase Console → Firestore → Rules tab → Publish
+//
+// ARCHITECTURE NOTES:
+// - All group document reads go through authenticated API server endpoints
+//   which project sensitive fields (members, moderators, bannedUsers) based on
+//   caller membership. Firestore rules below enforce minimal client permissions
+//   so that direct SDK calls cannot bypass field-level projections.
+// - Post updates from the client are limited to the `likes` field, and only
+//   the caller's own UID may be added or removed from that array.
+//   All other post mutations (create, delete, pin) go through the API server.
+// ──────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────────────────────
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isGroupMember(groupId) {
+      return uid() in
+        get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+
+    // ── Groups ──────────────────────────────────────────────────────────────
+
+    match /groups/{groupId} {
+      // READ: only current members may read group documents directly.
+      // All other reads (public listing, non-member detail) go through the API
+      // server which projects safe fields and never exposes members/moderators/
+      // bannedUsers to non-members.
+      allow read: if isAuthed() && uid() in resource.data.members;
+
+      // CREATE: authenticated user creates a group. Invariants:
+      //   • createdBy must equal the caller
+      //   • members must be exactly [caller] — sole initial member
+      //   • memberCount must be 1
+      //   • isPublic must be boolean
+      allow create: if isAuthed() &&
+        request.resource.data.createdBy == uid() &&
+        request.resource.data.members == [uid()] &&
+        request.resource.data.memberCount == 1 &&
+        request.resource.data.isPublic is bool;
+
+      // UPDATE — two narrow cases allowed from the client. Both constrain the
+      // changed keys, the exact membership delta, and the count delta:
+      //
+      // Case 1 — Public-group self-join:
+      //   • Caller must NOT already be a member
+      //   • Caller must NOT be in bannedUsers
+      //   • The new `members` must equal old `members` + [caller] only
+      //   • memberCount must increase by exactly 1
+      //   • Only `members` and `memberCount` may change
+      //
+      // Case 2 — Self-leave (any group):
+      //   • Caller must currently be a member
+      //   • The new `members` must equal old `members` - [caller] only
+      //   • memberCount must decrease by exactly 1
+      //   • Only `members` and `memberCount` may change
+      allow update: if isAuthed() && (
+        // ── Case 1: joining a public group ──────────────────────────────────
+        (
+          resource.data.isPublic == true &&
+          !(uid() in resource.data.bannedUsers) &&
+          !(uid() in resource.data.members) &&
+          // New members set = old members set ∪ {caller} (nothing else)
+          request.resource.data.members.toSet() ==
+            resource.data.members.toSet().union([uid()].toSet()) &&
+          // memberCount incremented by exactly 1
+          request.resource.data.memberCount == resource.data.memberCount + 1 &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['members', 'memberCount'])
+        ) ||
+        // ── Case 2: leaving any group ────────────────────────────────────────
+        (
+          uid() in resource.data.members &&
+          // New members set = old members set - {caller} (nothing else removed)
+          resource.data.members.toSet().difference([uid()].toSet()) ==
+            request.resource.data.members.toSet() &&
+          // memberCount decremented by exactly 1
+          request.resource.data.memberCount == resource.data.memberCount - 1 &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['members', 'memberCount'])
+        )
+      );
+
+      // DELETE: not allowed from the client (admin deletes via API server).
+      allow delete: if false;
+
+      // ── Group posts subcollection ───────────────────────────────────────
+
+      match /posts/{postId} {
+        // READ: only group members may read posts.
+        allow read: if isAuthed() && isGroupMember(groupId);
+
+        // CREATE: all post creation goes through the API server which atomically
+        // updates postCount in a batch. Direct client creation is denied to keep
+        // postCount consistent.
+        allow create: if false;
+
+        // UPDATE: members may ONLY toggle their own like.
+        //   • Only the `likes` field may change.
+        //   • The caller's UID is the only element added or removed.
+        //   • No other uid in the likes array may be modified.
+        allow update: if isAuthed() &&
+          isGroupMember(groupId) &&
+          // Only `likes` may change
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['likes']) &&
+          (
+            // Adding the caller's like: new = old ∪ {caller}
+            (
+              !(uid() in resource.data.likes) &&
+              request.resource.data.likes.toSet() ==
+                resource.data.likes.toSet().union([uid()].toSet())
+            ) ||
+            // Removing the caller's like: new = old - {caller}
+            (
+              uid() in resource.data.likes &&
+              resource.data.likes.toSet().difference([uid()].toSet()) ==
+                request.resource.data.likes.toSet()
+            )
+          );
+
+        // DELETE: not allowed from the client (manager/admin deletes via API).
+        allow delete: if false;
+      }
+    }
+
+    // ── Reports ─────────────────────────────────────────────────────────────
+
+    match /reports/{reportId} {
+      // CREATE: server handles report creation via Admin SDK, so client
+      // writes are not needed. Deny all client access.
+      allow read, create, update, delete: if false;
+    }
+
+    // ── Community posts (existing collection — unchanged) ───────────────────
+
+    match /community_posts/{postId} {
+      allow read: if isAuthed();
+      allow create: if isAuthed() &&
+        request.resource.data.authorId == request.auth.uid;
+      allow update: if isAuthed();
+      allow delete: if false;
+    }
+
+    // ── Profiles (existing collection — unchanged) ──────────────────────────
+
+    match /profiles/{uid} {
+      allow read: if isAuthed();
+      allow create, update: if isAuthed() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+  }
+}

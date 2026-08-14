@@ -42,11 +42,14 @@ export interface UserProfile {
   studyTime?: string;
 }
 
+const ADMIN_EMAILS = ["improkinz@gmail.com"];
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
   configured: boolean;
+  isAdmin: boolean;
   logOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   addXP: (amount: number) => Promise<void>;
@@ -186,9 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isAdmin = profile?.email ? ADMIN_EMAILS.includes(profile.email) : false;
+
   return (
     <AuthContext.Provider value={{
-      user, profile, loading, configured: isFirebaseConfigured,
+      user, profile, loading, configured: isFirebaseConfigured, isAdmin,
       logOut, refreshProfile, addXP, loadProfileByClerkId,
     }}>
       {children}

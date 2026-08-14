@@ -1,11 +1,25 @@
 import { Icon } from "@/components/Icon";
 import { useColors } from "@/hooks/useColors";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
+import { db } from "@/lib/firebase";
+import {
+  arrayRemove,
+  arrayUnion,
+  collection,
+  getDocs,
+  increment,
+  doc,
+  orderBy,
+  query,
+  updateDoc,
+} from "firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,125 +29,48 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type StudyGroup = {
+// ── API base ──────────────────────────────────────────────────────────────────
+
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : "http://localhost:8080";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface StudyGroup {
   id: string;
   name: string;
   description: string;
-  icon: string;
-  iconBg: string;
+  iconColor: string;
+  tags: string[];
+  createdBy: string;
+  createdAt: any;
   memberCount: number;
-  postsPerDay: number;
-  subject: string;
-  joined?: boolean;
-};
+  postCount: number;
+  members: string[];
+  moderators: string[];
+  bannedUsers: string[];
+  pinnedPostIds: string[];
+  isPublic: boolean;
+}
 
-const ALL_GROUPS: StudyGroup[] = [
-  {
-    id: "general",
-    name: "General Study",
-    description: "Share tips, progress, and questions with all learners.",
-    icon: "🎓",
-    iconBg: "#7C3AED",
-    memberCount: 4812,
-    postsPerDay: 34,
-    subject: "General",
-  },
-  {
-    id: "math",
-    name: "Math",
-    description: "Algebra, calculus, geometry — solve it together.",
-    icon: "📐",
-    iconBg: "#2563EB",
-    memberCount: 3201,
-    postsPerDay: 28,
-    subject: "Math",
-  },
-  {
-    id: "biology",
-    name: "Biology",
-    description: "Cells, genetics, ecosystems, and beyond.",
-    icon: "🧬",
-    iconBg: "#16A34A",
-    memberCount: 2740,
-    postsPerDay: 19,
-    subject: "Biology",
-  },
-  {
-    id: "physics",
-    name: "Physics",
-    description: "Forces, waves, thermodynamics, and quantum magic.",
-    icon: "⚛️",
-    iconBg: "#0891B2",
-    memberCount: 2198,
-    postsPerDay: 15,
-    subject: "Physics",
-  },
-  {
-    id: "chemistry",
-    name: "Chemistry",
-    description: "Reactions, periodic table, organic chemistry.",
-    icon: "🧪",
-    iconBg: "#9333EA",
-    memberCount: 1892,
-    postsPerDay: 12,
-    subject: "Chemistry",
-  },
-  {
-    id: "cs",
-    name: "Computer Science",
-    description: "Algorithms, data structures, coding & projects.",
-    icon: "💻",
-    iconBg: "#1D4ED8",
-    memberCount: 5103,
-    postsPerDay: 47,
-    subject: "CS",
-  },
-  {
-    id: "history",
-    name: "History",
-    description: "Ancient to modern — learn from the past.",
-    icon: "📜",
-    iconBg: "#B45309",
-    memberCount: 1456,
-    postsPerDay: 9,
-    subject: "History",
-  },
-  {
-    id: "english",
-    name: "English",
-    description: "Writing, grammar, literature analysis.",
-    icon: "📝",
-    iconBg: "#0F766E",
-    memberCount: 2311,
-    postsPerDay: 21,
-    subject: "English",
-  },
-  {
-    id: "languages",
-    name: "Languages",
-    description: "Arabic, Spanish, French, Japanese and more.",
-    icon: "🌍",
-    iconBg: "#DC2626",
-    memberCount: 3087,
-    postsPerDay: 26,
-    subject: "Languages",
-  },
-  {
-    id: "exam-prep",
-    name: "Exam Prep",
-    description: "SAT, IELTS, university entrance — tackle them together.",
-    icon: "📋",
-    iconBg: "#F59E0B",
-    memberCount: 4220,
-    postsPerDay: 38,
-    subject: "General",
-  },
-];
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatMembers(n: number) {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k members`;
-  return `${n} members`;
+  return `${n} member${n !== 1 ? "s" : ""}`;
 }
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+// ── GroupCard ─────────────────────────────────────────────────────────────────
 
 function GroupCard({
   group,
@@ -141,12 +78,14 @@ function GroupCard({
   joined,
   onToggleJoin,
   onPress,
+  joining,
 }: {
   group: StudyGroup;
   colors: any;
   joined: boolean;
   onToggleJoin: () => void;
   onPress: () => void;
+  joining: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -155,12 +94,12 @@ function GroupCard({
       activeOpacity={0.85}
     >
       <View style={styles.groupCardRow}>
-        {/* Icon */}
-        <View style={[styles.groupIcon, { backgroundColor: group.iconBg + "33" }]}>
-          <Text style={styles.groupEmoji}>{group.icon}</Text>
+        <View style={[styles.groupIcon, { backgroundColor: group.iconColor + "33" }]}>
+          <Text style={[styles.groupInitials, { color: group.iconColor }]}>
+            {getInitials(group.name)}
+          </Text>
         </View>
 
-        {/* Info */}
         <View style={styles.groupInfo}>
           <Text style={[styles.groupName, { color: colors.foreground }]}>{group.name}</Text>
           <Text style={[styles.groupDesc, { color: colors.mutedForeground }]} numberOfLines={2}>
@@ -169,74 +108,178 @@ function GroupCard({
           <View style={styles.groupMeta}>
             <Icon name="users" size={11} color={colors.mutedForeground} />
             <Text style={[styles.groupMetaText, { color: colors.mutedForeground }]}>
-              {formatMembers(group.memberCount)}
+              {formatMembers(group.memberCount || 0)}
             </Text>
-            <Text style={[styles.groupMetaDot, { color: colors.mutedForeground }]}>·</Text>
-            <Text style={[styles.groupMetaText, { color: colors.mutedForeground }]}>
-              {group.postsPerDay} posts/day
-            </Text>
+            {group.tags?.length > 0 && (
+              <>
+                <Text style={[styles.groupMetaDot, { color: colors.mutedForeground }]}>·</Text>
+                <Text style={[styles.groupMetaText, { color: colors.mutedForeground }]}>
+                  {group.tags.slice(0, 2).join(", ")}
+                </Text>
+              </>
+            )}
           </View>
         </View>
 
-        {/* Join button */}
         <TouchableOpacity
           onPress={onToggleJoin}
+          disabled={joining}
           style={[
             styles.joinBtn,
             joined
-              ? { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }
+              ? { backgroundColor: "transparent", borderColor: colors.border, borderWidth: 1 }
               : { backgroundColor: colors.accent },
           ]}
         >
-          <Text
-            style={[
-              styles.joinBtnText,
-              { color: joined ? colors.mutedForeground : "#fff" },
-            ]}
-          >
-            {joined ? "Joined" : "Join"}
-          </Text>
+          {joining ? (
+            <ActivityIndicator size="small" color={joined ? colors.mutedForeground : "#fff"} />
+          ) : (
+            <Text style={[styles.joinBtnText, { color: joined ? colors.mutedForeground : "#fff" }]}>
+              {joined ? "Joined" : "Join"}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 export default function GroupsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
-  const [search, setSearch] = useState("");
-  const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set(["general", "cs"]));
+  const { userId, getToken } = useClerkAuth();
 
-  const filtered = ALL_GROUPS.filter(
-    g =>
+  // Public groups (from server — private groups are never sent)
+  const [publicGroups, setPublicGroups] = useState<StudyGroup[]>([]);
+  // User's own groups (from server — includes private groups they belong to)
+  const [myGroups, setMyGroups] = useState<StudyGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [joining, setJoining] = useState<Record<string, boolean>>({});
+
+  const currentUid = userId ?? "";
+
+  // ── Server-side fetch (server filters private groups) ─────────────────────
+
+  const fetchGroups = useCallback(async () => {
+    try {
+      // Public list — unauthenticated endpoint
+      const publicRes = await fetch(`${API_BASE}/api/groups/public`);
+      const publicData = publicRes.ok ? await publicRes.json() : { groups: [] };
+
+      let mineData: { groups: StudyGroup[] } = { groups: [] };
+      if (currentUid) {
+        const token = await getToken();
+        const mineRes = await fetch(`${API_BASE}/api/groups/mine`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (mineRes.ok) mineData = await mineRes.json();
+      }
+
+      setPublicGroups(publicData.groups ?? []);
+      setMyGroups(mineData.groups ?? []);
+    } catch (e) {
+      console.warn("fetchGroups error:", e);
+    }
+  }, [currentUid, getToken]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchGroups().finally(() => setLoading(false));
+  }, [fetchGroups]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchGroups();
+    setRefreshing(false);
+  };
+
+  // ── Optimistic join/leave (writes to Firestore directly — non-privileged) ──
+
+  const toggleJoin = async (group: StudyGroup) => {
+    if (!currentUid || joining[group.id]) return;
+    const joined = group.members?.includes(currentUid) || myGroups.some((g) => g.id === group.id);
+    setJoining((prev) => ({ ...prev, [group.id]: true }));
+    try {
+      const ref = doc(db, "groups", group.id);
+      if (joined) {
+        await updateDoc(ref, {
+          members: arrayRemove(currentUid),
+          memberCount: increment(-1),
+        });
+        setMyGroups((prev) => prev.filter((g) => g.id !== group.id));
+        // Reflect leave in publicGroups list too
+        setPublicGroups((prev) =>
+          prev.map((g) =>
+            g.id === group.id
+              ? {
+                  ...g,
+                  members: (g.members || []).filter((m) => m !== currentUid),
+                  memberCount: Math.max(0, g.memberCount - 1),
+                }
+              : g,
+          ),
+        );
+      } else {
+        await updateDoc(ref, {
+          members: arrayUnion(currentUid),
+          memberCount: increment(1),
+        });
+        const updatedGroup = {
+          ...group,
+          members: [...(group.members || []), currentUid],
+          memberCount: group.memberCount + 1,
+        };
+        setMyGroups((prev) => {
+          if (prev.some((g) => g.id === group.id)) return prev;
+          return [updatedGroup, ...prev];
+        });
+        setPublicGroups((prev) =>
+          prev.map((g) => (g.id === group.id ? updatedGroup : g)),
+        );
+      }
+    } catch (e) {
+      console.warn("toggleJoin error:", e);
+    } finally {
+      setJoining((prev) => ({ ...prev, [group.id]: false }));
+    }
+  };
+
+  // ── Computed lists ────────────────────────────────────────────────────────
+
+  const memberIds = new Set([
+    ...myGroups.map((g) => g.id),
+    ...publicGroups.filter((g) => g.members?.includes(currentUid)).map((g) => g.id),
+  ]);
+
+  const filtered = publicGroups.filter(
+    (g) =>
+      !search ||
       g.name.toLowerCase().includes(search.toLowerCase()) ||
-      g.subject.toLowerCase().includes(search.toLowerCase())
+      g.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase())),
   );
 
-  const joinedGroups = ALL_GROUPS.filter(g => joinedIds.has(g.id));
+  // ── Loading ───────────────────────────────────────────────────────────────
 
-  const toggleJoin = (id: string) => {
-    setJoinedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const goToGroup = (group: StudyGroup) => {
-    // Navigate to the community feed filtered by subject
-    router.push(`/community/${group.id}` as any);
-  };
-
-  const TAB_BAR_H = 80;
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: colors.background, alignItems: "center", justifyContent: "center" },
+        ]}
+      >
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <LinearGradient
         colors={[colors.purpleStart, colors.background]}
         style={[styles.header, { paddingTop: insets.top + 10 }]}
@@ -250,17 +293,16 @@ export default function GroupsScreen() {
           </View>
           <TouchableOpacity
             style={[styles.createBtn, { backgroundColor: colors.primary }]}
-            onPress={() => {}}
+            onPress={() => router.push("/create-group")}
           >
             <Icon name="plus" size={16} color={colors.primaryForeground} />
-            <Text style={[styles.createBtnText, { color: colors.primaryForeground }]}>
-              Create
-            </Text>
+            <Text style={[styles.createBtnText, { color: colors.primaryForeground }]}>Create</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Search */}
-        <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View
+          style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
           <Icon name="search" size={16} color={colors.mutedForeground} />
           <TextInput
             style={[styles.searchInput, { color: colors.foreground }]}
@@ -277,69 +319,89 @@ export default function GroupsScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: TAB_BAR_H + insets.bottom }}
+      <FlatList
+        data={search ? filtered : publicGroups}
+        keyExtractor={(g) => g.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        contentContainerStyle={{
+          paddingBottom: 100 + insets.bottom,
+          paddingHorizontal: 16,
+          paddingTop: 8,
+        }}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Your Groups */}
-        {!search && joinedGroups.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Groups</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.joinedRow}>
-              {joinedGroups.map(g => (
-                <TouchableOpacity
-                  key={g.id}
-                  style={[styles.joinedChip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => goToGroup(g)}
+        ListHeaderComponent={() => (
+          <>
+            {!search && myGroups.length > 0 && (
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Groups</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.joinedRow}
                 >
-                  <Text style={styles.joinedEmoji}>{g.icon}</Text>
-                  <Text style={[styles.joinedLabel, { color: colors.foreground }]}>{g.name}</Text>
-                  <View style={[styles.activeDot, { backgroundColor: colors.success }]} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* All Groups / Search results */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-            {search ? `Results for "${search}"` : "Explore Communities"}
-          </Text>
-          {filtered.map(group => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              colors={colors}
-              joined={joinedIds.has(group.id)}
-              onToggleJoin={() => toggleJoin(group.id)}
-              onPress={() => goToGroup(group)}
-            />
-          ))}
-          {filtered.length === 0 && (
-            <View style={styles.empty}>
-              <Icon name="search-x" size={36} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No groups found
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Coming soon banner */}
-        {!search && (
-          <View style={[styles.comingSoon, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <LinearGradient
-              colors={[colors.purpleStart + "22", colors.primary + "11"]}
-              style={StyleSheet.absoluteFill}
-            />
-            <Icon name="sparkles" size={20} color={colors.primary} />
-            <Text style={[styles.comingSoonText, { color: colors.foreground }]}>
-              Private groups, study rooms & live sessions coming soon
+                  {myGroups.map((g) => (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={[
+                        styles.joinedChip,
+                        { backgroundColor: colors.card, borderColor: g.iconColor + "88" },
+                      ]}
+                      onPress={() => router.push(`/group/${g.id}` as any)}
+                    >
+                      <View style={[styles.chipDot, { backgroundColor: g.iconColor }]} />
+                      <Text style={[styles.joinedLabel, { color: colors.foreground }]}>{g.name}</Text>
+                      {!g.isPublic && (
+                        <Icon name="lock" size={10} color={colors.mutedForeground} />
+                      )}
+                      <View style={[styles.activeDot, { backgroundColor: colors.success }]} />
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            <Text style={[styles.sectionTitle, { color: colors.foreground, marginBottom: 12 }]}>
+              {search ? `Results for "${search}"` : "Explore Communities"}
             </Text>
+          </>
+        )}
+        renderItem={({ item: group }) => (
+          <GroupCard
+            group={group}
+            colors={colors}
+            joined={memberIds.has(group.id)}
+            onToggleJoin={() => toggleJoin(group)}
+            onPress={() => router.push(`/group/${group.id}` as any)}
+            joining={joining[group.id] ?? false}
+          />
+        )}
+        ListEmptyComponent={() => (
+          <View style={styles.empty}>
+            <Icon name="users-round" size={44} color={colors.mutedForeground} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              {search ? "No groups found" : "No groups yet"}
+            </Text>
+            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+              {search ? "Try a different search term" : "Create the first study group!"}
+            </Text>
+            {!search && (
+              <TouchableOpacity
+                style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push("/create-group")}
+              >
+                <Text style={[styles.emptyBtnText, { color: colors.primaryForeground }]}>
+                  Create a Group
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
-      </ScrollView>
+      />
     </View>
   );
 }
@@ -374,11 +436,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   searchInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, padding: 0 },
-
-  section: { paddingHorizontal: 16, paddingTop: 18 },
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, marginBottom: 12 },
-
-  joinedRow: { gap: 10, paddingBottom: 4 },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17 },
+  joinedRow: { gap: 10, paddingBottom: 4, paddingTop: 8 },
   joinedChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -386,18 +445,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.5,
   },
-  joinedEmoji: { fontSize: 18 },
+  chipDot: { width: 10, height: 10, borderRadius: 5 },
   joinedLabel: { fontFamily: "Inter_500Medium", fontSize: 13 },
   activeDot: { width: 6, height: 6, borderRadius: 3, marginLeft: 2 },
-
-  groupCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 10,
-  },
+  groupCard: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
   groupCardRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   groupIcon: {
     width: 52,
@@ -407,7 +460,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  groupEmoji: { fontSize: 26 },
+  groupInitials: { fontFamily: "Inter_700Bold", fontSize: 18 },
   groupInfo: { flex: 1, gap: 3 },
   groupName: { fontFamily: "Inter_700Bold", fontSize: 15 },
   groupDesc: { fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 18 },
@@ -419,27 +472,14 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 20,
     flexShrink: 0,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "center",
   },
   joinBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
-
-  empty: { alignItems: "center", gap: 10, paddingTop: 40 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14 },
-
-  comingSoon: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    margin: 16,
-    marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    overflow: "hidden",
-  },
-  comingSoonText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    flex: 1,
-    lineHeight: 18,
-  },
+  empty: { alignItems: "center", gap: 12, paddingTop: 60, paddingHorizontal: 40 },
+  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18 },
+  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center" },
+  emptyBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  emptyBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
 });
