@@ -1,0 +1,79 @@
+You are rebuilding major parts of my app "ImproKinz" (AI-powered study
+companion + study community). Brand: royal purple + gold treasure theme
+(kinz = treasure), clean and minimal. Apply ALL sections below in order,
+fix ALL errors, and test before finishing.
+
+=== SECTION 1: NEW-USER FLOW (onboarding + paywall) ===
+1. After signup/login, check a saved flag (e.g. "onboardingCompleted" in
+   AsyncStorage or the user profile). If the account has NOT completed
+   onboarding yet:
+2. Show 4 personalization question screens with a progress bar:
+   - What should we call you?
+   - Your level? (School / College / Self-learner)
+   - Favorite subjects? (multi-select chips: Math, Science, English...)
+   - Daily study goal? (15 / 30 / 60 minutes)
+   Save answers to the user profile and use them to personalize Home.
+3. Immediately after the last question, present the REAL RevenueCat paywall
+   from my offering "Current" (react-native-purchases-ui: PaywallView or
+   presentPaywall). It must show my published design: mascot, stars,
+   Annual/Monthly cards, "Try for Free" button.
+4. If purchase succeeds (Pro entitlement active): unlock Pro, set the flag,
+   go to Home. If user taps "Maybe later"/close: set the flag, go to Home
+   with free limits.
+5. Accounts that already finished onboarding skip straight to Home.
+6. Pro entitlement check must accept BOTH identifiers: "ImproKinz Pro"
+   AND "Premium Access".
+7. If the paywall cannot render in the current preview environment, tell me
+   clearly what I need (e.g. dev build) instead of silently skipping it.
+
+=== SECTION 2: NAVIGATION & HOME ===
+1. Remove the center "+" button from the bottom tab bar. The "+" stays ONLY
+   in the top-right corner and opens a create menu: New Post / New Group /
+   New Opportunity.
+2. Bottom tabs (5): Home, Groups, Focus, Opportunities, Profile.
+3. HOME: first thing visible under the header = the POSTS FEED (posts from
+   joined groups + public posts, newest first). Above the feed keep a
+   compact horizontal row of study tool cards (AI tools, smart notes,
+   focus timer, streak) so tools are not lost.
+
+=== SECTION 3: REAL GROUPS (Reddit/Facebook style, NO dummy data) ===
+1. Delete ALL fake/dummy groups and fake member/post counts. Groups are
+   created only by real users, stored in Firestore.
+2. Any user can create a group (name, description, icon color, tags).
+   The creator becomes its "Manager".
+3. Join/leave groups; group page = header, about, members, posts inside,
+   comments + likes.
+4. Manager powers: pin/delete posts, remove members, ban from group,
+   appoint moderators.
+5. App ADMIN system: keep a constant ADMIN_EMAILS = ["PUT_MY_EMAIL_HERE"];
+   accounts in that list get an Admin Panel: delete any group/post,
+   suspend users, view reports. Any user can report a post/group.
+6. Empty states instead of fake numbers ("No groups yet - create the
+   first one!").
+
+=== SECTION 4: OPPORTUNITIES (hackathons & jobs) + $5 VERIFICATION ===
+1. Opportunities tab: feed of posts tagged Hackathon / Job / Internship
+   (title, organization, deadline, link, description). Anyone can VIEW free.
+2. To POST, the user must own the "verified" entitlement. If they tap
+   "Post Opportunity" WITHOUT it: present my second RevenueCat paywall from
+   offering "verification" (the small "Get Verified" paywall, one-time $5,
+   lifetime package). After purchase: verified badge on profile + unlock
+   posting forever. Never ask again.
+3. Users WITH "verified" go straight to the post form. Verified badge shows
+   next to their name on posts and profile.
+
+=== SECTION 5: CLEANUP & KEEP LIST ===
+1. Keep purple + gold theme but declutter: one clear feed, 8pt spacing,
+   no overlapping cards, no fake data anywhere.
+2. KEEP working features: custom focus timer, streak/coins treasure
+   gamification, sparkle like button, comments, both paywalls.
+3. Remove the dummy "Test Store Purchase" debug screen from the normal
+   flow: purchases must happen only through the real RevenueCat paywalls.
+
+=== FINAL ===
+- Fix all build/runtime errors.
+- Test with a brand-new account and verify this exact flow:
+  signup -> 4 questions -> Pro paywall -> Home shows feed first ->
+  creating a group works -> posting an opportunity asks for the $5
+  verification paywall -> admin panel visible for the admin email.
+- Tell me clearly anything I must do manually (dev build, keys, etc.).
