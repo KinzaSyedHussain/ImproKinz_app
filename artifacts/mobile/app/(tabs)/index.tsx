@@ -1,10 +1,20 @@
 import { Icon } from "@/components/Icon";
+import { Post, PostCard, normalizePost } from "@/components/PostCard";
+import { UserAvatar } from "@/components/UserAvatar";
+import { CreditBalancePill } from "@/components/CreditUI";
+import { useAuth } from "@/context/AuthContext";
+import { useColors } from "@/hooks/useColors";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Dimensions,
+  ActivityIndicator,
+  Animated,
+  FlatList,
+  Modal,
   Platform,
+  Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,53 +22,22 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@/context/AuthContext";
-import { useColors } from "@/hooks/useColors";
-import { UserAvatar } from "@/components/UserAvatar";
-import { CreditBalancePill } from "@/components/CreditUI";
 
-const { width: W } = Dimensions.get("window");
-
-const SUBJECT_COLORS: Record<string, [string, string]> = {
-  Math: ["#4F46E5", "#818CF8"],
-  Science: ["#059669", "#34D399"],
-  Biology: ["#16A34A", "#4ADE80"],
-  Physics: ["#0891B2", "#22D3EE"],
-  Chemistry: ["#D97706", "#FCD34D"],
-  History: ["#B45309", "#F59E0B"],
-  "Computer Science": ["#7C3AED", "#A78BFA"],
-  CS: ["#7C3AED", "#A78BFA"],
-  English: ["#DB2777", "#F472B6"],
-  Languages: ["#BE185D", "#F9A8D4"],
-  Art: ["#9333EA", "#C084FC"],
-  Business: ["#0369A1", "#38BDF8"],
-  Medicine: ["#DC2626", "#F87171"],
-};
-
-const SUBJECT_ICONS: Record<string, string> = {
-  Math: "calculator",
-  Science: "flask-conical",
-  Biology: "leaf",
-  Physics: "atom",
-  Chemistry: "test-tube",
-  History: "book-open",
-  "Computer Science": "code-2",
-  CS: "code-2",
-  English: "type",
-  Languages: "languages",
-  Art: "palette",
-  Business: "briefcase",
-  Medicine: "heart-pulse",
-};
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const TOOLS = [
-  { icon: "layers", label: "Flashcards", route: "/flashcards", color: "#4F46E5" },
-  { icon: "align-left", label: "Summarizer", route: "/summarizer", color: "#7C3AED" },
-  { icon: "check-square", label: "Quiz", route: "/quiz", color: "#D97706" },
-  { icon: "file-text", label: "Notes", route: "/notes", color: "#0891B2" },
-  { icon: "message-circle", label: "Chatbot", route: "/chatbot", color: "#059669" },
-  { icon: "calculator", label: "Calculator", route: "/calculator", color: "#DB2777" },
+  { icon: "timer",       label: "Focus",      route: "/(tabs)/focus",  color: "#7C3AED" },
+  { icon: "layers",      label: "Flashcards", route: "/flashcards",    color: "#4F46E5" },
+  { icon: "align-left",  label: "Summarizer", route: "/summarizer",    color: "#7C3AED" },
+  { icon: "check-square",label: "Quiz",       route: "/quiz",          color: "#D97706" },
+  { icon: "file-text",   label: "Notes",      route: "/notes",         color: "#0891B2" },
+  { icon: "message-circle", label: "Chatbot", route: "/chatbot",       color: "#059669" },
+  { icon: "calculator",  label: "Calculator", route: "/calculator",    color: "#DB2777" },
 ];
+
+const PAGE_SIZE = 20;
+
+// ─── Greeting ────────────────────────────────────────────────────────────────
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -66,77 +45,176 @@ function greeting(name: string) {
   return `${time}, ${name.split(" ")[0]} 👋`;
 }
 
-function StudyGoalBar({ goal, done }: { goal: number; done: number }) {
+// ─── Create Menu Sheet ───────────────────────────────────────────────────────
+
+function CreateMenuSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   const colors = useColors();
-  const pct = Math.min(1, goal > 0 ? done / goal : 0);
+  const router = useRouter();
+  const slideAnim = useRef(new Animated.Value(300)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 200,
+      }).start();
+    } else {
+      slideAnim.setValue(300);
+    }
+  }, [visible]);
+
+  const go = (route: string) => {
+    onClose();
+    setTimeout(() => router.push(route as any), 120);
+  };
+
+  const ACTIONS = [
+    { icon: "edit-3",   label: "New Post",        sub: "Share something with the community",       route: "/create-post" },
+    { icon: "users-round", label: "New Group",     sub: "Create a study group for your subject",    route: "/create-group" },
+    { icon: "briefcase",   label: "New Opportunity", sub: "Post a hackathon, job or internship",  route: "/create-opportunity" },
+  ];
+
   return (
-    <View style={[styles.goalCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={styles.goalHeader}>
-        <Icon name="target" size={16} color={colors.primary} />
-        <Text style={[styles.goalTitle, { color: colors.foreground }]}>Daily Goal</Text>
-        <Text style={[styles.goalCount, { color: colors.primary }]}>{done}/{goal} min</Text>
-      </View>
-      <View style={[styles.goalTrack, { backgroundColor: colors.secondary }]}>
-        <LinearGradient
-          colors={[colors.purpleStart, colors.primary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[styles.goalFill, { width: `${Math.round(pct * 100)}%` as any }]}
-        />
-      </View>
-      <Text style={[styles.goalSub, { color: colors.mutedForeground }]}>
-        {pct >= 1 ? "🎉 Goal reached! Keep going!" : `${goal - done} min left to hit your goal`}
-      </Text>
-    </View>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable style={styles.menuOverlay} onPress={onClose}>
+        <Animated.View
+          style={[
+            styles.menuSheet,
+            { backgroundColor: colors.card, transform: [{ translateY: slideAnim }] },
+          ]}
+        >
+          {/* Handle */}
+          <View style={[styles.sheetHandle, { backgroundColor: colors.muted }]} />
+          <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Create</Text>
+
+          {ACTIONS.map((a) => (
+            <TouchableOpacity
+              key={a.route}
+              style={[styles.sheetRow, { borderBottomColor: colors.border }]}
+              onPress={() => go(a.route)}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.sheetIcon, { backgroundColor: colors.secondary }]}>
+                <Icon name={a.icon as any} size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sheetRowTitle, { color: colors.foreground }]}>{a.label}</Text>
+                <Text style={[styles.sheetRowSub, { color: colors.mutedForeground }]}>{a.sub}</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity onPress={onClose} style={[styles.sheetCancel, { backgroundColor: colors.secondary }]}>
+            <Text style={[styles.sheetCancelText, { color: colors.foreground }]}>Cancel</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Pressable>
+    </Modal>
   );
 }
 
-export default function HomeScreen() {
+// ─── Compact Tools Row ───────────────────────────────────────────────────────
+
+function ToolsRow() {
   const colors = useColors();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile, user } = useAuth();
-
-  const [studiedToday, setStudiedToday] = useState(0); // will grow as user uses Focus
-
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
-  const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
-
-  const displayName = profile?.displayName || user?.displayName || "Learner";
-  const streak = (profile as any)?.streak ?? 0;
-  const xp = profile?.xp ?? 0;
-  const studyGoal: number = parseInt(String((profile as any)?.studyGoal ?? "30"), 10) || 30;
-
-  // Subjects — could be array (new) or single string (old)
-  const rawSubjects = (profile as any)?.subjects;
-  const subjects: string[] = Array.isArray(rawSubjects)
-    ? rawSubjects
-    : typeof rawSubjects === "string" && rawSubjects
-    ? [rawSubjects]
-    : ["Science", "Math", "History"]; // friendly default
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ paddingBottom: botPad }}
-      showsVerticalScrollIndicator={false}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.toolsRowContent}
+      style={styles.toolsRowScroll}
     >
-      {/* ── Header ───────────────────────────────────────────── */}
+      {TOOLS.map((t) => (
+        <TouchableOpacity
+          key={t.label}
+          style={[styles.toolPill, { backgroundColor: colors.card, borderColor: colors.border }]}
+          onPress={() => router.push(t.route as any)}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.toolPillIcon, { backgroundColor: t.color + "22" }]}>
+            <Icon name={t.icon as any} size={16} color={t.color} />
+          </View>
+          <Text style={[styles.toolPillLabel, { color: colors.foreground }]}>{t.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ─── Feed Header (inside FlatList ListHeaderComponent) ───────────────────────
+
+function FeedHeader({
+  displayName,
+  profile,
+  streak,
+  xp,
+  onPressPlus,
+}: {
+  displayName: string;
+  profile: any;
+  streak: number;
+  xp: number;
+  onPressPlus: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+
+  return (
+    <>
+      {/* ── Hero gradient header ── */}
       <LinearGradient
         colors={[colors.purpleEnd, colors.purpleStart]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.heroBg, { paddingTop: topPad + 16 }]}
+        style={[styles.hero, { paddingTop: topPad + 16 }]}
       >
         <View style={styles.heroRow}>
-          <TouchableOpacity onPress={() => router.push("/profile" as any)}>
+          <TouchableOpacity onPress={() => router.push("/(tabs)/profile" as any)}>
             <UserAvatar photoURL={profile?.photoURL} displayName={displayName} size={44} />
           </TouchableOpacity>
           <View style={{ flex: 1, paddingLeft: 12 }}>
-            <Text style={styles.heroGreeting} numberOfLines={1}>{greeting(displayName)}</Text>
+            <Text style={styles.heroGreeting} numberOfLines={1}>
+              {greeting(displayName)}
+            </Text>
             <Text style={styles.heroSub}>Ready to study today?</Text>
           </View>
+          {/* Credits pill */}
           <CreditBalancePill />
+          {/* Create "+" button */}
+          <TouchableOpacity
+            onPress={onPressPlus}
+            style={styles.plusBtn}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <LinearGradient
+              colors={[colors.purpleStart, colors.primary]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.plusGradient}
+            >
+              <Text style={styles.plusText}>+</Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         {/* Stats row */}
@@ -144,176 +222,390 @@ export default function HomeScreen() {
           <View style={styles.statPill}>
             <Text style={styles.statEmoji}>🔥</Text>
             <Text style={styles.statVal}>{streak}</Text>
-            <Text style={styles.statLbl}>day streak</Text>
-          </View>
-          <View style={[styles.statDivider]} />
-          <View style={styles.statPill}>
-            <Text style={styles.statEmoji}>⭐</Text>
-            <Text style={styles.statVal}>{xp.toLocaleString()}</Text>
-            <Text style={styles.statLbl}>XP earned</Text>
+            <Text style={styles.statLbl}>streak</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statPill}>
-            <Icon name="trophy" size={16} color="#F59E0B" />
+            <Text style={styles.statEmoji}>⭐</Text>
+            <Text style={styles.statVal}>{xp.toLocaleString()}</Text>
+            <Text style={styles.statLbl}>XP</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statPill}>
+            <Icon name="trophy" size={15} color="#F59E0B" />
             <Text style={styles.statVal}>{Math.floor(xp / 100)}</Text>
             <Text style={styles.statLbl}>treasures</Text>
           </View>
         </View>
       </LinearGradient>
 
-      <View style={styles.body}>
-        {/* Daily goal bar */}
-        <StudyGoalBar goal={studyGoal} done={studiedToday} />
+      {/* ── Compact tools row ── */}
+      <ToolsRow />
 
-        {/* Subject bubbles */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Subjects</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bubblesRow}>
-          {subjects.map((subj) => {
-            const gradColors = SUBJECT_COLORS[subj] ?? (["#7C3AED", "#A78BFA"] as [string, string]);
-            const iconName = SUBJECT_ICONS[subj] ?? "book-open";
-            return (
-              <TouchableOpacity
-                key={subj}
-                style={styles.bubbleWrap}
-                onPress={() => router.push({ pathname: "/(tabs)/community", params: { community: subj } })}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.bubbleRing, { borderColor: gradColors[0] + "60" }]}>
-                  <LinearGradient
-                    colors={gradColors}
-                    style={styles.bubble}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  >
-                    <Icon name={iconName as any} size={24} color="#fff" />
-                  </LinearGradient>
-                </View>
-                <Text style={[styles.bubbleLabel, { color: colors.mutedForeground }]} numberOfLines={1}>
-                  {subj}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          {/* Add subjects */}
-          <TouchableOpacity
-            style={styles.bubbleWrap}
-            onPress={() => router.push("/onboarding")}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.bubbleRing, { borderColor: colors.border }]}>
-              <View style={[styles.bubble, { backgroundColor: colors.card }]}>
-                <Icon name="plus" size={22} color={colors.mutedForeground} />
-              </View>
-            </View>
-            <Text style={[styles.bubbleLabel, { color: colors.mutedForeground }]}>Add</Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {/* Quick Start Focus */}
-        <TouchableOpacity
-          style={[styles.focusCTA, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => router.push("/(tabs)/focus" as any)}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={[colors.purpleStart, colors.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.focusCTAIcon}
-          >
-            <Icon name="timer" size={20} color="#fff" />
-          </LinearGradient>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.focusCTATitle, { color: colors.foreground }]}>Start a Focus Session</Text>
-            <Text style={[styles.focusCTASub, { color: colors.mutedForeground }]}>
-              Set your timer, earn coins on completion
-            </Text>
-          </View>
-          <Icon name="chevron-right" size={18} color={colors.mutedForeground} />
-        </TouchableOpacity>
-
-        {/* AI Study Tools */}
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>AI Study Tools</Text>
-        <View style={styles.toolsGrid}>
-          {TOOLS.map((tool) => (
-            <TouchableOpacity
-              key={tool.label}
-              style={[styles.toolCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => router.push(tool.route as any)}
-              activeOpacity={0.78}
-            >
-              <View style={[styles.toolIcon, { backgroundColor: tool.color + "22" }]}>
-                <Icon name={tool.icon as any} size={22} color={tool.color} />
-              </View>
-              <Text style={[styles.toolLabel, { color: colors.foreground }]}>{tool.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Community CTA */}
-        <TouchableOpacity
-          style={[styles.communityCTA, { backgroundColor: colors.secondary }]}
-          onPress={() => router.push("/(tabs)/community" as any)}
-          activeOpacity={0.85}
-        >
-          <Icon name="users" size={20} color={colors.primary} />
-          <Text style={[styles.communityCTAText, { color: colors.primary }]}>
-            See what the community is studying →
-          </Text>
-        </TouchableOpacity>
+      {/* ── Feed section label ── */}
+      <View style={[styles.feedLabelRow, { borderBottomColor: colors.border }]}>
+        <Icon name="rss" size={14} color={colors.primary} />
+        <Text style={[styles.feedLabel, { color: colors.foreground }]}>Community Feed</Text>
       </View>
-    </ScrollView>
+    </>
   );
 }
 
+// ─── Home Screen ─────────────────────────────────────────────────────────────
+
+export default function HomeScreen() {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const { profile, user } = useAuth();
+
+  const [posts, setPosts]             = useState<Post[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // Start false so onEndReached cannot trigger loadMore before the first page has landed.
+  const [hasMore, setHasMore]         = useState(false);
+  const [loadError, setLoadError]     = useState<string | null>(null);
+  const [attempt, setAttempt]         = useState(0);
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  // Cursor is the document ID of the last post on the current page, returned by the API.
+  const cursorRef = useRef<string | null>(null);
+
+  const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
+
+  const displayName = profile?.displayName || user?.displayName || "Learner";
+  const streak = (profile as any)?.streak ?? 0;
+  const xp = profile?.xp ?? 0;
+
+  const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : "";
+
+  // ── API fetch — ordered by createdAt desc, document-ID cursor ───────────
+  // `cursor` is the document ID of the last post on the previous page.
+  // The server resolves it to a DocumentSnapshot for startAfter(), which handles
+  // duplicate createdAt timestamps correctly without a composite index.
+  // Throws a tagged error { stale: true } when the server returns 410 (cursor
+  // document was deleted), so callers can reset and reload from page 1.
+  const fetchPage = useCallback(async (cursor?: string) => {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`${API_BASE}/api/posts?${params}`);
+    if (res.status === 410) {
+      // Cursor document was deleted — callers must reset and reload page 1.
+      throw Object.assign(new Error("stale_cursor"), { stale: true });
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const raw: any[] = json.posts ?? [];
+    const fetched: Post[] = raw
+      .map((p) => { try { return normalizePost(p.id ?? "", p); } catch { return null; } })
+      .filter((p): p is Post => p !== null);
+    return { fetched, hasMore: !!json.hasMore, nextCursor: json.nextCursor as string | null };
+  }, [API_BASE]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    cursorRef.current = null;
+
+    fetchPage()
+      .then(({ fetched, hasMore: more, nextCursor }) => {
+        if (!cancelled) {
+          setPosts(fetched);
+          setHasMore(more);
+          cursorRef.current = nextCursor ?? null;
+          setLoading(false);
+        }
+      })
+      .catch((e: any) => {
+        if (!cancelled) {
+          setLoadError(e?.message ?? "Couldn't load posts");
+          setLoading(false);
+        }
+      });
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) { setLoadError("Timed out loading feed"); setLoading(false); }
+    }, 10000);
+
+    return () => { cancelled = true; clearTimeout(timeout); };
+  }, [attempt]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setLoadError(null);
+    cursorRef.current = null;
+    try {
+      const { fetched, hasMore: more, nextCursor } = await fetchPage();
+      setPosts(fetched);
+      setHasMore(more);
+      cursorRef.current = nextCursor ?? null;
+    } catch (e: any) {
+      setLoadError(e?.message ?? "Refresh failed");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const loadMore = async () => {
+    // Guard: do not paginate until the first page has fully landed,
+    // and do not fire if there are no more pages or a load is in flight.
+    if (!hasMore || loadingMore || loading) return;
+    // No cursor means we are at the start — do not append a duplicate page 1.
+    if (!cursorRef.current) { setHasMore(false); return; }
+    setLoadingMore(true);
+    try {
+      const { fetched, hasMore: more, nextCursor } = await fetchPage(cursorRef.current);
+      if (!fetched.length) { setHasMore(false); return; }
+      cursorRef.current = nextCursor ?? null;
+      setPosts((prev) => [...prev, ...fetched]);
+      setHasMore(more);
+    } catch (e: any) {
+      if (e?.stale) {
+        // Cursor document was deleted — reset and reload from page 1.
+        cursorRef.current = null;
+        setAttempt((a) => a + 1);
+      }
+      // Other network failures: silent — user can pull-to-refresh.
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // ── Render helpers ───────────────────────────────────────────────────────
+  const renderPost = useCallback(
+    ({ item }: { item: Post }) => <PostCard post={item} />,
+    []
+  );
+
+  const ListEmpty = () => {
+    if (loading) return null;
+    return (
+      <View style={styles.emptyWrap}>
+        {loadError ? (
+          <>
+            <Icon name="wifi-off" size={36} color={colors.mutedForeground} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              Couldn't load feed
+            </Text>
+            <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
+              {loadError}
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setAttempt((n) => n + 1)}
+            >
+              <Text style={styles.retryBtnText}>Try again</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Icon name="rss" size={36} color={colors.mutedForeground} />
+            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+              No posts yet
+            </Text>
+            <Text style={[styles.emptySub, { color: colors.mutedForeground }]}>
+              Be the first to post something!
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+              onPress={() => setMenuVisible(true)}
+            >
+              <Text style={styles.retryBtnText}>Create a Post</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const ListFooter = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      );
+    }
+    if (loadingMore) {
+      return (
+        <View style={styles.loadMoreWrap}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      );
+    }
+    if (!hasMore && posts.length > 0) {
+      return (
+        <View style={styles.endWrap}>
+          <Text style={[styles.endText, { color: colors.mutedForeground }]}>
+            You've seen everything! ✨
+          </Text>
+        </View>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <>
+      <FlatList
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ paddingBottom: botPad }}
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={renderPost}
+        ListHeaderComponent={
+          <FeedHeader
+            displayName={displayName}
+            profile={profile}
+            streak={streak}
+            xp={xp}
+            onPressPlus={() => setMenuVisible(true)}
+          />
+        }
+        ListEmptyComponent={<ListEmpty />}
+        ListFooterComponent={<ListFooter />}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        maxToRenderPerBatch={8}
+        windowSize={10}
+      />
+
+      {/* Create menu bottom sheet */}
+      <CreateMenuSheet
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+      />
+    </>
+  );
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  heroBg: { paddingHorizontal: 18, paddingBottom: 22 },
-  heroRow: { flexDirection: "row", alignItems: "center", marginBottom: 18 },
-  heroGreeting: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 18 },
-  heroSub: { color: "rgba(255,255,255,0.7)", fontFamily: "Inter_400Regular", fontSize: 13, marginTop: 2 },
-  statsRow: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16 },
-  statPill: { flex: 1, alignItems: "center", gap: 2 },
-  statEmoji: { fontSize: 16 },
-  statVal: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 16 },
-  statLbl: { color: "rgba(255,255,255,0.65)", fontFamily: "Inter_400Regular", fontSize: 10 },
-  statDivider: { width: 1, height: 32, backgroundColor: "rgba(255,255,255,0.2)" },
+  // Hero header
+  hero: { paddingHorizontal: 18, paddingBottom: 20 },
+  heroRow: { flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 0 },
+  heroGreeting: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 17 },
+  heroSub: { color: "rgba(255,255,255,0.7)", fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
 
-  body: { paddingHorizontal: 16, paddingTop: 18, gap: 18 },
+  // Create "+" button in header
+  plusBtn: { marginLeft: 10 },
+  plusGradient: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#7C3AED",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  plusText: { color: "#fff", fontSize: 22, lineHeight: 26, fontWeight: "300", marginTop: -1 },
 
-  goalCard: { borderRadius: 16, borderWidth: 1, padding: 14, gap: 10 },
-  goalHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
-  goalTitle: { fontFamily: "Inter_700Bold", fontSize: 14, flex: 1 },
-  goalCount: { fontFamily: "Inter_700Bold", fontSize: 14 },
-  goalTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
-  goalFill: { height: 8, borderRadius: 4 },
-  goalSub: { fontFamily: "Inter_400Regular", fontSize: 12 },
-
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 17, marginBottom: -8 },
-
-  bubblesRow: { gap: 16, paddingVertical: 4, paddingHorizontal: 2 },
-  bubbleWrap: { alignItems: "center", gap: 7, width: 70 },
-  bubbleRing: { width: 64, height: 64, borderRadius: 32, borderWidth: 2.5, padding: 4 },
-  bubble: { flex: 1, borderRadius: 28, alignItems: "center", justifyContent: "center" },
-  bubbleLabel: { fontFamily: "Inter_500Medium", fontSize: 11, textAlign: "center" },
-
-  focusCTA: { flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 16, borderWidth: 1, padding: 15 },
-  focusCTAIcon: { width: 46, height: 46, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  focusCTATitle: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  focusCTASub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
-
-  toolsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  toolCard: {
-    width: (W - 32 - 10) / 2 - 0.5,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
+  // Stats row
+  statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  toolIcon: { width: 42, height: 42, borderRadius: 11, alignItems: "center", justifyContent: "center" },
-  toolLabel: { fontFamily: "Inter_600SemiBold", fontSize: 13, flex: 1 },
+  statPill: { flex: 1, alignItems: "center", gap: 2 },
+  statEmoji: { fontSize: 14 },
+  statVal: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 15 },
+  statLbl: { color: "rgba(255,255,255,0.65)", fontFamily: "Inter_400Regular", fontSize: 10 },
+  statDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.2)" },
 
-  communityCTA: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16, marginBottom: 4 },
-  communityCTAText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  // Compact tools row
+  toolsRowScroll: { flexGrow: 0 },
+  toolsRowContent: { paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
+  toolPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+  toolPillIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  toolPillLabel: { fontFamily: "Inter_500Medium", fontSize: 13 },
+
+  // Feed section label
+  feedLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+  },
+  feedLabel: { fontFamily: "Inter_700Bold", fontSize: 15 },
+
+  // Empty / footer states
+  emptyWrap: { alignItems: "center", paddingTop: 60, paddingHorizontal: 40, gap: 12 },
+  emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18, textAlign: "center" },
+  emptySub: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 20, textAlign: "center" },
+  retryBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20, marginTop: 4 },
+  retryBtnText: { color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 14 },
+
+  loadingWrap: { paddingVertical: 40, alignItems: "center" },
+  loadMoreWrap: { paddingVertical: 16, alignItems: "center" },
+  endWrap: { paddingVertical: 20, alignItems: "center" },
+  endText: { fontFamily: "Inter_400Regular", fontSize: 13 },
+
+  // Create menu sheet
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  menuSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 36,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  sheetTitle: { fontFamily: "Inter_700Bold", fontSize: 18, marginBottom: 16, paddingHorizontal: 4 },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  sheetIcon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  sheetRowTitle: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  sheetRowSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
+  sheetCancel: {
+    marginTop: 16,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  sheetCancelText: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
 });
