@@ -63,6 +63,14 @@ function RootLayoutNav() {
       <Stack.Screen name="study-hub" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} />
+      <Stack.Screen
+        name="create-group"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
+      <Stack.Screen
+        name="create-opportunity"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
     </Stack>
   );
 }

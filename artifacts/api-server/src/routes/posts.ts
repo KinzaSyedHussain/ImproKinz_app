@@ -31,19 +31,44 @@ function getAdminDb(): admin.firestore.Firestore | null {
 
 const router = Router();
 
-router.get("/posts", async (_req, res) => {
+router.get("/posts", async (req, res) => {
   const db = getAdminDb();
   if (!db) {
     return res.status(503).json({ error: "Firebase Admin not configured" });
   }
 
   try {
-    const snap = await db.collection("community_posts").limit(60).get();
-    const posts = snap.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    return res.json({ posts });
+    const pageSize = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"), 10) || 20));
+
+    // Cursor is the document ID of the last item on the previous page.
+    // We fetch its DocumentSnapshot and pass it to startAfter(), which uses the
+    // snapshot's exact position in the ordered result set — handling duplicate
+    // createdAt values correctly without requiring a composite index.
+    const cursorDocId = req.query.cursor ? String(req.query.cursor) : null;
+
+    let q: admin.firestore.Query = db
+      .collection("community_posts")
+      .orderBy("createdAt", "desc")
+      .limit(pageSize);
+
+    if (cursorDocId) {
+      const cursorSnap = await db.collection("community_posts").doc(cursorDocId).get();
+      if (!cursorSnap.exists) {
+        // Cursor document was deleted. Returning page 1 silently would cause the
+        // client to append a duplicate page, so we signal the client explicitly.
+        return res.status(410).json({
+          error: "stale_cursor",
+          message: "Cursor document no longer exists. Reset your feed to page 1.",
+        });
+      }
+      q = q.startAfter(cursorSnap);
+    }
+
+    const snap = await q.get();
+    const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    // Return the ID of the last document as the next page cursor.
+    const nextCursor = snap.docs.length === pageSize ? snap.docs[snap.docs.length - 1].id : null;
+    return res.json({ posts, hasMore: snap.docs.length === pageSize, nextCursor });
   } catch (e) {
     console.error("[posts] query failed:", e);
     return res.status(500).json({ error: "Failed to fetch posts" });
