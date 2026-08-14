@@ -24,6 +24,8 @@ import { useColors } from "@/hooks/useColors";
 import { Post, PostCard, normalizePost } from "@/components/PostCard";
 import { UserAvatar } from "@/components/UserAvatar";
 import { XPStreakBadge } from "@/components/XPStreakBadge";
+import { VerifiedBadge } from "@/components/VerifiedBadge";
+import { useSubscription } from "@/lib/revenuecat";
 
 async function pickAndConvertToBase64(
   options: ImagePicker.ImagePickerOptions,
@@ -46,6 +48,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile, user, refreshProfile, isAdmin } = useAuth();
+  const { isVerified } = useSubscription();
 
   const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -234,6 +237,7 @@ export default function ProfileScreen() {
                 <Text style={[styles.name, { color: colors.foreground }]}>
                   {profile?.displayName || "Study User"}
                 </Text>
+                {isVerified && <VerifiedBadge size={16} />}
                 <TouchableOpacity
                   style={[styles.editBtn, { borderColor: colors.border }]}
                   onPress={() => router.push("/settings")}
