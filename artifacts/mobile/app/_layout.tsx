@@ -27,6 +27,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 const queryClient = new QueryClient();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
+// Safe initialization
 try {
   initializeRevenueCat();
 } catch (error) {
@@ -39,10 +40,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" />
       <Stack.Screen name="auth" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="create-post"
-        options={{ presentation: "modal", animation: "slide_from_bottom" }}
-      />
+      <Stack.Screen name="create-post" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="post/[id]" options={{ presentation: "modal" }} />
       <Stack.Screen name="user/[id]" />
       <Stack.Screen name="search" />
@@ -63,14 +61,8 @@ function RootLayoutNav() {
       <Stack.Screen name="study-hub" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="privacy" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} />
-      <Stack.Screen
-        name="create-group"
-        options={{ presentation: "modal", animation: "slide_from_bottom" }}
-      />
-      <Stack.Screen
-        name="create-opportunity"
-        options={{ presentation: "modal", animation: "slide_from_bottom" }}
-      />
+      <Stack.Screen name="create-group" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="create-opportunity" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="group/[id]" options={{ animation: "slide_from_right" }} />
       <Stack.Screen name="admin" options={{ animation: "slide_from_right" }} />
     </Stack>

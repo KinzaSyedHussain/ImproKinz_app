@@ -6,7 +6,7 @@ import { useSubscription } from "@/lib/revenuecat";
 import { useAuth as useClerkAuth } from "@clerk/clerk-expo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -89,16 +89,13 @@ function OpportunityCard({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      {/* Type badge */}
       <View style={[styles.typeBadge, { backgroundColor: typeColor + "22", borderColor: typeColor + "55" }]}>
         <Text style={[styles.typeBadgeText, { color: typeColor }]}>{opportunity.type}</Text>
       </View>
 
-      {/* Title & org */}
       <Text style={[styles.cardTitle, { color: colors.foreground }]}>{opportunity.title}</Text>
       <Text style={[styles.cardOrg, { color: colors.mutedForeground }]}>{opportunity.organization}</Text>
 
-      {/* Deadline */}
       <View style={styles.cardMeta}>
         <Icon name="calendar" size={13} color={colors.mutedForeground} />
         <Text style={[styles.cardMetaText, { color: colors.mutedForeground }]}>
@@ -106,14 +103,12 @@ function OpportunityCard({
         </Text>
       </View>
 
-      {/* Description */}
       {!!opportunity.description && (
         <Text style={[styles.cardDesc, { color: colors.foreground }]} numberOfLines={3}>
           {opportunity.description}
         </Text>
       )}
 
-      {/* Footer */}
       <View style={styles.cardFooter}>
         <View style={styles.cardPoster}>
           <Text style={[styles.cardPosterText, { color: colors.mutedForeground }]}>
@@ -155,26 +150,59 @@ export default function OpportunitiesScreen() {
   const [filter, setFilter] = useState<FilterKey>("All");
   const [showPaywall, setShowPaywall] = useState(false);
 
+  // Use a ref to prevent race conditions
+  const isMounted = useRef(true);
+  const hasLoadedOnce = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   // ── Fetch from server ───────────────────────────────────────────────────────
   const fetchOpportunities = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && isMounted.current) {
+      setLoading(true);
+    }
+
     try {
       const token = await getToken();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(`${API_BASE}/api/opportunities`, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setOpportunities(data.opportunities ?? []);
+
+      if (isMounted.current) {
+        setOpportunities(data.opportunities ?? []);
+        hasLoadedOnce.current = true;
+      }
     } catch (e) {
       console.warn("opportunities fetch error:", e);
+      if (isMounted.current && !hasLoadedOnce.current) {
+        setOpportunities([]);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [getToken]);
 
-  useEffect(() => { fetchOpportunities(); }, [fetchOpportunities]);
+  // Load once on mount - no dependencies to prevent re-renders
+  useEffect(() => {
+    fetchOpportunities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -299,7 +327,7 @@ export default function OpportunitiesScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

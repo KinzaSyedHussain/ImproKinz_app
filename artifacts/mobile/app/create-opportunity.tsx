@@ -54,34 +54,73 @@ export default function CreateOpportunityScreen() {
     !submitting;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      Alert.alert("Missing Fields", "Please fill in Title, Organization, and Description.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${API_BASE}/api/opportunities`, {
+      console.log("🔑 Token:", token ? "Exists" : "NULL");
+
+      const payload = {
+        type,
+        title: title.trim(),
+        organization: organization.trim(),
+        deadline: deadline.trim() || "Rolling",
+        link: link.trim(),
+        description: description.trim(),
+      };
+      console.log("📦 Payload being sent:", payload);
+
+      if (!token) {
+        Alert.alert("Not Authenticated", "Please log in again.");
+        setSubmitting(false);
+        return;
+      }
+
+      const API_URL = `${API_BASE}/api/opportunities`;
+      console.log("🌐 Posting to URL:", API_URL);
+
+      const res = await fetch(API_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          type,
-          title: title.trim(),
-          organization: organization.trim(),
-          deadline: deadline.trim() || "Rolling",
-          link: link.trim(),
-          description: description.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
+
+      console.log("📡 Response Status:", res.status);
+      const responseText = await res.text();
+      console.log("📄 Response Body:", responseText);
+
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || `HTTP ${res.status}`);
+        throw new Error(responseText || `HTTP ${res.status}`);
       }
-      router.back();
+
+      // Success!
+      Alert.alert("✅ Success", "Opportunity posted successfully!");
+
+      // Clear form
+      setTitle("");
+      setOrganization("");
+      setDeadline("");
+      setLink("");
+      setDescription("");
+
+      // Redirect with a slight delay to let the alert show
+      setTimeout(() => {
+        // If your route is nested in tabs, change this to: router.replace("/(tabs)/opportunities");
+        router.replace("/opportunities");
+      }, 800);
+
     } catch (e: any) {
+      console.error("❌ Error:", e);
       Alert.alert(
-        "Error",
-        e?.message || "Failed to post. Please try again.",
+        "❌ Posting Failed", 
+        `Error: ${e.message}\n\nCheck console for details.`
       );
     } finally {
       setSubmitting(false);

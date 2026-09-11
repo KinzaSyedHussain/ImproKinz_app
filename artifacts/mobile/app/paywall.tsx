@@ -1,4 +1,14 @@
-import React, { useEffect, useState } from "react";
+/**
+ * PaywallScreen
+ *
+ * On native development builds: attempts to present the RevenueCat-configured
+ * native paywall (presentPaywall from react-native-purchases-ui) which renders
+ * the mascot / stars / "Try for Free" design set up in the dashboard.
+ *
+ * On Expo Go and web: falls back to the custom plan-card UI and shows a banner
+ * explaining that the full native paywall requires a development build.
+ */
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,7 +17,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Modal,
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -15,6 +24,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useSubscription } from "@/lib/revenuecat";
 import { useLocalSearchParams } from "expo-router";
+import Constants from "expo-constants";
+import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 
 const GOLD = "#F59E0B";
 const GOLD2 = "#D97706";
@@ -26,6 +37,9 @@ const TEXT = "#FFFFFF";
 const MUTED = "#9CA3AF";
 const PURPLE = "#7C3AED";
 const TEAL = "#10B981";
+
+// Expo Go is detected by executionEnvironment === "storeClient"
+const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
 
 const FREE_FEATURES = [
   "100 credits daily (resets each day)",
@@ -50,7 +64,6 @@ const YEARLY_FEATURES = [
   "Priority AI access",
   "Extended tool limits",
   "Premium badge on profile",
-  "Stripe-ready architecture",
 ];
 
 function CheckIcon({ color = TEAL }: { color?: string }) {
@@ -142,13 +155,42 @@ function PlanCard({
 export default function PaywallScreen() {
   const router = useRouter();
   const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
-  const { offerings, isConfigured, isLoading, purchase, restore, isPurchasing, isRestoring, isSubscribed } = useSubscription();
+  const {
+    offerings, isConfigured, isLoading, purchase, restore,
+    isPurchasing, isRestoring, isSubscribed, refetchCustomerInfo,
+  } = useSubscription();
   const [purchasing, setPurchasing] = useState<"monthly" | "yearly" | null>(null);
-  const [confirmPkg, setConfirmPkg] = useState<any>(null);
+  // Whether we already attempted (and failed/declined) the native paywall this session
+  const nativeAttempted = useRef(false);
 
   useEffect(() => {
     if (isSubscribed) router.replace("/(tabs)");
   }, [isSubscribed]);
+
+  // ── Attempt native RevenueCat paywall on first mount (non-Expo-Go / non-web) ──
+  //
+  // On a real development build or production build the native module is present and
+  // RevenueCatUI.presentPaywall() shows the dashboard-configured paywall (mascot, stars,
+  // "Try for Free" design). On Expo Go the native module is absent and the call throws;
+  // we catch that and fall through to the custom card UI shown below.
+  useEffect(() => {
+    if (IS_EXPO_GO || Platform.OS === "web" || nativeAttempted.current) return;
+    nativeAttempted.current = true;
+
+    (async () => {
+      try {
+        const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall({
+          displayCloseButton: fromOnboarding !== "1",
+        });
+        if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
+          router.replace("/(tabs)");
+        }
+        // CANCELLED / NOT_PRESENTED / ERROR: fall through to custom card UI
+      } catch {
+        // Native module unavailable (simulator without native build) — custom UI handles it
+      }
+    })();
+  }, []);
 
   // Map RevenueCat packages to monthly/yearly
   const allPackages = offerings?.current?.availablePackages ?? [];
@@ -167,12 +209,6 @@ export default function PaywallScreen() {
       Alert.alert("Unavailable", "In-app purchases are not configured on this device.");
       return;
     }
-    if (__DEV__) { setConfirmPkg({ pkg, type }); return; }
-    await doPurchase(pkg, type);
-  };
-
-  const doPurchase = async (pkg: any, type: "monthly" | "yearly") => {
-    setConfirmPkg(null);
     setPurchasing(type);
     try {
       await purchase(pkg);
@@ -201,11 +237,21 @@ export default function PaywallScreen() {
         showsVerticalScrollIndicator={false}
         bounces
       >
-        {/* Close button */}
+        {/* Close button — hidden when entering from onboarding */}
         {fromOnboarding !== "1" && (
           <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
             <Ionicons name="close" size={22} color={MUTED} />
           </TouchableOpacity>
+        )}
+
+        {/* Expo Go banner */}
+        {IS_EXPO_GO && (
+          <View style={styles.expoGoBanner}>
+            <Ionicons name="information-circle-outline" size={16} color={GOLD} />
+            <Text style={styles.expoGoBannerText}>
+              The full premium paywall requires a development build. You are currently in Expo Go preview mode.
+            </Text>
+          </View>
         )}
 
         {/* Header */}
@@ -294,27 +340,6 @@ export default function PaywallScreen() {
           </>
         )}
       </ScrollView>
-
-      {/* Dev-mode confirm */}
-      <Modal visible={!!confirmPkg} transparent animationType="fade" onRequestClose={() => setConfirmPkg(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Ionicons name="construct-outline" size={32} color={GOLD} style={{ marginBottom: 8 }} />
-            <Text style={styles.modalTitle}>Test Purchase</Text>
-            <Text style={styles.modalBody}>
-              You're in development mode. This simulates the purchase via RevenueCat's test store. No real charge.
-            </Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.modalCancel} onPress={() => setConfirmPkg(null)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirm} onPress={() => doPurchase(confirmPkg.pkg, confirmPkg.type)}>
-                <Text style={styles.modalConfirmText}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -323,6 +348,25 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: DARK },
   scroll: { paddingHorizontal: 16, paddingBottom: 48, paddingTop: 8 },
   closeBtn: { alignSelf: "flex-end", padding: 10, marginBottom: 4 },
+
+  expoGoBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: GOLD + "14",
+    borderWidth: 1,
+    borderColor: GOLD + "44",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  expoGoBannerText: {
+    flex: 1,
+    color: GOLD,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    lineHeight: 18,
+  },
 
   headerWrap: { alignItems: "center", marginBottom: 24 },
   crownRow: { marginBottom: 14 },
@@ -390,18 +434,4 @@ const styles = StyleSheet.create({
     color: "#4B5563", fontFamily: "Inter_400Regular",
     fontSize: 11, textAlign: "center", lineHeight: 16, paddingHorizontal: 12,
   },
-
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center" },
-  modalCard: {
-    backgroundColor: CARD, borderRadius: 20, padding: 24, margin: 24,
-    alignItems: "center", borderWidth: 1, borderColor: GOLD,
-  },
-  modalTitle: { color: TEXT, fontFamily: "Inter_700Bold", fontSize: 18, marginBottom: 8 },
-  modalBody: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center", lineHeight: 18, marginBottom: 20 },
-  modalBtns: { flexDirection: "row", gap: 12 },
-  modalCancel: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: "#2A2560" },
-  modalCancelText: { color: MUTED, fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  modalConfirm: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: GOLD },
-  modalConfirmText: { color: DARK, fontFamily: "Inter_700Bold", fontSize: 14 },
 });

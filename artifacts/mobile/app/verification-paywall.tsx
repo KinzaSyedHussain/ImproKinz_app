@@ -1,16 +1,5 @@
 /**
  * VerificationPaywallSheet
- *
- * An inline bottom-sheet Modal (not a route) that prompts the user to purchase
- * the "verified" one-time entitlement from the "verification" RevenueCat offering.
- *
- * Usage:
- *   <VerificationPaywallSheet visible={show} onClose={() => setShow(false)} onVerified={() => {...}} />
- *
- * RevenueCat setup required (manual):
- *   1. Dashboard → Offerings → create offering with ID "verification"
- *   2. Add a Lifetime package linked to a $4.99 product in App Store / Play Store
- *   3. Link the entitlement "verified" to that product
  */
 import React, { useState } from "react";
 import {
@@ -32,6 +21,7 @@ const CARD = "#1A1740";
 const BORDER = "#2A2560";
 const TEXT = "#FFFFFF";
 const MUTED = "#9CA3AF";
+const SUCCESS = "#10B981";
 
 const BENEFITS = [
   { icon: "briefcase-outline", text: "Post jobs, hackathons & internships" },
@@ -42,7 +32,6 @@ const BENEFITS = [
 interface Props {
   visible: boolean;
   onClose: () => void;
-  /** Called only after the "verified" entitlement is confirmed in the returned customerInfo. */
   onVerified?: () => void;
 }
 
@@ -51,7 +40,6 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
   const [purchasing, setPurchasing] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
 
-  // Require the explicitly named "verification" offering — no fallback to premium/current.
   const verificationOffering = offerings?.all?.["verification"] ?? null;
   const verificationPkg =
     verificationOffering?.availablePackages?.[0] ??
@@ -59,16 +47,20 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
     null;
   const priceString = verificationPkg?.product?.priceString ?? "$4.99";
   const offeringAvailable = !!verificationOffering && !!verificationPkg;
+  const isDevMode = __DEV__;
 
   const handlePurchase = async () => {
     if (!offeringAvailable || !isConfigured) {
-      Alert.alert(
-        "Unavailable",
-        "The verification purchase is not available on this device yet. Please try again later or contact support.",
-      );
+      // In dev mode, we'll show the mock button instead of this alert
+      if (!isDevMode) {
+        Alert.alert(
+          "Unavailable",
+          "The verification purchase is not available on this device yet.",
+        );
+      }
       return;
     }
-    if (__DEV__) {
+    if (isDevMode) {
       setConfirmVisible(true);
       return;
     }
@@ -80,13 +72,12 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
     setPurchasing(true);
     try {
       const customerInfo = await purchase(verificationPkg!);
-      // Verify the "verified" entitlement is active in the returned customerInfo
       const entitlementActive =
         customerInfo?.entitlements?.active?.[VERIFICATION_ENTITLEMENT_ID] !== undefined;
       if (!entitlementActive) {
         Alert.alert(
           "Purchase incomplete",
-          "The verification entitlement was not activated. Please restore purchases or contact support.",
+          "The verification entitlement was not activated.",
         );
         return;
       }
@@ -110,29 +101,19 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
         onVerified?.();
         onClose();
       } else {
-        Alert.alert(
-          "No purchase found",
-          "We couldn't find a verified purchase on this account. If you believe this is an error, contact support.",
-        );
+        Alert.alert("No purchase found", "We couldn't find a verified purchase on this account.");
       }
     } catch {
-      Alert.alert("Restore failed", "We couldn't restore your purchases. Please try again.");
+      Alert.alert("Restore failed", "We couldn't restore your purchases.");
     }
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose} />
       <View style={styles.sheet}>
-        {/* Handle */}
         <View style={styles.handle} />
 
-        {/* Gold badge */}
         <View style={styles.badgeWrap}>
           <View style={[styles.badgeCircle, { backgroundColor: GOLD + "20", borderColor: GOLD }]}>
             <Ionicons name="shield-checkmark" size={36} color={GOLD} />
@@ -144,7 +125,6 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
           A one-time purchase that unlocks posting privileges and your gold verified badge.
         </Text>
 
-        {/* Benefits */}
         <View style={styles.benefits}>
           {BENEFITS.map((b) => (
             <View key={b.text} style={styles.benefitRow}>
@@ -156,7 +136,6 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
           ))}
         </View>
 
-        {/* Price */}
         <View style={styles.priceRow}>
           <Text style={styles.price}>{priceString}</Text>
           <Text style={styles.priceSub}>one-time · lifetime access</Text>
@@ -167,12 +146,12 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
           <View style={[styles.unavailableNote, { borderColor: BORDER }]}>
             <Ionicons name="time-outline" size={14} color={MUTED} />
             <Text style={[styles.unavailableText, { color: MUTED }]}>
-              Verification purchase not yet available on this store. Check back soon.
+              Verification purchase not yet available on this store.
             </Text>
           </View>
         )}
 
-        {/* CTA */}
+        {/* Main CTA (Disabled if not configured/available) */}
         <TouchableOpacity
           style={[
             styles.ctaBtn,
@@ -189,7 +168,21 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
           )}
         </TouchableOpacity>
 
-        {/* Restore & dismiss */}
+        {/* 🛠️ DEV MODE BYPASS: Lets you test the flow without RevenueCat configured */}
+        {isDevMode && (!offeringAvailable || !isConfigured) && (
+          <TouchableOpacity
+            style={[styles.ctaBtn, { backgroundColor: SUCCESS, marginTop: 8 }]}
+            onPress={() => {
+              console.log("🛠️ DEV: Mock verifying user...");
+              onVerified?.();
+              onClose();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.ctaText}>🛠️ Mock Verify (Dev Only)</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity onPress={handleRestore} disabled={isRestoring} style={styles.restoreBtn}>
           <Text style={styles.restoreText}>
             {isRestoring ? "Restoring…" : "Restore purchase"}
@@ -202,24 +195,17 @@ export function VerificationPaywallSheet({ visible, onClose, onVerified }: Props
 
         <Text style={styles.legal}>
           Payment charged to your App Store / Play Store account at confirmation.
-          Non-refundable once purchased.
         </Text>
       </View>
 
       {/* Dev-mode confirm dialog */}
-      <Modal
-        visible={confirmVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmVisible(false)}
-      >
+      <Modal visible={confirmVisible} transparent animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
         <View style={styles.devOverlay}>
           <View style={styles.devCard}>
             <Ionicons name="construct-outline" size={32} color={GOLD} style={{ marginBottom: 8 }} />
             <Text style={styles.devTitle}>Test Purchase</Text>
             <Text style={styles.devBody}>
-              You're in development mode. This simulates the "verification" purchase via
-              RevenueCat's sandbox. No real charge will be made.
+              You're in development mode. This simulates the "verification" purchase.
             </Text>
             <View style={styles.devBtns}>
               <TouchableOpacity style={styles.devCancel} onPress={() => setConfirmVisible(false)}>
@@ -272,9 +258,9 @@ const styles = StyleSheet.create({
   priceSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: MUTED, marginTop: 2 },
   unavailableNote: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 12, width: "100%",
+    borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 12, width: "100%", justifyContent: "center",
   },
-  unavailableText: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1, lineHeight: 17 },
+  unavailableText: { fontFamily: "Inter_400Regular", fontSize: 12, flex: 1, lineHeight: 17, textAlign: "center" },
   ctaBtn: {
     width: "100%", backgroundColor: GOLD, borderRadius: 14,
     paddingVertical: 15, alignItems: "center", marginBottom: 12,
@@ -288,7 +274,6 @@ const styles = StyleSheet.create({
     fontSize: 10, fontFamily: "Inter_400Regular", color: "#4B5563",
     textAlign: "center", lineHeight: 15,
   },
-  // Dev confirm
   devOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center" },
   devCard: {
     backgroundColor: CARD, borderRadius: 20, padding: 24, margin: 24,
@@ -299,7 +284,7 @@ const styles = StyleSheet.create({
     color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13,
     textAlign: "center", lineHeight: 18, marginBottom: 20,
   },
-  devBtns: { flexDirection: "row", gap: 12 },
+  devBtns: { flexDirection: "row", gap: 12, width: "100%" },
   devCancel: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: "#2A2560" },
   devCancelText: { color: MUTED, fontFamily: "Inter_600SemiBold", fontSize: 14 },
   devConfirm: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center", backgroundColor: GOLD },

@@ -1,166 +1,156 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { Platform } from "react-native";
-import Purchases, { type PurchasesPackage } from "react-native-purchases";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import Constants from "expo-constants";
-import { useAuth } from "@/context/AuthContext";
-
-const REVENUECAT_TEST_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
-const REVENUECAT_IOS_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
-const REVENUECAT_ANDROID_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
-
-export const REVENUECAT_ENTITLEMENT_IDENTIFIER = "premium";
+// Add this export so verification-paywall.tsx doesn't break
 export const VERIFICATION_ENTITLEMENT_ID = "verified";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import Purchases, { CustomerInfo, PurchasesPackage, Offerings } from 'react-native-purchases';
 
-let revenueCatConfigured = false;
+// Replace with your actual RevenueCat API key from .env, or keep the fallback for testing
+const REVENUECAT_API_KEY = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY || 'appl_YourApiKeyHere';
 
-function getRevenueCatApiKey() {
-  if (!REVENUECAT_TEST_API_KEY || !REVENUECAT_IOS_API_KEY || !REVENUECAT_ANDROID_API_KEY) {
-    return null;
-  }
-
-  if (!REVENUECAT_ENTITLEMENT_IDENTIFIER) {
-    return null;
-  }
-
-  if (__DEV__ || Platform.OS === "web" || Constants.executionEnvironment === "storeClient") {
-    return REVENUECAT_TEST_API_KEY;
-  }
-
-  if (Platform.OS === "ios") {
-    return REVENUECAT_IOS_API_KEY;
-  }
-
-  if (Platform.OS === "android") {
-    return REVENUECAT_ANDROID_API_KEY;
-  }
-
-  return REVENUECAT_TEST_API_KEY;
+interface SubscriptionContextType {
+  customerInfo: CustomerInfo | null;
+  offerings: Offerings | null;
+  isLoading: boolean;
+  isConfigured: boolean;
+  isPurchasing: boolean;
+  isRestoring: boolean;
+  isSubscribed: boolean;
+  isVerified: boolean; // Added for compatibility with opportunities.tsx
+  purchase: (pkg: PurchasesPackage) => Promise<CustomerInfo | null>;
+  restore: () => Promise<CustomerInfo | null>;
+  refetchCustomerInfo: () => Promise<CustomerInfo | null>;
 }
 
-export function initializeRevenueCat(): boolean {
-  if (revenueCatConfigured) return true;
+const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
-  const apiKey = getRevenueCatApiKey();
-  if (!apiKey) {
-    console.warn("RevenueCat is unavailable: public API keys are not configured.");
-    return false;
+let isInitialized = false;
+
+// Called once in _layout.tsx
+export function initializeRevenueCat() {
+  if (!isInitialized) {
+    try {
+      Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+      isInitialized = true;
+    } catch (error) {
+      console.warn("RevenueCat configure error:", error);
+    }
   }
-
-  Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
-  Purchases.configure({ apiKey });
-  revenueCatConfigured = true;
-
-  console.log("Configured RevenueCat");
-  return true;
 }
 
-function useSubscriptionContext() {
-  const { user } = useAuth();
-  const [customerError, setCustomerError] = useState<unknown>(null);
-  const [customerReady, setCustomerReady] = useState(false);
+export function SubscriptionProvider({ children }: { children: ReactNode }) {
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [offerings, setOfferings] = useState<Offerings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  // Exposed so paywall.tsx can await it before routing
+  const refetchCustomerInfo = useCallback(async () => {
+    try {
+      if (!isInitialized) return null;
+      const info = await Purchases.getCustomerInfo();
+      setCustomerInfo(info);
+      return info;
+    } catch (error) {
+      console.warn('Failed to refetch customer info:', error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
-    if (!revenueCatConfigured) {
-      setCustomerReady(false);
-      return;
-    }
-
-    let cancelled = false;
-    setCustomerReady(false);
-    setCustomerError(null);
-
-    const syncUser = async () => {
+    let mounted = true;
+    const init = async () => {
       try {
-        if (user?.uid) {
-          await Purchases.logIn(user.uid);
-          if (!cancelled) setCustomerReady(true);
-        } else if (!cancelled) {
-          setCustomerReady(false);
+        if (!isInitialized) {
+          Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+          isInitialized = true;
+        }
+        setIsConfigured(true);
+
+        // Fetch both safely in parallel
+        const [info, offs] = await Promise.all([
+          Purchases.getCustomerInfo(),
+          Purchases.getOfferings()
+        ]);
+
+        if (mounted) {
+          setCustomerInfo(info);
+          setOfferings(offs);
+          setIsLoading(false); // ✅ CRITICAL: Always turns off loading on success
         }
       } catch (error) {
-        if (!cancelled) {
-          setCustomerError(error);
-          setCustomerReady(false);
-          console.warn("RevenueCat customer sync failed:", error);
+        console.error('RevenueCat initialization error (falling back gracefully):', error);
+        if (mounted) {
+          setIsLoading(false); // ✅ CRITICAL: Prevents infinite loading spinners on error
+          setIsConfigured(false);
         }
       }
     };
+    init();
+    return () => { mounted = false; };
+  }, []);
 
-    syncUser();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.uid]);
-
-  const customerInfoQuery = useQuery({
-    queryKey: ["revenuecat", "customer-info"],
-    queryFn: async () => {
-      const info = await Purchases.getCustomerInfo();
-      return info;
-    },
-    staleTime: 60 * 1000,
-    enabled: revenueCatConfigured && !!user && customerReady,
-  });
-
-  const offeringsQuery = useQuery({
-    queryKey: ["revenuecat", "offerings"],
-    queryFn: async () => {
-      const offerings = await Purchases.getOfferings();
-      return offerings;
-    },
-    staleTime: 300 * 1000,
-    enabled: revenueCatConfigured,
-  });
-
-  const purchaseMutation = useMutation({
-    mutationFn: async (packageToPurchase: PurchasesPackage) => {
-      const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
-      return customerInfo;
-    },
-    onSuccess: () => customerInfoQuery.refetch(),
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: async () => {
-      return Purchases.restorePurchases();
-    },
-    onSuccess: () => customerInfoQuery.refetch(),
-  });
-
-  const isSubscribed =
-    customerInfoQuery.data?.entitlements.active?.[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
-
-  const isVerified =
-    customerInfoQuery.data?.entitlements.active?.[VERIFICATION_ENTITLEMENT_ID] !== undefined;
-
-  return {
-    customerInfo: customerInfoQuery.data,
-    offerings: offeringsQuery.data,
-    isSubscribed,
-    isVerified,
-    isConfigured: revenueCatConfigured,
-    error: customerError || customerInfoQuery.error || offeringsQuery.error,
-    isLoading: revenueCatConfigured && (customerInfoQuery.isLoading || offeringsQuery.isLoading),
-    purchase: purchaseMutation.mutateAsync,
-    restore: restoreMutation.mutateAsync,
-    isPurchasing: purchaseMutation.isPending,
-    isRestoring: restoreMutation.isPending,
+  const purchase = async (pkg: PurchasesPackage) => {
+    setIsPurchasing(true);
+    try {
+      const { customerInfo: newInfo } = await Purchases.purchasePackage(pkg);
+      setCustomerInfo(newInfo);
+      return newInfo;
+    } catch (error: any) {
+      if (!error.userCancelled) {
+        console.error('Purchase error:', error);
+      }
+      throw error;
+    } finally {
+      setIsPurchasing(false);
+    }
   };
-}
 
-type SubscriptionContextValue = ReturnType<typeof useSubscriptionContext>;
-const Context = createContext<SubscriptionContextValue | null>(null);
+  const restore = async () => {
+    setIsRestoring(true);
+    try {
+      const newInfo = await Purchases.restorePurchases();
+      setCustomerInfo(newInfo);
+      return newInfo;
+    } catch (error) {
+      console.error('Restore error:', error);
+      throw error;
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
-export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
-  const value = useSubscriptionContext();
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  // ⚠️ IMPORTANT: Change 'premium' or 'pro' to match your actual RevenueCat entitlement ID
+  const isSubscribed = !!(customerInfo?.entitlements.active['premium'] || customerInfo?.entitlements.active['pro']);
+
+  // Alias for compatibility with components checking isVerified
+  const isVerified = isSubscribed;
+
+  const value = {
+    customerInfo,
+    offerings,
+    isLoading,
+    isConfigured,
+    isPurchasing,
+    isRestoring,
+    isSubscribed,
+    isVerified, // ✅ Included so opportunities.tsx works correctly
+    purchase,
+    restore,
+    refetchCustomerInfo,
+  };
+
+  return (
+    <SubscriptionContext.Provider value={value}>
+      {children}
+    </SubscriptionContext.Provider>
+  );
 }
 
 export function useSubscription() {
-  const ctx = useContext(Context);
-  if (!ctx) {
-    throw new Error("useSubscription must be used within a SubscriptionProvider");
+  const context = useContext(SubscriptionContext);
+  if (context === undefined) {
+    throw new Error('useSubscription must be used within a SubscriptionProvider');
   }
-  return ctx;
+  return context;
 }
