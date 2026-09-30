@@ -1,474 +1,720 @@
 import { Icon } from "@/components/Icon";
-import * as Haptics from "expo-haptics";
-import { playSound } from "@/lib/sounds";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Circle, Defs, LinearGradient as SvgGrad, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useCredits } from "@/context/CreditContext";
+import { ToolCreditPill } from "@/components/CreditUI";
 
-const { width: W } = Dimensions.get("window");
+const WORK_MIN = 25;
+const BREAK_MIN = 5;
 
-const RING_R = 105;
-const RING_SW = 14;
-const RING_SIZE = (RING_R + RING_SW + 4) * 2;
-const CIRCUMFERENCE = 2 * Math.PI * RING_R;
-const CX = RING_SIZE / 2;
-const CY = RING_SIZE / 2;
+function formatTime(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const m = Math.floor(safeSeconds / 60);
+  const s = safeSeconds % 60;
 
-const PRESETS = [
-  { label: "5 min", value: 5 },
-  { label: "10 min", value: 10 },
-  { label: "25 min", value: 25 },
-  { label: "50 min", value: 50 },
-];
-
-type Phase = "setup" | "running" | "paused" | "complete";
-
-function formatTime(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  return `${m.toString().padStart(2, "0")}:${s
+    .toString()
+    .padStart(2, "0")}`;
 }
 
-function Confetti() {
-  const colors = ["#F59E0B", "#7C3AED", "#10B981", "#EF4444", "#F472B6", "#38BDF8"];
-  const dots = Array.from({ length: 24 }, (_, i) => ({
-    key: i,
-    color: colors[i % colors.length],
-    anim: useRef(new Animated.Value(0)).current,
-    x: (Math.random() - 0.5) * W * 0.9,
-    delay: Math.random() * 300,
-    size: 6 + Math.random() * 8,
-  }));
-
-  useEffect(() => {
-    const anims = dots.map((d) =>
-      Animated.timing(d.anim, {
-        toValue: 1,
-        duration: 900,
-        delay: d.delay,
-        useNativeDriver: true,
-      })
-    );
-    Animated.stagger(20, anims).start();
-  }, []);
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {dots.map((d) => (
-        <Animated.View
-          key={d.key}
-          style={{
-            position: "absolute",
-            top: "35%",
-            left: "50%",
-            width: d.size,
-            height: d.size,
-            borderRadius: d.size / 2,
-            backgroundColor: d.color,
-            transform: [
-              { translateX: d.anim.interpolate({ inputRange: [0, 1], outputRange: [0, d.x] }) },
-              { translateY: d.anim.interpolate({ inputRange: [0, 1], outputRange: [0, -160 - Math.random() * 120] }) },
-              { scale: d.anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1.4, 0.2] }) },
-            ],
-            opacity: d.anim.interpolate({ inputRange: [0, 0.7, 1], outputRange: [1, 1, 0] }),
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-export default function FocusScreen() {
+export default function PomodoroScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { addXP } = useAuth();
+  const router = useRouter();
 
-  const [phase, setPhase] = useState<Phase>("setup");
-  const [selectedMinutes, setSelectedMinutes] = useState(25);
-  const [customInput, setCustomInput] = useState("");
-  const [totalSeconds, setTotalSeconds] = useState(25 * 60);
-  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
-  const [sessions, setSessions] = useState(0);
-  const [coinsEarned, setCoinsEarned] = useState(0);
+  const { addXP } = useAuth();
+  const { consumeTool } = useCredits();
+
+  const [mode, setMode] = useState<"work" | "break">("work");
+  const [secondsLeft, setSecondsLeft] = useState(WORK_MIN * 60);
+  const [running, setRunning] = useState(false);
+  const [completedSessions, setCompletedSessions] = useState(0);
+  const [chargedForCurrentSession, setChargedForCurrentSession] =
+    useState(false);
+
+  const endTimeRef = useRef<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const coinAnim = useRef(new Animated.Value(0)).current;
+  const completionHandledRef = useRef(false);
 
   const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
   const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
 
-  const progress = totalSeconds > 0 ? 1 - secondsLeft / totalSeconds : 0;
-  const dashOffset = CIRCUMFERENCE * (1 - progress);
+  const totalSeconds = mode === "work" ? WORK_MIN * 60 : BREAK_MIN * 60;
+
+  const progress =
+    totalSeconds > 0
+      ? Math.min(1, Math.max(0, 1 - secondsLeft / totalSeconds))
+      : 0;
+
+  const stopTimer = useCallback(() => {
+    endTimeRef.current = null;
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    setRunning(false);
+  }, []);
+
+  const completeTimer = useCallback(() => {
+    if (completionHandledRef.current) {
+      return;
+    }
+
+    completionHandledRef.current = true;
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    endTimeRef.current = null;
+    setRunning(false);
+    setSecondsLeft(0);
+
+    if (mode === "work") {
+      setCompletedSessions((current) => current + 1);
+
+      addXP(10).catch(() => {});
+
+      Alert.alert(
+        "Focus session complete!",
+        "Time for a short break.",
+        [
+          {
+            text: "Start Break",
+            onPress: () => {
+              setMode("break");
+              setSecondsLeft(BREAK_MIN * 60);
+              setChargedForCurrentSession(false);
+              completionHandledRef.current = false;
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        "Break over!",
+        "Ready to focus again?",
+        [
+          {
+            text: "Start Work",
+            onPress: () => {
+              setMode("work");
+              setSecondsLeft(WORK_MIN * 60);
+              setChargedForCurrentSession(false);
+              completionHandledRef.current = false;
+            },
+          },
+        ],
+      );
+    }
+  }, [addXP, mode]);
 
   useEffect(() => {
-    if (phase === "running") {
-      intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(intervalRef.current!);
-            handleComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (!running) {
+      return;
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [phase]);
 
-  const handleComplete = () => {
-    const mins = Math.round(totalSeconds / 60);
-    const coins = Math.max(1, Math.round(mins / 5));
-    const xpGain = mins * 2;
-    setSessions((s) => s + 1);
-    setCoinsEarned(coins);
-    addXP(xpGain).catch(() => {});
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    playSound("focusComplete").catch(() => {});
+    const updateTimer = () => {
+      if (!endTimeRef.current) {
+        return;
+      }
 
-    Animated.sequence([
-      Animated.timing(coinAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.spring(coinAnim, { toValue: 1.15, useNativeDriver: true }),
-    ]).start();
+      const remainingMilliseconds =
+        endTimeRef.current - Date.now();
 
-    setPhase("complete");
+      const remainingSeconds = Math.ceil(
+        remainingMilliseconds / 1000,
+      );
+
+      if (remainingSeconds <= 0) {
+        setSecondsLeft(0);
+        completeTimer();
+        return;
+      }
+
+      setSecondsLeft(remainingSeconds);
+    };
+
+    updateTimer();
+
+    intervalRef.current = setInterval(updateTimer, 250);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [running, completeTimer]);
+
+  const switchMode = useCallback(
+    (newMode: "work" | "break") => {
+      stopTimer();
+
+      completionHandledRef.current = false;
+
+      setMode(newMode);
+
+      setSecondsLeft(
+        newMode === "work"
+          ? WORK_MIN * 60
+          : BREAK_MIN * 60,
+      );
+
+      setChargedForCurrentSession(false);
+    },
+    [stopTimer],
+  );
+
+  const toggle = async () => {
+    // Pause
+    if (running) {
+      if (endTimeRef.current) {
+        const remaining = Math.max(
+          0,
+          Math.ceil(
+            (endTimeRef.current - Date.now()) / 1000,
+          ),
+        );
+
+        setSecondsLeft(remaining);
+      }
+
+      stopTimer();
+      return;
+    }
+
+    // Start
+    if (secondsLeft <= 0) {
+      setSecondsLeft(totalSeconds);
+    }
+
+    if (mode === "work" && !chargedForCurrentSession) {
+      try {
+        const allowed = await consumeTool("pomodoro");
+
+        if (!allowed) {
+          return;
+        }
+
+        setChargedForCurrentSession(true);
+      } catch (error) {
+        console.error("Pomodoro credit error:", error);
+
+        Alert.alert(
+          "Unable to start timer",
+          "We couldn't verify your Pomodoro credits. Please try again.",
+        );
+
+        return;
+      }
+    }
+
+    const secondsToRun = Math.max(1, secondsLeft);
+
+    completionHandledRef.current = false;
+
+    endTimeRef.current =
+      Date.now() + secondsToRun * 1000;
+
+    setRunning(true);
   };
 
-  const startSession = (mins: number) => {
-    const secs = mins * 60;
-    setTotalSeconds(secs);
-    setSecondsLeft(secs);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPhase("running");
+  const reset = () => {
+    stopTimer();
+
+    completionHandledRef.current = false;
+
+    setSecondsLeft(
+      mode === "work"
+        ? WORK_MIN * 60
+        : BREAK_MIN * 60,
+    );
+
+    setChargedForCurrentSession(false);
   };
 
-  const pauseResume = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPhase((p) => (p === "running" ? "paused" : "running"));
-  };
+  const ringColor =
+    mode === "work" ? "#059669" : "#D97706";
 
-  const endSession = () => {
-    Alert.alert("End Session?", "Your progress won't count toward a reward.", [
-      { text: "Keep going", style: "cancel" },
-      { text: "End", style: "destructive", onPress: () => { clearInterval(intervalRef.current!); setPhase("setup"); setSecondsLeft(totalSeconds); } },
-    ]);
-  };
-
-  const resetToSetup = () => {
-    coinAnim.setValue(0);
-    setPhase("setup");
-    setSecondsLeft(selectedMinutes * 60);
-  };
+  const ringColors: [string, string] =
+    mode === "work"
+      ? ["#059669", "#84CC16"]
+      : ["#D97706", "#F59E0B"];
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <ScrollView
+      style={{
+        flex: 1,
+        backgroundColor: colors.background,
+      }}
+      contentContainerStyle={{
+        paddingBottom: botPad,
+        alignItems: "center",
+      }}
     >
-      <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingTop: topPad + 16, paddingBottom: botPad }]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <LinearGradient
+        colors={["#059669", "#84CC16"]}
+        style={[
+          styles.header,
+          {
+            paddingTop: topPad + 12,
+          },
+        ]}
       >
-        {/* ── Setup phase ───────────────────────────────── */}
-        {phase === "setup" && (
-          <>
-            <Text style={[styles.screenTitle, { color: colors.foreground }]}>Focus Timer</Text>
-            <Text style={[styles.screenSub, { color: colors.mutedForeground }]}>
-              Set your time and earn gold coins when you finish
-            </Text>
+        <View style={styles.headerRow}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backBtn}
+          >
+            <Icon
+              name="arrow-left"
+              size={20}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
 
-            {/* Session counter */}
-            {sessions > 0 && (
-              <View style={[styles.sessionBadge, { backgroundColor: colors.secondary }]}>
-                <Icon name="trophy" size={14} color={colors.primary} />
-                <Text style={[styles.sessionBadgeText, { color: colors.primary }]}>
-                  {sessions} session{sessions > 1 ? "s" : ""} completed today
-                </Text>
-              </View>
-            )}
-
-            {/* Preset chips */}
-            <Text style={[styles.label, { color: colors.foreground }]}>Choose duration</Text>
-            <View style={styles.presetRow}>
-              {PRESETS.map((p) => (
-                <TouchableOpacity
-                  key={p.value}
-                  onPress={() => { setSelectedMinutes(p.value); setCustomInput(""); }}
-                  style={[
-                    styles.preset,
-                    {
-                      backgroundColor: selectedMinutes === p.value && !customInput ? colors.primary : colors.card,
-                      borderColor: selectedMinutes === p.value && !customInput ? colors.primary : colors.border,
-                    },
-                  ]}
-                  activeOpacity={0.78}
-                >
-                  <Text style={[styles.presetText, {
-                    color: selectedMinutes === p.value && !customInput ? colors.primaryForeground : colors.foreground,
-                  }]}>
-                    {p.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Custom input */}
-            <View style={[styles.customWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Icon name="edit-3" size={16} color={colors.mutedForeground} />
-              <TextInput
-                style={[styles.customInput, { color: colors.foreground }]}
-                value={customInput}
-                onChangeText={(v) => {
-                  const n = v.replace(/[^0-9]/g, "");
-                  setCustomInput(n);
-                  if (n) setSelectedMinutes(parseInt(n, 10));
-                }}
-                placeholder="Custom minutes (e.g. 45)"
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType="number-pad"
-                maxLength={3}
-              />
-              {!!customInput && (
-                <Text style={[styles.customUnit, { color: colors.primary }]}>min</Text>
-              )}
-            </View>
-
-            {/* Reward preview */}
-            <View style={[styles.rewardPreview, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Icon name="coins" size={18} color={colors.primary} />
-              <Text style={[styles.rewardText, { color: colors.mutedForeground }]}>
-                Complete this session →{" "}
-                <Text style={{ color: colors.primary, fontFamily: "Inter_700Bold" }}>
-                  +{Math.max(1, Math.round((customInput ? parseInt(customInput) || 0 : selectedMinutes) / 5))} coins
-                </Text>
-                {" "}+{" "}
-                <Text style={{ color: colors.primary, fontFamily: "Inter_700Bold" }}>
-                  +{(customInput ? parseInt(customInput) || 0 : selectedMinutes) * 2} XP
-                </Text>
-              </Text>
-            </View>
-
-            {/* Start button */}
-            <TouchableOpacity
-              onPress={() => {
-                const mins = customInput ? parseInt(customInput, 10) : selectedMinutes;
-                if (!mins || mins < 1 || mins > 300) {
-                  Alert.alert("Invalid duration", "Please choose between 1 and 300 minutes.");
-                  return;
-                }
-                startSession(mins);
-              }}
-              activeOpacity={0.85}
+          <View style={{ flex: 1 }}>
+            <Text
+              style={[
+                styles.headerTitle,
+                { color: colors.foreground },
+              ]}
             >
-              <LinearGradient
-                colors={[colors.purpleStart, colors.primary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.startBtn}
-              >
-                <Icon name="play" size={20} color="#fff" />
-                <Text style={styles.startBtnText}>Start Focus Session</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* ── Timer phase (running / paused) ────────────── */}
-        {(phase === "running" || phase === "paused") && (
-          <>
-            <Text style={[styles.screenTitle, { color: colors.foreground }]}>
-              {phase === "paused" ? "⏸ Paused" : "Focusing…"}
+              Pomodoro
             </Text>
 
-            {/* SVG ring */}
-            <View style={styles.ringWrap}>
-              <Svg width={RING_SIZE} height={RING_SIZE}>
-                <Defs>
-                  <SvgGrad id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                    <Stop offset="0" stopColor={colors.purpleStart} stopOpacity="1" />
-                    <Stop offset="1" stopColor={colors.primary} stopOpacity="1" />
-                  </SvgGrad>
-                </Defs>
-                {/* Background track */}
-                <Circle cx={CX} cy={CY} r={RING_R} stroke={colors.secondary} strokeWidth={RING_SW} fill="none" />
-                {/* Progress arc */}
-                <Circle
-                  cx={CX}
-                  cy={CY}
-                  r={RING_R}
-                  stroke="url(#ringGrad)"
-                  strokeWidth={RING_SW}
-                  fill="none"
-                  strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
-                  strokeDashoffset={dashOffset}
-                  strokeLinecap="round"
-                  rotation={-90}
-                  origin={`${CX},${CY}`}
-                />
-              </Svg>
-
-              {/* Time display overlaid */}
-              <View style={styles.timeOverlay}>
-                <Text style={[styles.timeText, { color: colors.foreground }]}>{formatTime(secondsLeft)}</Text>
-                <Text style={[styles.timeLabel, { color: colors.mutedForeground }]}>
-                  {phase === "paused" ? "paused" : "remaining"}
-                </Text>
-              </View>
-            </View>
-
-            {/* Controls */}
-            <View style={styles.controlRow}>
-              <TouchableOpacity style={[styles.controlBtn, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={endSession}>
-                <Icon name="square" size={22} color={colors.destructive ?? "#EF4444"} />
-                <Text style={[styles.controlLabel, { color: colors.mutedForeground }]}>End</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={pauseResume} activeOpacity={0.85}>
-                <LinearGradient
-                  colors={[colors.purpleStart, colors.primary]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={styles.pauseBtn}
-                >
-                  <Icon name={phase === "running" ? "pause" : "play"} size={28} color="#fff" />
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <View style={[styles.controlBtn, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={{ fontSize: 20 }}>⭐</Text>
-                <Text style={[styles.controlLabel, { color: colors.mutedForeground }]}>
-                  +{Math.round(totalSeconds / 60) * 2} XP
-                </Text>
-              </View>
-            </View>
-
-            <Text style={[styles.focusTip, { color: colors.mutedForeground }]}>
-              Stay focused — your coins are waiting! 🏆
+            <Text
+              style={[
+                styles.headerSub,
+                { color: colors.foreground },
+              ]}
+            >
+              {completedSessions} sessions completed
             </Text>
-          </>
-        )}
+          </View>
 
-        {/* ── Complete phase ─────────────────────────────── */}
-        {phase === "complete" && (
-          <>
-            <Confetti />
-            <View style={styles.completeWrap}>
-              <Animated.View
-                style={{
-                  transform: [{ scale: coinAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }) }],
-                  opacity: coinAnim,
-                }}
-              >
-                <LinearGradient
-                  colors={[colors.purpleStart, colors.primary]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={styles.coinCircle}
-                >
-                  <Text style={styles.coinEmoji}>🏆</Text>
-                </LinearGradient>
-              </Animated.View>
+          <ToolCreditPill tool="pomodoro" />
+        </View>
+      </LinearGradient>
 
-              <Text style={[styles.completeTitle, { color: colors.foreground }]}>Session Complete!</Text>
-              <Text style={[styles.completeSub, { color: colors.mutedForeground }]}>
-                Excellent focus! You've earned:
-              </Text>
+      {/* Mode switcher */}
+      <View
+        style={[
+          styles.modeBar,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={[
+            styles.modeBtn,
+            mode === "work" && {
+              backgroundColor: "#059669",
+            },
+          ]}
+          onPress={() => switchMode("work")}
+        >
+          <Text
+            style={[
+              styles.modeText,
+              {
+                color:
+                  mode === "work"
+                    ? "#fff"
+                    : colors.mutedForeground,
+              },
+            ]}
+          >
+            Focus
+          </Text>
+        </TouchableOpacity>
 
-              <View style={styles.rewardRow}>
-                <View style={[styles.rewardPill, { backgroundColor: colors.secondary }]}>
-                  <Text style={styles.rewardPillEmoji}>🪙</Text>
-                  <Text style={[styles.rewardPillText, { color: colors.primary }]}>+{coinsEarned} coins</Text>
-                </View>
-                <View style={[styles.rewardPill, { backgroundColor: colors.secondary }]}>
-                  <Text style={styles.rewardPillEmoji}>⭐</Text>
-                  <Text style={[styles.rewardPillText, { color: colors.primary }]}>+{Math.round(totalSeconds / 60) * 2} XP</Text>
-                </View>
-              </View>
+        <TouchableOpacity
+          style={[
+            styles.modeBtn,
+            mode === "break" && {
+              backgroundColor: "#D97706",
+            },
+          ]}
+          onPress={() => switchMode("break")}
+        >
+          <Text
+            style={[
+              styles.modeText,
+              {
+                color:
+                  mode === "break"
+                    ? "#fff"
+                    : colors.mutedForeground,
+              },
+            ]}
+          >
+            Break
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-              <View style={styles.completeActions}>
-                <TouchableOpacity
-                  onPress={resetToSetup}
-                  activeOpacity={0.85}
-                  style={{ flex: 1 }}
-                >
-                  <LinearGradient
-                    colors={[colors.purpleStart, colors.primary]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={styles.anotherBtn}
-                  >
-                    <Icon name="rotate-ccw" size={18} color="#fff" />
-                    <Text style={styles.anotherBtnText}>Another Session</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {/* Timer */}
+      <View style={styles.ringWrap}>
+        <LinearGradient
+          colors={ringColors}
+          style={styles.ringOuter}
+        >
+          <View
+            style={[
+              styles.ringInner,
+              {
+                backgroundColor: colors.background,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.timerText,
+                {
+                  color: colors.foreground,
+                },
+              ]}
+            >
+              {formatTime(secondsLeft)}
+            </Text>
+
+            <Text
+              style={[
+                styles.timerLabel,
+                {
+                  color: colors.mutedForeground,
+                },
+              ]}
+            >
+              {mode === "work"
+                ? "Focus Time"
+                : "Break Time"}
+            </Text>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.progressBar}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                width: `${progress * 100}%`,
+                backgroundColor: ringColor,
+              },
+            ]}
+          />
+        </View>
+      </View>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        {/* Reset */}
+        <TouchableOpacity
+          style={[
+            styles.controlBtn,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+          onPress={reset}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.actionIcon,
+              { color: colors.foreground },
+            ]}
+          >
+            ↻
+          </Text>
+        </TouchableOpacity>
+
+        {/* Play / Pause */}
+        <TouchableOpacity
+          style={[
+            styles.mainBtn,
+            {
+              backgroundColor: ringColor,
+            },
+          ]}
+          onPress={toggle}
+          activeOpacity={0.8}
+        >
+          <Icon
+            name={running ? "pause" : "play"}
+            size={28}
+            color="#fff"
+          />
+        </TouchableOpacity>
+      </View>
+
+      <Text
+        style={[
+          styles.statusText,
+          {
+            color: colors.mutedForeground,
+          },
+        ]}
+      >
+        {running
+          ? mode === "work"
+            ? "Focus session running"
+            : "Break running"
+          : "Press play to start"}
+      </Text>
+
+      {/* Stats */}
+      <View
+        style={[
+          styles.statsCard,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.statItem}>
+          <Text
+            style={[
+              styles.statNum,
+              {
+                color: colors.foreground,
+              },
+            ]}
+          >
+            {completedSessions}
+          </Text>
+
+          <Text
+            style={[
+              styles.statLabel,
+              {
+                color: colors.mutedForeground,
+              },
+            ]}
+          >
+            Sessions
+          </Text>
+        </View>
+
+        <View
+          style={[
+            styles.statDivider,
+            {
+              backgroundColor: colors.border,
+            },
+          ]}
+        />
+
+        <View style={styles.statItem}>
+          <Text
+            style={[
+              styles.statNum,
+              {
+                color: colors.foreground,
+              },
+            ]}
+          >
+            {completedSessions * WORK_MIN}
+          </Text>
+
+          <Text
+            style={[
+              styles.statLabel,
+              {
+                color: colors.mutedForeground,
+              },
+            ]}
+          >
+            Focus Min
+          </Text>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 20, alignItems: "center", gap: 18 },
-  screenTitle: { fontFamily: "Inter_700Bold", fontSize: 26, textAlign: "center" },
-  screenSub: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center", lineHeight: 20, marginTop: -10 },
+  header: {
+    width: "100%",
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
 
-  sessionBadge: { flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  sessionBadgeText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
 
-  label: { fontFamily: "Inter_600SemiBold", fontSize: 15, alignSelf: "flex-start" },
-  presetRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, justifyContent: "center", width: "100%" },
-  preset: { paddingHorizontal: 22, paddingVertical: 13, borderRadius: 14, borderWidth: 1.5, minWidth: (W - 60) / 4 - 5, alignItems: "center" },
-  presetText: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  backBtn: {
+    padding: 4,
+  },
 
-  customWrap: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, width: "100%" },
-  customInput: { flex: 1, fontFamily: "Inter_400Regular", fontSize: 15 },
-  customUnit: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
 
-  rewardPreview: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 11, width: "100%" },
-  rewardText: { fontFamily: "Inter_400Regular", fontSize: 13, flex: 1, lineHeight: 19 },
+  headerSub: {
+    fontSize: 13,
+    marginTop: 2,
+  },
 
-  startBtn: { borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32, flexDirection: "row", alignItems: "center", gap: 12, width: W - 40 },
-  startBtnText: { fontFamily: "Inter_700Bold", fontSize: 17, color: "#fff" },
+  modeBar: {
+    flexDirection: "row",
+    marginTop: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 4,
+    gap: 4,
+  },
 
-  // Timer
-  ringWrap: { width: RING_SIZE, height: RING_SIZE, alignItems: "center", justifyContent: "center" },
-  timeOverlay: { position: "absolute", alignItems: "center" },
-  timeText: { fontFamily: "Inter_700Bold", fontSize: 52, letterSpacing: 2 },
-  timeLabel: { fontFamily: "Inter_400Regular", fontSize: 14, marginTop: 4 },
+  modeBtn: {
+    minWidth: 110,
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
 
-  controlRow: { flexDirection: "row", alignItems: "center", gap: 20 },
-  controlBtn: { width: 70, height: 70, borderRadius: 35, borderWidth: 1, alignItems: "center", justifyContent: "center", gap: 4 },
-  controlLabel: { fontFamily: "Inter_500Medium", fontSize: 11 },
-  pauseBtn: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", shadowColor: "#7C3AED", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },
-  focusTip: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center" },
+  modeText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
 
-  // Complete
-  completeWrap: { alignItems: "center", gap: 16, width: "100%", paddingTop: 20 },
-  coinCircle: { width: 110, height: 110, borderRadius: 55, alignItems: "center", justifyContent: "center" },
-  coinEmoji: { fontSize: 52 },
-  completeTitle: { fontFamily: "Inter_700Bold", fontSize: 28 },
-  completeSub: { fontFamily: "Inter_400Regular", fontSize: 15 },
-  rewardRow: { flexDirection: "row", gap: 12 },
-  rewardPill: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 18, paddingVertical: 11, borderRadius: 20 },
-  rewardPillEmoji: { fontSize: 20 },
-  rewardPillText: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  completeActions: { flexDirection: "row", gap: 12, width: "100%" },
-  anotherBtn: { borderRadius: 14, paddingVertical: 15, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 },
-  anotherBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" },
+  ringWrap: {
+    alignItems: "center",
+    marginTop: 32,
+    width: "100%",
+  },
+
+  ringOuter: {
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  ringInner: {
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  timerText: {
+    fontSize: 42,
+    fontWeight: "700",
+  },
+
+  timerLabel: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+
+  progressBar: {
+    width: 220,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    marginTop: 20,
+    overflow: "hidden",
+  },
+
+  progressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+
+  controls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
+    marginTop: 32,
+  },
+
+  controlBtn: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+
+  mainBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  actionIcon: {
+    fontSize: 28,
+    fontWeight: "700",
+    lineHeight: 30,
+  },
+
+  statusText: {
+    marginTop: 16,
+    fontSize: 13,
+  },
+
+  statsCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 28,
+    marginHorizontal: 20,
+    paddingVertical: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    width: "90%",
+    maxWidth: 420,
+  },
+
+  statItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  statNum: {
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
+  statLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+
+  statDivider: {
+    width: 1,
+    height: 32,
+  },
 });

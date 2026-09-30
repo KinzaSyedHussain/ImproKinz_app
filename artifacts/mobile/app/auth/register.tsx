@@ -1,4 +1,6 @@
 import { Icon } from "@/components/Icon";
+import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
+import { useAuth as useClerkAuth, useSignUp } from "@clerk/clerk-expo";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -16,8 +18,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth as useClerkAuth, useSignUp } from "@clerk/clerk-expo";
-import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 
 const { width: W, height: H } = Dimensions.get("window");
 
@@ -30,18 +30,32 @@ const STARS = Array.from({ length: 30 }, (_, i) => ({
 }));
 
 const PERKS = [
-  { icon: "⭐", text: "Earn XP for every study session" },
-  { icon: "🤖", text: "AI tools: flashcards, quizzes & more" },
-  { icon: "🏆", text: "Climb the leaderboard with streaks" },
+  {
+    icon: "⭐",
+    text: "Earn XP for every study session",
+  },
+  {
+    icon: "🤖",
+    text: "AI tools: flashcards, quizzes & more",
+  },
+  {
+    icon: "🏆",
+    text: "Climb the leaderboard with streaks",
+  },
 ];
 
 const SESSION_POLL_ATTEMPTS = 8;
 const SESSION_POLL_DELAY_MS = 500;
 
 const wait = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+  new Promise<void>((resolve) =>
+    setTimeout(resolve, milliseconds),
+  );
 
-function getClerkErrorMessage(error: any, fallback: string): string {
+function getClerkErrorMessage(
+  error: any,
+  fallback: string,
+): string {
   return (
     error?.errors?.[0]?.longMessage ||
     error?.errors?.[0]?.message ||
@@ -75,6 +89,7 @@ function isAlreadyVerifiedError(error: any): boolean {
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
   const { signUp, setActive, isLoaded } = useSignUp();
   const { isSignedIn } = useClerkAuth();
 
@@ -82,105 +97,258 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const [pendingVerification, setPendingVerification] = useState(false);
+
+  const [pendingVerification, setPendingVerification] =
+    useState(false);
+
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
-  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [focusedField, setFocusedField] =
+    useState<string | null>(null);
+
   const [legalAccepted, setLegalAccepted] = useState(false);
+
   const actionInFlight = useRef(false);
+  const onboardingNavigationRef = useRef(false);
   const isSignedInRef = useRef(!!isSignedIn);
 
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(50)).current;
-  const starAnims = useRef(STARS.map(() => new Animated.Value(0.1))).current;
+
+  const starAnims = useRef(
+    STARS.map(() => new Animated.Value(0.1)),
+  ).current;
+
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     isSignedInRef.current = !!isSignedIn;
   }, [isSignedIn]);
 
+  /*
+   * ---------------------------------------
+   * Page animations
+   * ---------------------------------------
+   */
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeIn, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.timing(slideUp, { toValue: 0, duration: 700, easing: Easing.out(Easing.back(1.1)), useNativeDriver: true }),
+      Animated.timing(fadeIn, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(slideUp, {
+        toValue: 0,
+        duration: 700,
+        easing: Easing.out(Easing.back(1.1)),
+        useNativeDriver: true,
+      }),
     ]).start();
 
-    Animated.loop(
+    const glowLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    glowLoop.start();
 
     starAnims.forEach((anim, i) => {
       Animated.loop(
         Animated.sequence([
           Animated.delay(STARS[i].delay),
-          Animated.timing(anim, { toValue: 0.85, duration: 550, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.1, duration: 950, useNativeDriver: true }),
-        ])
+
+          Animated.timing(anim, {
+            toValue: 0.85,
+            duration: 550,
+            useNativeDriver: true,
+          }),
+
+          Animated.timing(anim, {
+            toValue: 0.1,
+            duration: 950,
+            useNativeDriver: true,
+          }),
+        ]),
       ).start();
     });
-  }, []);
 
-  const handleRegister = async () => {
-    if (!isLoaded || actionInFlight.current) return;
-    setError("");
-    if (!name.trim() || !email.trim() || !password) { setError("Please fill in all fields"); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
-    if (!legalAccepted) {
-      setError("Please agree to the Terms of Service and Privacy Policy.");
+    return () => {
+      glowLoop.stop();
+    };
+  }, [fadeIn, slideUp, glowAnim, starAnims]);
+
+  /*
+   * ---------------------------------------
+   * Safe onboarding navigation
+   * ---------------------------------------
+   *
+   * Prevents multiple router.replace calls if Clerk's
+   * authentication state changes at the same time.
+   */
+  const navigateToOnboarding = () => {
+    if (onboardingNavigationRef.current) {
       return;
     }
+
+    onboardingNavigationRef.current = true;
+    router.replace("/onboarding");
+  };
+
+  /*
+   * ---------------------------------------
+   * Register
+   * ---------------------------------------
+   */
+  const handleRegister = async () => {
+    if (!isLoaded || actionInFlight.current) {
+      return;
+    }
+
+    setError("");
+
+    if (
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
+      setError("Please fill in all fields");
+      return;
+    }
+
+    if (password.length < 8) {
+      setError(
+        "Password must be at least 8 characters",
+      );
+      return;
+    }
+
+    if (!legalAccepted) {
+      setError(
+        "Please agree to the Terms of Service and Privacy Policy.",
+      );
+      return;
+    }
+
     actionInFlight.current = true;
     setLoading(true);
+
     try {
+      /*
+       * Create the Clerk signup.
+       */
       await signUp.create({
         emailAddress: email.trim(),
         password,
         legalAccepted: true,
       });
-      await AsyncStorage.setItem("pending_onboarding_nickname", name.trim());
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+
+      /*
+       * Remember that this is a NEW account which still needs
+       * onboarding.
+       *
+       * This stays until onboarding has been completed.
+       */
+      await AsyncStorage.setItem(
+        "pending_onboarding_nickname",
+        name.trim(),
+      );
+
+      /*
+       * Send verification code.
+       */
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
       setPendingVerification(true);
     } catch (e: any) {
-      setError(getClerkErrorMessage(e, "Sign up failed"));
+      setError(
+        getClerkErrorMessage(e, "Sign up failed"),
+      );
     } finally {
       setLoading(false);
       actionInFlight.current = false;
     }
   };
 
+  /*
+   * ---------------------------------------
+   * Verify email
+   * ---------------------------------------
+   */
   const handleVerify = async () => {
-    if (!isLoaded || loading || actionInFlight.current || code.trim().length < 6) return;
+    if (
+      !isLoaded ||
+      loading ||
+      actionInFlight.current ||
+      code.trim().length < 6
+    ) {
+      return;
+    }
+
     setError("");
     actionInFlight.current = true;
     setLoading(true);
+
     try {
+      /*
+       * Sometimes Clerk has already completed the signup
+       * before the button is pressed again.
+       */
       if (signUp.status === "complete") {
         await finishVerifiedSignup(signUp);
         return;
       }
 
-      const result = await signUp.attemptEmailAddressVerification({
-        code: code.trim(),
-      });
-      const completedSignup = await completeSignupRequirements(result);
+      const result =
+        await signUp.attemptEmailAddressVerification({
+          code: code.trim(),
+        });
+
+      const completedSignup =
+        await completeSignupRequirements(result);
+
       if (completedSignup.status === "complete") {
         await finishVerifiedSignup(completedSignup);
       } else {
         await recoverCompletedSignup(completedSignup);
       }
     } catch (e: any) {
-      if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
+      if (
+        isAlreadyVerifiedError(e) ||
+        signUp.status === "complete"
+      ) {
         try {
           await recoverCompletedSignup(signUp);
         } catch (recoveryError: any) {
-          setError(getVerificationRecoveryMessage(recoveryError));
+          setError(
+            getVerificationRecoveryMessage(
+              recoveryError,
+            ),
+          );
         }
       } else {
-        setError(getClerkErrorMessage(e, "Verification failed"));
+        setError(
+          getClerkErrorMessage(
+            e,
+            "Verification failed",
+          ),
+        );
       }
     } finally {
       setLoading(false);
@@ -188,28 +356,58 @@ export default function RegisterScreen() {
     }
   };
 
+  /*
+   * ---------------------------------------
+   * Resend verification code
+   * ---------------------------------------
+   */
   const handleResend = async () => {
-    if (!isLoaded || loading || actionInFlight.current) return;
+    if (
+      !isLoaded ||
+      loading ||
+      actionInFlight.current
+    ) {
+      return;
+    }
+
     setError("");
     actionInFlight.current = true;
     setLoading(true);
+
     try {
       if (signUp.status === "complete") {
         await finishVerifiedSignup(signUp);
         return;
       }
 
-      await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-      setError("A new verification code was sent.");
+      await signUp.prepareEmailAddressVerification({
+        strategy: "email_code",
+      });
+
+      setError(
+        "A new verification code was sent.",
+      );
     } catch (e: any) {
-      if (isAlreadyVerifiedError(e) || signUp.status === "complete") {
+      if (
+        isAlreadyVerifiedError(e) ||
+        signUp.status === "complete"
+      ) {
         try {
           await recoverCompletedSignup(signUp);
         } catch (recoveryError: any) {
-          setError(getVerificationRecoveryMessage(recoveryError));
+          setError(
+            getVerificationRecoveryMessage(
+              recoveryError,
+            ),
+          );
         }
       } else {
-        setError(getClerkErrorMessage(e, "Could not resend code"));
+        setError(
+          getClerkErrorMessage(
+            e,
+            "Could not resend code",
+          ),
+        );
       }
     } finally {
       setLoading(false);
@@ -217,27 +415,65 @@ export default function RegisterScreen() {
     }
   };
 
-  const finishVerifiedSignup = async (completedSignup: typeof signUp) => {
-    if (!completedSignup || completedSignup.status !== "complete") {
-      throw new Error("Verification is not complete yet.");
+  /*
+   * ---------------------------------------
+   * Finish verified signup
+   * ---------------------------------------
+   */
+  const finishVerifiedSignup = async (
+    completedSignup: typeof signUp,
+  ) => {
+    if (
+      !completedSignup ||
+      completedSignup.status !== "complete"
+    ) {
+      throw new Error(
+        "Verification is not complete yet.",
+      );
     }
 
     let currentSignup = completedSignup;
     let sessionId = currentSignup.createdSessionId;
-    for (let attempt = 0; !sessionId && attempt < SESSION_POLL_ATTEMPTS; attempt += 1) {
+
+    /*
+     * Clerk can sometimes report "complete" before the
+     * created session is immediately available.
+     *
+     * Poll for it instead of navigating prematurely.
+     */
+    for (
+      let attempt = 0;
+      !sessionId &&
+      attempt < SESSION_POLL_ATTEMPTS;
+      attempt += 1
+    ) {
+      /*
+       * If Clerk has already activated the session,
+       * go straight to onboarding.
+       */
       if (isSignedInRef.current) {
-        router.replace("/onboarding");
+        navigateToOnboarding();
         return;
       }
+
       await wait(SESSION_POLL_DELAY_MS);
-      currentSignup = await currentSignup.reload();
-      if (currentSignup.status === "complete") {
-        sessionId = currentSignup.createdSessionId;
+
+      currentSignup =
+        await currentSignup.reload();
+
+      if (
+        currentSignup.status === "complete"
+      ) {
+        sessionId =
+          currentSignup.createdSessionId;
       }
     }
 
+    /*
+     * Check one more time after polling.
+     */
     if (isSignedInRef.current) {
-      router.replace("/onboarding");
+      navigateToOnboarding();
       return;
     }
 
@@ -247,162 +483,435 @@ export default function RegisterScreen() {
       );
     }
 
-    await setActive({ session: sessionId });
-    // Only newly created accounts go through onboarding. Existing users
-    // use the sign-in screen and are sent straight to the app.
-    router.replace("/onboarding");
+    /*
+     * Activate the newly created Clerk session.
+     */
+    await setActive({
+      session: sessionId,
+    });
+
+    /*
+     * Give Clerk/AuthContext a moment to receive the new
+     * authenticated state before changing screens.
+     */
+    await wait(150);
+
+    /*
+     * IMPORTANT:
+     * This is a newly created account, so it goes to
+     * onboarding rather than directly to the dashboard.
+     */
+    navigateToOnboarding();
   };
 
+  /*
+   * ---------------------------------------
+   * Complete missing Clerk requirements
+   * ---------------------------------------
+   */
   const completeSignupRequirements = async (
     signup: NonNullable<typeof signUp>,
   ): Promise<NonNullable<typeof signUp>> => {
-    if (signup.status === "complete") return signup;
-
-    const missingFields = (signup.missingFields ?? []).map((field) =>
-      String(field)
-        .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
-        .replace(/[-\s]/g, "_")
-        .toLowerCase(),
-    );
-    const needsFirstName = missingFields.includes("first_name");
-    const needsLastName = missingFields.includes("last_name");
-    const needsLegalAcceptance = missingFields.includes("legal_accepted");
-    const needsUsername = missingFields.includes("username");
-    if (!needsFirstName && !needsLastName && !needsLegalAcceptance && !needsUsername) {
+    if (signup.status === "complete") {
       return signup;
     }
 
-    const savedName = await AsyncStorage.getItem("pending_onboarding_nickname").catch(
-      () => null,
+    const missingFields = (
+      signup.missingFields ?? []
+    ).map((field) =>
+      String(field)
+        .replace(
+          /[A-Z]/g,
+          (letter) =>
+            `_${letter.toLowerCase()}`,
+        )
+        .replace(/[-\s]/g, "_")
+        .toLowerCase(),
     );
-    const fullName = (name.trim() || savedName?.trim() || "").trim();
-    if (!fullName && (needsFirstName || needsLastName)) return signup;
 
-    const nameParts = fullName ? fullName.split(/\s+/) : [];
-    const firstName = nameParts[0] || "";
-    const lastName = nameParts.slice(1).join(" ") || firstName;
+    const needsFirstName =
+      missingFields.includes("first_name");
+
+    const needsLastName =
+      missingFields.includes("last_name");
+
+    const needsLegalAcceptance =
+      missingFields.includes(
+        "legal_accepted",
+      );
+
+    const needsUsername =
+      missingFields.includes("username");
+
+    if (
+      !needsFirstName &&
+      !needsLastName &&
+      !needsLegalAcceptance &&
+      !needsUsername
+    ) {
+      return signup;
+    }
+
+    /*
+     * Recover the name saved before verification.
+     */
+    const savedName =
+      await AsyncStorage.getItem(
+        "pending_onboarding_nickname",
+      ).catch(() => null);
+
+    const fullName = (
+      name.trim() ||
+      savedName?.trim() ||
+      ""
+    ).trim();
+
+    if (
+      !fullName &&
+      (needsFirstName || needsLastName)
+    ) {
+      return signup;
+    }
+
+    const nameParts = fullName
+      ? fullName.split(/\s+/)
+      : [];
+
+    const firstName =
+      nameParts[0] || "";
+
+    const lastName =
+      nameParts.slice(1).join(" ") ||
+      firstName;
+
+    /*
+     * Generate a reasonable Clerk username.
+     */
     const emailUsername = email
       .split("@")[0]
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
-    const nameUsername = fullName.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const usernameBase = (emailUsername || nameUsername || "learner").slice(0, 24);
-    const username = /^[a-z]/.test(usernameBase)
+
+    const nameUsername = fullName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    const usernameBase = (
+      emailUsername ||
+      nameUsername ||
+      "learner"
+    ).slice(0, 24);
+
+    const username = /^[a-z]/.test(
+      usernameBase,
+    )
       ? usernameBase
-      : `user${usernameBase}`.slice(0, 30);
+      : `user${usernameBase}`.slice(
+          0,
+          30,
+        );
 
     return signup.update({
-      ...(needsFirstName && firstName ? { firstName } : {}),
-      ...(needsLastName && lastName ? { lastName } : {}),
-      ...(needsLegalAcceptance && legalAccepted ? { legalAccepted: true } : {}),
-      ...(needsUsername ? { username: username || "learner" } : {}),
+      ...(needsFirstName && firstName
+        ? { firstName }
+        : {}),
+
+      ...(needsLastName && lastName
+        ? { lastName }
+        : {}),
+
+      ...(needsLegalAcceptance &&
+      legalAccepted
+        ? { legalAccepted: true }
+        : {}),
+
+      ...(needsUsername
+        ? {
+            username:
+              username || "learner",
+          }
+        : {}),
     });
   };
 
-  const getIncompleteSignupMessage = (signup: NonNullable<typeof signUp>) => {
-    const missingFields = (signup.missingFields ?? []).map((field) =>
+  /*
+   * ---------------------------------------
+   * Explain incomplete signup
+   * ---------------------------------------
+   */
+  const getIncompleteSignupMessage = (
+    signup: NonNullable<typeof signUp>,
+  ) => {
+    const missingFields = (
+      signup.missingFields ?? []
+    ).map((field) =>
       String(field)
-        .replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)
-        .replace(/[_-]/g, " ")
+        .replace(
+          /[A-Z]/g,
+          (letter) =>
+            ` ${letter.toLowerCase()}`,
+        )
+        .replace(/[\_-]/g, " ")
         .trim()
         .toLowerCase(),
     );
-    if (missingFields.includes("first name") || missingFields.includes("last name")) {
+
+    if (
+      missingFields.includes("first name") ||
+      missingFields.includes("last name")
+    ) {
       return "Your email is verified. We still need your name to finish creating your account.";
     }
-    if (missingFields.includes("legal accepted")) {
+
+    if (
+      missingFields.includes(
+        "legal accepted",
+      )
+    ) {
       return "Please agree to the Terms of Service and Privacy Policy before creating your account.";
     }
-    if (missingFields.includes("username")) {
+
+    if (
+      missingFields.includes("username")
+    ) {
       return "Your email is verified, but Clerk still needs a username to finish creating your account.";
     }
-    return `Your email is verified, but Clerk still needs: ${missingFields.join(", ")}.`;
+
+    return `Your email is verified, but Clerk still needs: ${missingFields.join(
+      ", ",
+    )}.`;
   };
 
+  /*
+   * ---------------------------------------
+   * Recover completed signup
+   * ---------------------------------------
+   */
   const recoverCompletedSignup = async (
     startingSignup: NonNullable<typeof signUp>,
   ) => {
     if (!startingSignup) {
-      throw new Error("The signup session is no longer available.");
+      throw new Error(
+        "The signup session is no longer available.",
+      );
     }
 
     let currentSignup = startingSignup;
-    for (let attempt = 0; attempt < SESSION_POLL_ATTEMPTS; attempt += 1) {
+
+    for (
+      let attempt = 0;
+      attempt < SESSION_POLL_ATTEMPTS;
+      attempt += 1
+    ) {
       if (isSignedInRef.current) {
-        router.replace("/onboarding");
+        navigateToOnboarding();
         return;
       }
 
       await wait(SESSION_POLL_DELAY_MS);
-      currentSignup = await currentSignup.reload();
-      const completedSignup = await completeSignupRequirements(currentSignup);
-      if (completedSignup.status === "complete") {
-        await finishVerifiedSignup(completedSignup);
+
+      currentSignup =
+        await currentSignup.reload();
+
+      const completedSignup =
+        await completeSignupRequirements(
+          currentSignup,
+        );
+
+      if (
+        completedSignup.status ===
+        "complete"
+      ) {
+        await finishVerifiedSignup(
+          completedSignup,
+        );
         return;
       }
+
       currentSignup = completedSignup;
     }
 
     if (isSignedInRef.current) {
-      router.replace("/onboarding");
+      navigateToOnboarding();
       return;
     }
 
     throw new Error(
-      getIncompleteSignupMessage(currentSignup),
+      getIncompleteSignupMessage(
+        currentSignup,
+      ),
     );
   };
 
-  const getVerificationRecoveryMessage = (error: any) => {
-    const message = getClerkErrorMessage(error, "");
-    if (message.toLowerCase().includes("couldn't find")) {
+  /*
+   * ---------------------------------------
+   * Verification recovery message
+   * ---------------------------------------
+   */
+  const getVerificationRecoveryMessage = (
+    error: any,
+  ) => {
+    const message =
+      getClerkErrorMessage(error, "");
+
+    if (
+      message
+        .toLowerCase()
+        .includes("couldn't find")
+    ) {
       return "Your email was verified, but this signup session expired. Please sign in with your email and password.";
     }
-    return message || "Your email was verified, but we could not finish signing you in. Please try again.";
+
+    return (
+      message ||
+      "Your email was verified, but we could not finish signing you in. Please try again."
+    );
   };
 
-  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.85] });
-  const glowScale = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.85],
+  });
+
+  const glowScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.15],
+  });
+
   const busy = loading;
 
+  /*
+   * ---------------------------------------
+   * Verification screen
+   * ---------------------------------------
+   */
   if (pendingVerification) {
     return (
       <View style={styles.root}>
         <LinearGradient
-          colors={["#0A0820", "#0D0B2B", "#1C0B52"]}
+          colors={[
+            "#0A0820",
+            "#0D0B2B",
+            "#1C0B52",
+          ]}
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFill}
         />
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={
+            Platform.OS === "ios"
+              ? "padding"
+              : undefined
+          }
+        >
           <ScrollView
             contentContainerStyle={[
               styles.scroll,
-              { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 60), paddingBottom: insets.bottom + 40 },
+              {
+                paddingTop:
+                  insets.top +
+                  (Platform.OS === "web"
+                    ? 67
+                    : 60),
+
+                paddingBottom:
+                  insets.bottom + 40,
+              },
             ]}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={
+              false
+            }
           >
-            <View style={{ alignItems: "center", width: "100%" }}>
-              <View style={styles.verifyIconArea}>
-                <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.verifyIconBox}>
-                  <Text style={{ fontSize: 36 }}>📬</Text>
+            <View
+              style={{
+                alignItems: "center",
+                width: "100%",
+              }}
+            >
+              <View
+                style={styles.verifyIconArea}
+              >
+                <LinearGradient
+                  colors={[
+                    "#F59E0B",
+                    "#D97706",
+                  ]}
+                  style={
+                    styles.verifyIconBox
+                  }
+                >
+                  <Text
+                    style={{ fontSize: 36 }}
+                  >
+                    📬
+                  </Text>
                 </LinearGradient>
               </View>
-              <Text style={styles.verifyTitle}>Check your email</Text>
-              <Text style={styles.verifySub}>
+
+              <Text
+                style={styles.verifyTitle}
+              >
+                Check your email
+              </Text>
+
+              <Text
+                style={styles.verifySub}
+              >
                 We sent a 6-digit code to{"\n"}
-                <Text style={{ color: "#F59E0B" }}>{email}</Text>
+                <Text
+                  style={{
+                    color: "#F59E0B",
+                  }}
+                >
+                  {email}
+                </Text>
               </Text>
 
               {!!error && (
-                <View style={[styles.errorBox, { width: "100%" }]}>
-                  <Icon name="alert-circle" size={14} color="#FCA5A5" />
-                  <Text style={styles.errorText}>{error}</Text>
+                <View
+                  style={[
+                    styles.errorBox,
+                    { width: "100%" },
+                  ]}
+                >
+                  <Icon
+                    name="alert-circle"
+                    size={14}
+                    color="#FCA5A5"
+                  />
+
+                  <Text
+                    style={styles.errorText}
+                  >
+                    {error}
+                  </Text>
                 </View>
               )}
 
-              <View style={[styles.inputWrap, { width: "100%", marginTop: 8 }, focusedField === "code" && styles.inputFocused]}>
-                <Icon name="shield" size={17} color={focusedField === "code" ? "#A78BFA" : "#6B5FA0"} />
+              <View
+                style={[
+                  styles.inputWrap,
+                  {
+                    width: "100%",
+                    marginTop: 8,
+                  },
+                  focusedField === "code" &&
+                    styles.inputFocused,
+                ]}
+              >
+                <Icon
+                  name="shield"
+                  size={17}
+                  color={
+                    focusedField === "code"
+                      ? "#A78BFA"
+                      : "#6B5FA0"
+                  }
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="Enter 6-digit code"
@@ -411,36 +920,99 @@ export default function RegisterScreen() {
                   onChangeText={setCode}
                   keyboardType="number-pad"
                   maxLength={6}
-                  onFocus={() => setFocusedField("code")}
-                  onBlur={() => setFocusedField(null)}
+                  onFocus={() =>
+                    setFocusedField(
+                      "code",
+                    )
+                  }
+                  onBlur={() =>
+                    setFocusedField(null)
+                  }
                 />
               </View>
 
               <TouchableOpacity
                 onPress={handleVerify}
-                disabled={busy || code.length < 6}
-                style={{ width: "100%", marginTop: 16, opacity: (busy || code.length < 6) ? 0.65 : 1 }}
+                disabled={
+                  busy ||
+                  code.length < 6
+                }
+                style={{
+                  width: "100%",
+                  marginTop: 16,
+                  opacity:
+                    busy ||
+                    code.length < 6
+                      ? 0.65
+                      : 1,
+                }}
               >
                 <LinearGradient
-                  colors={["#F59E0B", "#D97706"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.createBtn}
+                  colors={[
+                    "#F59E0B",
+                    "#D97706",
+                  ]}
+                  start={{
+                    x: 0,
+                    y: 0,
+                  }}
+                  end={{
+                    x: 1,
+                    y: 0,
+                  }}
+                  style={
+                    styles.createBtn
+                  }
                 >
-                  <Text style={styles.createBtnText}>{busy ? "Verifying..." : "Verify & Start Learning 🚀"}</Text>
+                  <Text
+                    style={
+                      styles.createBtnText
+                    }
+                  >
+                    {busy
+                      ? "Verifying..."
+                      : "Verify & Start Learning 🚀"}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleResend}
                 disabled={busy}
-                style={{ marginTop: 16 }}
+                style={{
+                  marginTop: 16,
+                }}
               >
-                <Text style={styles.resendText}>Didn't receive it? Resend code</Text>
+                <Text
+                  style={styles.resendText}
+                >
+                  Didn't receive it? Resend
+                  code
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => { setPendingVerification(false); setCode(""); setError(""); }} style={{ marginTop: 8 }}>
-                <Text style={[styles.resendText, { color: "#6B5FA0" }]}>← Go back</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setPendingVerification(
+                    false,
+                  );
+                  setCode("");
+                  setError("");
+                }}
+                style={{
+                  marginTop: 8,
+                }}
+              >
+                <Text
+                  style={[
+                    styles.resendText,
+                    {
+                      color: "#6B5FA0",
+                    },
+                  ]}
+                >
+                  ← Go back
+                </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -449,170 +1021,585 @@ export default function RegisterScreen() {
     );
   }
 
+  /*
+   * ---------------------------------------
+   * Registration screen
+   * ---------------------------------------
+   */
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={["#0A0820", "#0D0B2B", "#1C0B52"]}
+        colors={[
+          "#0A0820",
+          "#0D0B2B",
+          "#1C0B52",
+        ]}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      <View style={[styles.blob, { top: H * 0.5, right: -70, backgroundColor: "#7C3AED20", width: 260, height: 260 }]} />
-      <View style={[styles.blob, { top: H * 0.15, left: -90, backgroundColor: "#4C1D9518", width: 230, height: 230 }]} />
+      <View
+        style={[
+          styles.blob,
+          {
+            top: H * 0.5,
+            right: -70,
+            backgroundColor:
+              "#7C3AED20",
+            width: 260,
+            height: 260,
+          },
+        ]}
+      />
+
+      <View
+        style={[
+          styles.blob,
+          {
+            top: H * 0.15,
+            left: -90,
+            backgroundColor:
+              "#4C1D9518",
+            width: 230,
+            height: 230,
+          },
+        ]}
+      />
 
       {STARS.map((s, i) => (
         <Animated.View
           key={s.key}
-          style={[styles.star, { left: s.x, top: s.y, width: s.size, height: s.size, borderRadius: s.size, opacity: starAnims[i] }]}
+          style={[
+            styles.star,
+            {
+              left: s.x,
+              top: s.y,
+              width: s.size,
+              height: s.size,
+              borderRadius: s.size,
+              opacity: starAnims[i],
+            },
+          ]}
         />
       ))}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
+        }
+      >
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
-            { paddingTop: insets.top + (Platform.OS === "web" ? 67 : 16), paddingBottom: insets.bottom + 24 },
+            {
+              paddingTop:
+                insets.top +
+                (Platform.OS === "web"
+                  ? 67
+                  : 16),
+
+              paddingBottom:
+                insets.bottom + 24,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={
+            false
+          }
         >
-          <Animated.View style={{ opacity: fadeIn, transform: [{ translateY: slideUp }], alignItems: "center", width: "100%" }}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-              <Icon name="arrow-left" size={20} color="#A78BFA" />
+          <Animated.View
+            style={{
+              opacity: fadeIn,
+              transform: [
+                {
+                  translateY: slideUp,
+                },
+              ],
+              alignItems: "center",
+              width: "100%",
+            }}
+          >
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() =>
+                router.back()
+              }
+            >
+              <Icon
+                name="arrow-left"
+                size={20}
+                color="#A78BFA"
+              />
             </TouchableOpacity>
 
-            <View style={styles.iconArea}>
-              <Animated.View style={[styles.iconGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
-              <LinearGradient colors={["#F59E0B", "#D97706"]} style={styles.iconBox}>
-                <Text style={styles.iconEmoji}>🗝️</Text>
+            <View
+              style={styles.iconArea}
+            >
+              <Animated.View
+                style={[
+                  styles.iconGlow,
+                  {
+                    opacity:
+                      glowOpacity,
+                    transform: [
+                      {
+                        scale:
+                          glowScale,
+                      },
+                    ],
+                  },
+                ]}
+              />
+
+              <LinearGradient
+                colors={[
+                  "#F59E0B",
+                  "#D97706",
+                ]}
+                style={styles.iconBox}
+              >
+                <Text
+                  style={
+                    styles.iconEmoji
+                  }
+                >
+                  🗝️
+                </Text>
               </LinearGradient>
-              <View style={[styles.sparkle, { top: 0, right: 6 }]}><Text style={{ fontSize: 11, color: "#F59E0B" }}>✦</Text></View>
-              <View style={[styles.sparkle, { bottom: 5, left: 2 }]}><Text style={{ fontSize: 8, color: "#F59E0B" }}>★</Text></View>
+
+              <View
+                style={[
+                  styles.sparkle,
+                  {
+                    top: 0,
+                    right: 6,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 11,
+                    color: "#F59E0B",
+                  }}
+                >
+                  ✦
+                </Text>
+              </View>
+
+              <View
+                style={[
+                  styles.sparkle,
+                  {
+                    bottom: 5,
+                    left: 2,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 8,
+                    color: "#F59E0B",
+                  }}
+                >
+                  ★
+                </Text>
+              </View>
             </View>
 
             <Text style={styles.title}>
-              <Text style={{ color: "#FFFFFF" }}>Join </Text>
-              <Text style={{ color: "#F59E0B" }}>ImproKinz</Text>
-            </Text>
-            <Text style={styles.subtitle}>Unlock your personal learning treasury</Text>
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                }}
+              >
+                Join{" "}
+              </Text>
 
-            <View style={styles.perksRow}>
+              <Text
+                style={{
+                  color: "#F59E0B",
+                }}
+              >
+                ImproKinz
+              </Text>
+            </Text>
+
+            <Text
+              style={styles.subtitle}
+            >
+              Unlock your personal
+              learning treasury
+            </Text>
+
+            <View
+              style={styles.perksRow}
+            >
               {PERKS.map((p, i) => (
-                <View key={i} style={styles.perk}>
-                  <Text style={styles.perkIcon}>{p.icon}</Text>
-                  <Text style={styles.perkText}>{p.text}</Text>
+                <View
+                  key={i}
+                  style={styles.perk}
+                >
+                  <Text
+                    style={
+                      styles.perkIcon
+                    }
+                  >
+                    {p.icon}
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.perkText
+                    }
+                  >
+                    {p.text}
+                  </Text>
                 </View>
               ))}
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Create your account</Text>
+              <Text
+                style={styles.cardTitle}
+              >
+                Create your account
+              </Text>
 
               {!!error && (
-                <View style={styles.errorBox}>
-                  <Icon name="alert-circle" size={14} color="#FCA5A5" />
-                  <Text style={styles.errorText}>{error}</Text>
+                <View
+                  style={
+                    styles.errorBox
+                  }
+                >
+                  <Icon
+                    name="alert-circle"
+                    size={14}
+                    color="#FCA5A5"
+                  />
+
+                  <Text
+                    style={
+                      styles.errorText
+                    }
+                  >
+                    {error}
+                  </Text>
                 </View>
               )}
 
               <View style={styles.form}>
-                <View style={[styles.inputWrap, focusedField === "name" && styles.inputFocused]}>
-                  <Icon name="user" size={17} color={focusedField === "name" ? "#A78BFA" : "#6B5FA0"} />
+                {/* Name */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    focusedField ===
+                      "name" &&
+                      styles.inputFocused,
+                  ]}
+                >
+                  <Icon
+                    name="user"
+                    size={17}
+                    color={
+                      focusedField ===
+                      "name"
+                        ? "#A78BFA"
+                        : "#6B5FA0"
+                    }
+                  />
+
                   <TextInput
                     style={styles.input}
                     placeholder="Full name"
                     placeholderTextColor="#6B5FA0"
                     value={name}
-                    onChangeText={setName}
-                    onFocus={() => setFocusedField("name")}
-                    onBlur={() => setFocusedField(null)}
+                    onChangeText={
+                      setName
+                    }
+                    onFocus={() =>
+                      setFocusedField(
+                        "name",
+                      )
+                    }
+                    onBlur={() =>
+                      setFocusedField(
+                        null,
+                      )
+                    }
                   />
                 </View>
 
-                <View style={[styles.inputWrap, focusedField === "email" && styles.inputFocused]}>
-                  <Icon name="mail" size={17} color={focusedField === "email" ? "#A78BFA" : "#6B5FA0"} />
+                {/* Email */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    focusedField ===
+                      "email" &&
+                      styles.inputFocused,
+                  ]}
+                >
+                  <Icon
+                    name="mail"
+                    size={17}
+                    color={
+                      focusedField ===
+                      "email"
+                        ? "#A78BFA"
+                        : "#6B5FA0"
+                    }
+                  />
+
                   <TextInput
                     style={styles.input}
                     placeholder="Email address"
                     placeholderTextColor="#6B5FA0"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={
+                      setEmail
+                    }
                     keyboardType="email-address"
                     autoCapitalize="none"
-                    onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
+                    onFocus={() =>
+                      setFocusedField(
+                        "email",
+                      )
+                    }
+                    onBlur={() =>
+                      setFocusedField(
+                        null,
+                      )
+                    }
                   />
                 </View>
 
-                <View style={[styles.inputWrap, focusedField === "pw" && styles.inputFocused]}>
-                  <Icon name="lock" size={17} color={focusedField === "pw" ? "#A78BFA" : "#6B5FA0"} />
+                {/* Password */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    focusedField ===
+                      "pw" &&
+                      styles.inputFocused,
+                  ]}
+                >
+                  <Icon
+                    name="lock"
+                    size={17}
+                    color={
+                      focusedField ===
+                      "pw"
+                        ? "#A78BFA"
+                        : "#6B5FA0"
+                    }
+                  />
+
                   <TextInput
                     style={styles.input}
                     placeholder="Password (min. 8 characters)"
                     placeholderTextColor="#6B5FA0"
                     value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPw}
-                    onFocus={() => setFocusedField("pw")}
-                    onBlur={() => setFocusedField(null)}
+                    onChangeText={
+                      setPassword
+                    }
+                    secureTextEntry={
+                      !showPw
+                    }
+                    onFocus={() =>
+                      setFocusedField(
+                        "pw",
+                      )
+                    }
+                    onBlur={() =>
+                      setFocusedField(
+                        null,
+                      )
+                    }
                   />
-                  <TouchableOpacity onPress={() => setShowPw((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Icon name={showPw ? "eye-off" : "eye"} size={17} color="#6B5FA0" />
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      setShowPw(
+                        (v) => !v,
+                      )
+                    }
+                    hitSlop={{
+                      top: 8,
+                      bottom: 8,
+                      left: 8,
+                      right: 8,
+                    }}
+                  >
+                    <Icon
+                      name={
+                        showPw
+                          ? "eye-off"
+                          : "eye"
+                      }
+                      size={17}
+                      color="#6B5FA0"
+                    />
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.legalConsent}>
+                {/* Legal consent */}
+                <View
+                  style={
+                    styles.legalConsent
+                  }
+                >
                   <TouchableOpacity
-                    onPress={() => setLegalAccepted((accepted) => !accepted)}
+                    onPress={() =>
+                      setLegalAccepted(
+                        (accepted) =>
+                          !accepted,
+                      )
+                    }
                     activeOpacity={0.8}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    hitSlop={{
+                      top: 8,
+                      bottom: 8,
+                      left: 8,
+                      right: 8,
+                    }}
                   >
-                    <View style={[styles.checkbox, legalAccepted && styles.checkboxSelected]}>
-                      {legalAccepted && <Text style={styles.checkboxMark}>✓</Text>}
+                    <View
+                      style={[
+                        styles.checkbox,
+                        legalAccepted &&
+                          styles.checkboxSelected,
+                      ]}
+                    >
+                      {legalAccepted && (
+                        <Text
+                          style={
+                            styles.checkboxMark
+                          }
+                        >
+                          ✓
+                        </Text>
+                      )}
                     </View>
                   </TouchableOpacity>
-                  <Text style={styles.legalConsentText}>
+
+                  <Text
+                    style={
+                      styles.legalConsentText
+                    }
+                  >
                     I agree to the{" "}
                     <Text
-                      style={styles.legalLink}
-                      onPress={() => router.push("/terms" as any)}
+                      style={
+                        styles.legalLink
+                      }
+                      onPress={() =>
+                        router.push(
+                          "/terms" as any,
+                        )
+                      }
                     >
                       Terms of Service
                     </Text>
                     {" "}and{" "}
                     <Text
-                      style={styles.legalLink}
-                      onPress={() => router.push("/privacy" as any)}
+                      style={
+                        styles.legalLink
+                      }
+                      onPress={() =>
+                        router.push(
+                          "/privacy" as any,
+                        )
+                      }
                     >
                       Privacy Policy
-                    </Text>.
+                    </Text>
+                    .
                   </Text>
                 </View>
 
+                {/* Register button */}
                 <TouchableOpacity
-                  onPress={handleRegister}
+                  onPress={
+                    handleRegister
+                  }
                   disabled={busy}
-                  style={{ opacity: busy ? 0.75 : 1 }}
+                  style={{
+                    opacity:
+                      busy ? 0.75 : 1,
+                  }}
                 >
                   <LinearGradient
-                    colors={["#7C3AED", "#5B21B6"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.createBtn}
+                    colors={[
+                      "#7C3AED",
+                      "#5B21B6",
+                    ]}
+                    start={{
+                      x: 0,
+                      y: 0,
+                    }}
+                    end={{
+                      x: 1,
+                      y: 0,
+                    }}
+                    style={
+                      styles.createBtn
+                    }
                   >
-                    <View style={styles.btnInner}>
-                      <Text style={styles.createBtnText}>{busy ? "Creating account..." : "Start Learning"}</Text>
-                      {!busy && <Text style={{ fontSize: 16 }}>🚀</Text>}
+                    <View
+                      style={
+                        styles.btnInner
+                      }
+                    >
+                      <Text
+                        style={
+                          styles.createBtnText
+                        }
+                      >
+                        {busy
+                          ? "Creating account..."
+                          : "Start Learning"}
+                      </Text>
+
+                      {!busy && (
+                        <Text
+                          style={{
+                            fontSize: 16,
+                          }}
+                        >
+                          🚀
+                        </Text>
+                      )}
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
             </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerNote}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.footerLink}>Sign In</Text>
+            <View
+              style={styles.footer}
+            >
+              <Text
+                style={
+                  styles.footerNote
+                }
+              >
+                Already have an
+                account?{" "}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  router.back()
+                }
+              >
+                <Text
+                  style={
+                    styles.footerLink
+                  }
+                >
+                  Sign In
+                </Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -623,54 +1610,293 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  blob: { position: "absolute", borderRadius: 140 },
-  star: { position: "absolute", backgroundColor: "#FFFFFF" },
-  scroll: { alignItems: "center", paddingHorizontal: 20 },
-  backBtn: { alignSelf: "flex-start", padding: 8, marginBottom: 8, backgroundColor: "#1E1554", borderRadius: 12, borderWidth: 1, borderColor: "#2D2080" },
+  root: {
+    flex: 1,
+  },
 
-  iconArea: { width: 96, height: 96, alignItems: "center", justifyContent: "center", marginBottom: 14 },
-  iconGlow: { position: "absolute", width: 112, height: 112, borderRadius: 56, backgroundColor: "#F59E0B40" },
-  iconBox: { width: 80, height: 80, borderRadius: 22, alignItems: "center", justifyContent: "center", shadowColor: "#F59E0B", shadowOpacity: 0.6, shadowRadius: 16, elevation: 10 },
-  iconEmoji: { fontSize: 40 },
-  sparkle: { position: "absolute" },
+  blob: {
+    position: "absolute",
+    borderRadius: 140,
+  },
 
-  title: { fontSize: 30, fontWeight: "800" },
-  subtitle: { fontSize: 13, color: "#8B7CC4", marginTop: 4, marginBottom: 16, textAlign: "center" },
+  star: {
+    position: "absolute",
+    backgroundColor: "#FFFFFF",
+  },
 
-  perksRow: { width: "100%", gap: 8, marginBottom: 20 },
-  perk: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#1E155488", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: "#2D208044" },
-  perkIcon: { fontSize: 18 },
-  perkText: { color: "#C4B5FD", fontSize: 13, flex: 1 },
+  scroll: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
 
-  card: { width: "100%", backgroundColor: "#1E1554", borderRadius: 24, padding: 22, borderWidth: 1, borderColor: "#2D208033", shadowColor: "#7C3AED", shadowOpacity: 0.18, shadowRadius: 20, elevation: 8 },
-  cardTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", marginBottom: 14 },
+  backBtn: {
+    alignSelf: "flex-start",
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: "#1E1554",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2D2080",
+  },
 
-  errorBox: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 11, borderRadius: 10, backgroundColor: "#3B1515", borderWidth: 1, borderColor: "#7F1D1D", marginBottom: 12 },
-  errorText: { color: "#FCA5A5", fontSize: 12, flex: 1, lineHeight: 17 },
+  iconArea: {
+    width: 96,
+    height: 96,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
 
-  form: { gap: 12 },
-  inputWrap: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#13103A", borderRadius: 14, borderWidth: 1.5, borderColor: "#2D2080", paddingHorizontal: 14, paddingVertical: 13 },
-  inputFocused: { borderColor: "#A78BFA" },
-  input: { flex: 1, color: "#FFFFFF", fontSize: 15 },
-  legalConsent: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 2 },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: "#6B5FA0", alignItems: "center", justifyContent: "center", marginTop: 1 },
-  checkboxSelected: { backgroundColor: "#7C3AED", borderColor: "#A78BFA" },
-  checkboxMark: { color: "#FFFFFF", fontSize: 14, fontWeight: "800", lineHeight: 17 },
-  legalConsentText: { color: "#8B7CC4", fontSize: 12, lineHeight: 18, flex: 1 },
-  legalLink: { color: "#C4B5FD", fontWeight: "600" },
+  iconGlow: {
+    position: "absolute",
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: "#F59E0B40",
+  },
 
-  createBtn: { borderRadius: 14, paddingVertical: 15, alignItems: "center", shadowColor: "#7C3AED", shadowOpacity: 0.45, shadowRadius: 12, elevation: 6 },
-  btnInner: { flexDirection: "row", alignItems: "center", gap: 8 },
-  createBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  iconBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#F59E0B",
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 10,
+  },
 
-  footer: { flexDirection: "row", alignItems: "center", marginTop: 18 },
-  footerNote: { color: "#6B5FA0", fontSize: 13 },
-  footerLink: { color: "#A78BFA", fontSize: 13, fontWeight: "600" },
+  iconEmoji: {
+    fontSize: 40,
+  },
 
-  verifyIconArea: { width: 90, height: 90, alignItems: "center", justifyContent: "center", marginBottom: 20 },
-  verifyIconBox: { width: 76, height: 76, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  verifyTitle: { fontSize: 26, fontWeight: "800", color: "#FFFFFF", marginBottom: 8, textAlign: "center" },
-  verifySub: { fontSize: 14, color: "#8B7CC4", textAlign: "center", marginBottom: 24, lineHeight: 22 },
-  resendText: { color: "#A78BFA", fontSize: 13, fontWeight: "600" },
+  sparkle: {
+    position: "absolute",
+  },
+
+  title: {
+    fontSize: 30,
+    fontWeight: "800",
+  },
+
+  subtitle: {
+    fontSize: 13,
+    color: "#8B7CC4",
+    marginTop: 4,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+
+  perksRow: {
+    width: "100%",
+    gap: 8,
+    marginBottom: 20,
+  },
+
+  perk: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#1E155488",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#2D208044",
+  },
+
+  perkIcon: {
+    fontSize: 18,
+  },
+
+  perkText: {
+    color: "#C4B5FD",
+    fontSize: 13,
+    flex: 1,
+  },
+
+  card: {
+    width: "100%",
+    backgroundColor: "#1E1554",
+    borderRadius: 24,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#2D208033",
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 14,
+  },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 11,
+    borderRadius: 10,
+    backgroundColor: "#3B1515",
+    borderWidth: 1,
+    borderColor: "#7F1D1D",
+    marginBottom: 12,
+  },
+
+  errorText: {
+    color: "#FCA5A5",
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 17,
+  },
+
+  form: {
+    gap: 12,
+  },
+
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#13103A",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#2D2080",
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+
+  inputFocused: {
+    borderColor: "#A78BFA",
+  },
+
+  input: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 15,
+  },
+
+  legalConsent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 2,
+  },
+
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#6B5FA0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+
+  checkboxSelected: {
+    backgroundColor: "#7C3AED",
+    borderColor: "#A78BFA",
+  },
+
+  checkboxMark: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 17,
+  },
+
+  legalConsentText: {
+    color: "#8B7CC4",
+    fontSize: 12,
+    lineHeight: 18,
+    flex: 1,
+  },
+
+  legalLink: {
+    color: "#C4B5FD",
+    fontWeight: "600",
+  },
+
+  createBtn: {
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+
+  btnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  createBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 18,
+  },
+
+  footerNote: {
+    color: "#6B5FA0",
+    fontSize: 13,
+  },
+
+  footerLink: {
+    color: "#A78BFA",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  verifyIconArea: {
+    width: 90,
+    height: 90,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+
+  verifyIconBox: {
+    width: 76,
+    height: 76,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  verifyTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+
+  verifySub: {
+    fontSize: 14,
+    color: "#8B7CC4",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+
+  resendText: {
+    color: "#A78BFA",
+    fontSize: 13,
+    fontWeight: "600",
+  },
 });

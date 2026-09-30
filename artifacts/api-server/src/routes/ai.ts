@@ -18,7 +18,7 @@ function getGroq() {
   });
 }
 
-const MODEL = "llama-3.1-8b-instant";
+const MODEL = "openai/gpt-oss-20b";
 
 router.post("/ai/flashcards", async (req, res) => {
   const parsed = validateText(req.body);

@@ -1,437 +1,1114 @@
-/**
- * PaywallScreen
- *
- * On native development builds: attempts to present the RevenueCat-configured
- * native paywall (presentPaywall from react-native-purchases-ui) which renders
- * the mascot / stars / "Try for Free" design set up in the dashboard.
- *
- * On Expo Go and web: falls back to the custom plan-card UI and shows a banner
- * explaining that the full native paywall requires a development build.
- */
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+
+import type { PurchasesPackage } from "react-native-purchases";
+
 import { useSubscription } from "@/lib/revenuecat";
-import { useLocalSearchParams } from "expo-router";
-import Constants from "expo-constants";
-import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 
-const GOLD = "#F59E0B";
-const GOLD2 = "#D97706";
-const DARK = "#0D0B2B";
-const CARD = "#1A1740";
-const CARD2 = "#151230";
-const BORDER = "#2A2560";
-const TEXT = "#FFFFFF";
-const MUTED = "#9CA3AF";
-const PURPLE = "#7C3AED";
-const TEAL = "#10B981";
+type PlanType = "monthly" | "yearly";
 
-// Expo Go is detected by executionEnvironment === "storeClient"
-const IS_EXPO_GO = Constants.executionEnvironment === "storeClient";
-
-const FREE_FEATURES = [
-  "100 credits daily (resets each day)",
-  "AI flashcards, summaries & quizzes",
-  "Social feed & communities",
-  "Ads on workspace & feed",
-];
-const FREE_MISSING = ["Unlimited AI usage", "No ads"];
-
-const MONTHLY_FEATURES = [
-  "Unlimited credits",
-  "Unlimited flashcards & summariser",
-  "Unlimited quizzes & notes",
-  "Premium AI access",
-  "No ads",
-  "Premium profile badge",
-];
-
-const YEARLY_FEATURES = [
-  "Everything in Monthly",
-  "Discounted yearly pricing",
-  "Priority AI access",
-  "Extended tool limits",
-  "Premium badge on profile",
-];
-
-function CheckIcon({ color = TEAL }: { color?: string }) {
-  return <Ionicons name="checkmark-circle" size={16} color={color} />;
-}
-function CrossIcon() {
-  return <Ionicons name="close-circle" size={16} color="#4B5563" />;
-}
-
-interface PlanCardProps {
-  badge?: string;
-  badgeColor?: string;
-  icon: string;
-  name: string;
-  price: string;
-  period: string;
-  features: string[];
-  missingFeatures?: string[];
-  buttonLabel: string;
-  buttonStyle: "gold" | "purple" | "outline";
-  onPress: () => void;
-  loading?: boolean;
-  disabled?: boolean;
-}
-
-function PlanCard({
-  badge, badgeColor = GOLD, icon, name, price, period, features, missingFeatures = [],
-  buttonLabel, buttonStyle, onPress, loading, disabled,
-}: PlanCardProps) {
-  const isGold = buttonStyle === "gold";
-  const isPurple = buttonStyle === "purple";
-
-  return (
-    <View style={[styles.planCard, buttonStyle === "purple" && styles.planCardHighlighted]}>
-      {badge ? (
-        <View style={[styles.badge, { backgroundColor: badgeColor + "22", borderColor: badgeColor }]}>
-          <Text style={[styles.badgeText, { color: badgeColor }]}>{badge}</Text>
-        </View>
-      ) : <View style={{ height: 26 }} />}
-
-      <View style={styles.planHeader}>
-        <View style={[styles.planIconWrap, { backgroundColor: isGold ? "#2A1F5E" : isPurple ? PURPLE + "20" : "#1F2937" }]}>
-          <Ionicons name={icon as any} size={22} color={isGold ? GOLD : isPurple ? "#C4B5FD" : MUTED} />
-        </View>
-        <Text style={styles.planName}>{name}</Text>
-      </View>
-
-      <Text style={[styles.planPrice, { color: isGold || isPurple ? TEXT : MUTED }]}>{price}</Text>
-      <Text style={styles.planPeriod}>{period}</Text>
-
-      <View style={styles.planDivider} />
-
-      <View style={styles.featureList}>
-        {features.map((f, i) => (
-          <View key={i} style={styles.featureRow}>
-            <CheckIcon color={isPurple ? "#C4B5FD" : TEAL} />
-            <Text style={styles.featureText}>{f}</Text>
-          </View>
-        ))}
-        {missingFeatures.map((f, i) => (
-          <View key={`x-${i}`} style={styles.featureRow}>
-            <CrossIcon />
-            <Text style={[styles.featureText, { color: "#6B7280", textDecorationLine: "line-through" }]}>{f}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        onPress={onPress}
-        disabled={disabled || loading}
-        activeOpacity={0.85}
-        style={[
-          styles.planBtn,
-          isGold && { backgroundColor: CARD2, borderWidth: 1, borderColor: BORDER },
-          isPurple && { backgroundColor: PURPLE },
-          buttonStyle === "outline" && { backgroundColor: "transparent", borderWidth: 1.5, borderColor: GOLD },
-          (disabled || loading) && { opacity: 0.55 },
-        ]}
-      >
-        {loading
-          ? <ActivityIndicator size="small" color={isGold ? MUTED : TEXT} />
-          : <Text style={[styles.planBtnText, { color: isGold ? MUTED : TEXT }]}>{buttonLabel}</Text>
-        }
-      </TouchableOpacity>
-    </View>
-  );
-}
+const WEB_MONTHLY_PRICE = "$3";
+const WEB_YEARLY_PRICE = "$10";
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { fromOnboarding } = useLocalSearchParams<{ fromOnboarding?: string }>();
-  const {
-    offerings, isConfigured, isLoading, purchase, restore,
-    isPurchasing, isRestoring, isSubscribed, refetchCustomerInfo,
-  } = useSubscription();
-  const [purchasing, setPurchasing] = useState<"monthly" | "yearly" | null>(null);
-  // Whether we already attempted (and failed/declined) the native paywall this session
-  const nativeAttempted = useRef(false);
 
+  const params =
+    useLocalSearchParams<{
+      feature?: string;
+    }>();
+
+  const {
+    offerings,
+    isLoading,
+    isPurchasing,
+    isRestoring,
+    isSubscribed,
+    purchase,
+    restore,
+    activateWebPreviewPro,
+  } = useSubscription();
+
+  const [selectedPlan, setSelectedPlan] =
+    useState<PlanType>("monthly");
+
+  const [statusMessage, setStatusMessage] =
+    useState<string>("");
+
+  const [statusType, setStatusType] =
+    useState<"info" | "success" | "error">(
+      "info"
+    );
+
+  /*
+   * Get the RevenueCat package for the selected plan.
+   *
+   * RevenueCat normally provides:
+   *   MONTHLY
+   *   ANNUAL
+   *
+   * We also check package identifiers/product identifiers
+   * so this continues working with custom package setups.
+   */
+  const selectedPackage =
+    useMemo<PurchasesPackage | null>(() => {
+      if (!offerings) {
+        return null;
+      }
+
+      const packages =
+        offerings.availablePackages || [];
+
+      if (selectedPlan === "monthly") {
+        return (
+          packages.find(
+            (pkg) =>
+              pkg.packageType === "MONTHLY"
+          ) ||
+          packages.find((pkg) =>
+            pkg.identifier
+              .toLowerCase()
+              .includes("monthly")
+          ) ||
+          packages.find((pkg) =>
+            pkg.product.identifier
+              .toLowerCase()
+              .includes("month")
+          ) ||
+          null
+        );
+      }
+
+      return (
+        packages.find(
+          (pkg) =>
+            pkg.packageType === "ANNUAL"
+        ) ||
+        packages.find((pkg) =>
+          pkg.identifier
+            .toLowerCase()
+            .includes("annual")
+        ) ||
+        packages.find((pkg) =>
+          pkg.identifier
+            .toLowerCase()
+            .includes("year")
+        ) ||
+        packages.find((pkg) =>
+          pkg.product.identifier
+            .toLowerCase()
+            .includes("year")
+        ) ||
+        null
+      );
+    }, [offerings, selectedPlan]);
+
+  /*
+   * If the user is already subscribed, show that state.
+   */
   useEffect(() => {
-    if (isSubscribed) router.replace("/(tabs)");
+    if (isSubscribed) {
+      setStatusType("success");
+      setStatusMessage(
+        Platform.OS === "web"
+          ? "Pro Preview is active. Your credits are unlimited."
+          : "Pro is active. Your credits are unlimited."
+      );
+    }
   }, [isSubscribed]);
 
-  // ── Attempt native RevenueCat paywall on first mount (non-Expo-Go / non-web) ──
-  //
-  // On a real development build or production build the native module is present and
-  // RevenueCatUI.presentPaywall() shows the dashboard-configured paywall (mascot, stars,
-  // "Try for Free" design). On Expo Go the native module is absent and the call throws;
-  // we catch that and fall through to the custom card UI shown below.
-  useEffect(() => {
-    if (IS_EXPO_GO || Platform.OS === "web" || nativeAttempted.current) return;
-    nativeAttempted.current = true;
+  const showStatus = (
+    message: string,
+    type: "info" | "success" | "error" = "info"
+  ) => {
+    setStatusMessage(message);
+    setStatusType(type);
+  };
 
-    (async () => {
-      try {
-        const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall({
-          displayCloseButton: fromOnboarding !== "1",
-        });
-        if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
-          router.replace("/(tabs)");
-        }
-        // CANCELLED / NOT_PRESENTED / ERROR: fall through to custom card UI
-      } catch {
-        // Native module unavailable (simulator without native build) — custom UI handles it
-      }
-    })();
-  }, []);
+  const handlePurchase = async () => {
+    console.log(
+      "[Paywall] Continue button pressed"
+    );
 
-  // Map RevenueCat packages to monthly/yearly
-  const allPackages = offerings?.current?.availablePackages ?? [];
-  const monthlyPkg = allPackages.find((p: any) =>
-    p.packageType === "MONTHLY" || p.identifier?.toLowerCase().includes("monthly")
-  ) ?? allPackages[0];
-  const yearlyPkg = allPackages.find((p: any) =>
-    p.packageType === "ANNUAL" || p.identifier?.toLowerCase().includes("annual") || p.identifier?.toLowerCase().includes("yearly")
-  ) ?? allPackages[1];
+    /*
+     * WEB PREVIEW
+     *
+     * This does NOT make a real purchase.
+     * It simply activates the development-only
+     * Pro preview so the entire premium UI can
+     * be tested in a browser.
+     */
+    if (Platform.OS === "web") {
+      console.log(
+        "[Paywall] Web preview purchase button pressed"
+      );
 
-  const monthlyPrice = monthlyPkg?.product?.priceString ?? "SAR 9.99";
-  const yearlyPrice = yearlyPkg?.product?.priceString ?? "SAR 29.99";
+      activateWebPreviewPro();
 
-  const handlePurchase = async (pkg: any, type: "monthly" | "yearly") => {
-    if (!pkg || !isConfigured) {
-      Alert.alert("Unavailable", "In-app purchases are not configured on this device.");
+      showStatus(
+        "Pro Preview activated! Your credits are now unlimited. This is a browser development preview — no real payment was made.",
+        "success"
+      );
+
       return;
     }
-    setPurchasing(type);
+
+    /*
+     * NATIVE
+     *
+     * Native Android/iOS must have a RevenueCat package.
+     */
+    if (!selectedPackage) {
+      showStatus(
+        "No RevenueCat package is available. Check your RevenueCat offering and product configuration.",
+        "error"
+      );
+
+      console.error(
+        "[Paywall] No selected RevenueCat package."
+      );
+
+      return;
+    }
+
     try {
-      await purchase(pkg);
-      router.replace("/(tabs)");
-    } catch (e: any) {
-      if (!e?.userCancelled) Alert.alert("Purchase failed", "Please try again or restore purchases.");
-    } finally {
-      setPurchasing(null);
+      showStatus(
+        "Opening the purchase screen...",
+        "info"
+      );
+
+      const customerInfo =
+        await purchase(selectedPackage);
+
+      if (!customerInfo) {
+        /*
+         * Purchase was cancelled or failed.
+         * The RevenueCat provider already logs
+         * the detailed error.
+         */
+        showStatus(
+          "The purchase was not completed.",
+          "info"
+        );
+
+        return;
+      }
+
+      const proActive =
+        Boolean(
+          customerInfo.entitlements.active[
+            "pro"
+          ]
+        );
+
+      console.log(
+        "[Paywall] Pro entitlement after purchase:",
+        proActive
+      );
+
+      if (proActive) {
+        showStatus(
+          "Pro activated! Your credits are now unlimited.",
+          "success"
+        );
+
+        /*
+         * Give React a moment to update the provider
+         * before returning to the app.
+         */
+        setTimeout(() => {
+          router.back();
+        }, 900);
+      } else {
+        showStatus(
+          "The purchase completed, but the Pro entitlement is not active. Check your RevenueCat entitlement configuration.",
+          "error"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[Paywall] Purchase error:",
+        error
+      );
+
+      showStatus(
+        "Something went wrong while processing the purchase.",
+        "error"
+      );
     }
   };
 
   const handleRestore = async () => {
+    console.log(
+      "[Paywall] Restore Purchases pressed"
+    );
+
     try {
-      await restore();
-    } catch {
-      Alert.alert("Restore unavailable", "We couldn't restore your purchases. Please try again.");
+      if (Platform.OS === "web") {
+        activateWebPreviewPro();
+
+        showStatus(
+          "Pro Preview restored for this browser. Your credits are now unlimited.",
+          "success"
+        );
+
+        return;
+      }
+
+      showStatus(
+        "Restoring your purchases...",
+        "info"
+      );
+
+      const customerInfo =
+        await restore();
+
+      if (!customerInfo) {
+        showStatus(
+          "No purchases were restored.",
+          "info"
+        );
+
+        return;
+      }
+
+      const proActive =
+        Boolean(
+          customerInfo.entitlements.active[
+            "pro"
+          ]
+        );
+
+      if (proActive) {
+        showStatus(
+          "Pro restored successfully. Your credits are now unlimited.",
+          "success"
+        );
+
+        setTimeout(() => {
+          router.back();
+        }, 900);
+      } else {
+        showStatus(
+          "No active Pro entitlement was found.",
+          "info"
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[Paywall] Restore error:",
+        error
+      );
+
+      showStatus(
+        "Something went wrong while restoring your purchase.",
+        "error"
+      );
     }
   };
 
-  if (isSubscribed) return null;
+  const handleFreePlan = () => {
+    console.log(
+      "[Paywall] Continue with free plan"
+    );
+
+    router.replace("/(tabs)");
+  };
+
+  const monthlyPrice =
+    Platform.OS === "web"
+      ? WEB_MONTHLY_PRICE
+      : offerings
+        ? (() => {
+            const pkg =
+              offerings.availablePackages.find(
+                (item) =>
+                  item.packageType === "MONTHLY"
+              );
+
+            return (
+              pkg?.product.priceString ||
+              WEB_MONTHLY_PRICE
+            );
+          })()
+        : WEB_MONTHLY_PRICE;
+
+  const yearlyPrice =
+    Platform.OS === "web"
+      ? WEB_YEARLY_PRICE
+      : offerings
+        ? (() => {
+            const pkg =
+              offerings.availablePackages.find(
+                (item) =>
+                  item.packageType === "ANNUAL"
+              );
+
+            return (
+              pkg?.product.priceString ||
+              WEB_YEARLY_PRICE
+            );
+          })()
+        : WEB_YEARLY_PRICE;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={
+          styles.scrollContent
+        }
         showsVerticalScrollIndicator={false}
-        bounces
       >
-        {/* Close button — hidden when entering from onboarding */}
-        {fromOnboarding !== "1" && (
-          <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-            <Ionicons name="close" size={22} color={MUTED} />
-          </TouchableOpacity>
-        )}
-
-        {/* Expo Go banner */}
-        {IS_EXPO_GO && (
-          <View style={styles.expoGoBanner}>
-            <Ionicons name="information-circle-outline" size={16} color={GOLD} />
-            <Text style={styles.expoGoBannerText}>
-              The full premium paywall requires a development build. You are currently in Expo Go preview mode.
+        <View style={styles.container}>
+          {/* Close */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.closeText}>
+              ✕
             </Text>
-          </View>
-        )}
+          </TouchableOpacity>
 
-        {/* Header */}
-        <View style={styles.headerWrap}>
-          <View style={styles.crownRow}>
-            <View style={[styles.crownBadge, { backgroundColor: GOLD + "18", borderColor: GOLD }]}>
-              <Ionicons name="trophy" size={24} color={GOLD} />
-            </View>
-          </View>
-          <Text style={styles.title}>Choose your plan</Text>
-          <Text style={styles.subtitle}>
-            Upgrade for unlimited AI, no ads, and premium badges.{"\n"}Free users get 100 credits every day.
-          </Text>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={GOLD} size="large" />
-            <Text style={[styles.subtitle, { marginTop: 12 }]}>Loading plans…</Text>
-          </View>
-        ) : (
-          <>
-            {/* Free plan */}
-            <PlanCard
-              icon="star-outline"
-              name="Free"
-              price="$0"
-              period="Forever"
-              features={FREE_FEATURES}
-              missingFeatures={FREE_MISSING}
-              buttonLabel="Current plan"
-              buttonStyle="gold"
-              onPress={() => {}}
-              disabled
-            />
-
-            {/* Monthly plan */}
-            <PlanCard
-              badge="⭐  Most popular"
-              badgeColor={GOLD}
-              icon="flash"
-              name="Monthly"
-              price={monthlyPrice}
-              period="per month"
-              features={MONTHLY_FEATURES}
-              buttonLabel={purchasing === "monthly" ? "Processing…" : "Choose Monthly"}
-              buttonStyle="purple"
-              onPress={() => handlePurchase(monthlyPkg, "monthly")}
-              loading={purchasing === "monthly"}
-              disabled={!!purchasing || isLoading}
-            />
-
-            {/* Yearly plan */}
-            <PlanCard
-              badge="🏆  Best value"
-              badgeColor={TEAL}
-              icon="trophy"
-              name="Yearly"
-              price={yearlyPrice}
-              period="per year"
-              features={YEARLY_FEATURES}
-              buttonLabel={purchasing === "yearly" ? "Processing…" : "Choose Yearly"}
-              buttonStyle="outline"
-              onPress={() => handlePurchase(yearlyPkg, "yearly")}
-              loading={purchasing === "yearly"}
-              disabled={!!purchasing || isLoading}
-            />
-
-            {/* Footer actions */}
-            <View style={styles.footer}>
-              {fromOnboarding === "1" && (
-                <TouchableOpacity onPress={() => router.replace("/(tabs)")} style={styles.continueFreeBtn}>
-                  <Text style={styles.continueFreeText}>Continue with free plan</Text>
-                  <Ionicons name="arrow-forward" size={14} color={GOLD} />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity onPress={handleRestore} disabled={isRestoring} style={styles.restoreBtn}>
-                <Text style={styles.restoreText}>{isRestoring ? "Restoring…" : "Restore Purchases"}</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.legal}>
-                Payment charged at confirmation. Subscription renews automatically unless cancelled at least 24 hours before period ends.
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.proBadge}>
+              <Text style={styles.proBadgeText}>
+                PRO
               </Text>
             </View>
-          </>
-        )}
+
+            <Text style={styles.title}>
+              Unlock Improkinz Pro
+            </Text>
+
+            <Text style={styles.subtitle}>
+              Get unlimited access to your study
+              tools without worrying about daily
+              credits.
+            </Text>
+
+            {params.feature ? (
+              <Text style={styles.featureText}>
+                Unlocking: {params.feature}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Benefits */}
+          <View style={styles.benefitsCard}>
+            <Benefit
+              icon="∞"
+              title="Unlimited credits"
+              description="Use your AI study tools without the daily 100-credit limit."
+            />
+
+            <Benefit
+              icon="⚡"
+              title="More AI study tools"
+              description="Keep studying without constantly waiting for credits to reset."
+            />
+
+            <Benefit
+              icon="🚀"
+              title="Study without interruptions"
+              description="Focus on learning instead of managing your credit balance."
+            />
+
+            <Benefit
+              icon="✨"
+              title="Premium experience"
+              description="Unlock the full Pro experience across Improkinz."
+            />
+          </View>
+
+          {/* Already Pro */}
+          {isSubscribed ? (
+            <View
+              style={[
+                styles.statusBox,
+                styles.successBox,
+              ]}
+            >
+              <Text
+                style={styles.statusTitle}
+              >
+                ✓ Pro is active
+              </Text>
+
+              <Text
+                style={styles.statusMessage}
+              >
+                Your credits are unlimited.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Plans */}
+          {!isSubscribed ? (
+            <>
+              <Text style={styles.sectionTitle}>
+                Choose your plan
+              </Text>
+
+              <View style={styles.plans}>
+                {/* Monthly */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[
+                    styles.plan,
+                    selectedPlan ===
+                      "monthly" &&
+                      styles.selectedPlan,
+                  ]}
+                  onPress={() =>
+                    setSelectedPlan(
+                      "monthly"
+                    )
+                  }
+                >
+                  <View
+                    style={
+                      styles.planRadioOuter
+                    }
+                  >
+                    {selectedPlan ===
+                    "monthly" ? (
+                      <View
+                        style={
+                          styles.planRadioInner
+                        }
+                      />
+                    ) : null}
+                  </View>
+
+                  <View
+                    style={styles.planInfo}
+                  >
+                    <Text
+                      style={
+                        styles.planTitle
+                      }
+                    >
+                      Monthly
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.planDescription
+                      }
+                    >
+                      Flexible monthly access
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.priceContainer
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.planPrice
+                      }
+                    >
+                      {monthlyPrice}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.pricePeriod
+                      }
+                    >
+                      /month
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Yearly */}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={[
+                    styles.plan,
+                    selectedPlan ===
+                      "yearly" &&
+                      styles.selectedPlan,
+                  ]}
+                  onPress={() =>
+                    setSelectedPlan(
+                      "yearly"
+                    )
+                  }
+                >
+                  <View
+                    style={
+                      styles.planRadioOuter
+                    }
+                  >
+                    {selectedPlan ===
+                    "yearly" ? (
+                      <View
+                        style={
+                          styles.planRadioInner
+                        }
+                      />
+                    ) : null}
+                  </View>
+
+                  <View
+                    style={styles.planInfo}
+                  >
+                    <Text
+                      style={
+                        styles.planTitle
+                      }
+                    >
+                      Yearly
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.planDescription
+                      }
+                    >
+                      Full year of Pro access
+                    </Text>
+                  </View>
+
+                  <View
+                    style={
+                      styles.priceContainer
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.planPrice
+                      }
+                    >
+                      {yearlyPrice}
+                    </Text>
+
+                    <Text
+                      style={
+                        styles.pricePeriod
+                      }
+                    >
+                      /year
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Main purchase button */}
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={
+                  isPurchasing ||
+                  isLoading
+                }
+                style={[
+                  styles.continueButton,
+                  (isPurchasing ||
+                    isLoading) &&
+                    styles.disabledButton,
+                ]}
+                onPress={handlePurchase}
+              >
+                {isPurchasing ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.continueButtonText
+                    }
+                  >
+                    Continue
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Restore */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                disabled={isRestoring}
+                style={styles.restoreButton}
+                onPress={handleRestore}
+              >
+                {isRestoring ? (
+                  <ActivityIndicator
+                    size="small"
+                  />
+                ) : (
+                  <Text
+                    style={
+                      styles.restoreText
+                    }
+                  >
+                    Restore Purchases
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
+          ) : null}
+
+          {/* Status */}
+          {statusMessage ? (
+            <View
+              style={[
+                styles.statusBox,
+                statusType === "success" &&
+                  styles.successBox,
+                statusType === "error" &&
+                  styles.errorBox,
+                statusType === "info" &&
+                  styles.infoBox,
+              ]}
+            >
+              <Text
+                style={styles.statusMessage}
+              >
+                {statusMessage}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Web preview note */}
+          {Platform.OS === "web" ? (
+            <View
+              style={styles.previewNotice}
+            >
+              <Text
+                style={styles.previewTitle}
+              >
+                Browser Preview
+              </Text>
+
+              <Text
+                style={styles.previewText}
+              >
+                You are running Improkinz in
+                Expo Web. Continue activates a
+                development-only Pro preview so
+                you can test unlimited credits.
+                No real payment is processed in
+                the browser.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Free plan */}
+          {!isSubscribed ? (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.freeButton}
+              onPress={handleFreePlan}
+            >
+              <Text
+                style={styles.freeButtonText}
+              >
+                Continue with free plan
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.freeButton}
+              onPress={() =>
+                router.replace("/(tabs)")
+              }
+            >
+              <Text
+                style={styles.freeButtonText}
+              >
+                Back to Improkinz
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <Text style={styles.terms}>
+            Subscriptions are managed through
+            RevenueCat on supported native
+            platforms. Browser preview mode is
+            for development/testing only.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: DARK },
-  scroll: { paddingHorizontal: 16, paddingBottom: 48, paddingTop: 8 },
-  closeBtn: { alignSelf: "flex-end", padding: 10, marginBottom: 4 },
+function Benefit({
+  icon,
+  title,
+  description,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <View style={styles.benefit}>
+      <View style={styles.benefitIcon}>
+        <Text style={styles.benefitIconText}>
+          {icon}
+        </Text>
+      </View>
 
-  expoGoBanner: {
+      <View style={styles.benefitContent}>
+        <Text style={styles.benefitTitle}>
+          {title}
+        </Text>
+
+        <Text
+          style={styles.benefitDescription}
+        >
+          {description}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#090612",
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
+
+  container: {
+    width: "100%",
+    maxWidth: 620,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+
+  closeButton: {
+    alignSelf: "flex-end",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#191226",
+    marginBottom: 8,
+  },
+
+  closeText: {
+    color: "#aaa0bc",
+    fontSize: 20,
+    fontWeight: "600",
+  },
+
+  header: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 26,
+  },
+
+  proBadge: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#7c3aed",
+    marginBottom: 14,
+  },
+
+  proBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+
+  title: {
+    color: "#ffffff",
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  subtitle: {
+    color: "#aaa0bc",
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginTop: 10,
+    maxWidth: 500,
+  },
+
+  featureText: {
+    color: "#a78bfa",
+    fontSize: 13,
+    marginTop: 12,
+    fontWeight: "600",
+  },
+
+  benefitsCard: {
+    backgroundColor: "#120c1e",
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#251b35",
+    marginBottom: 24,
+  },
+
+  benefit: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: GOLD + "14",
-    borderWidth: 1,
-    borderColor: GOLD + "44",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    marginBottom: 18,
   },
-  expoGoBannerText: {
+
+  benefitLast: {
+    marginBottom: 0,
+  },
+
+  benefitIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#211433",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  benefitIconText: {
+    color: "#c4b5fd",
+    fontSize: 20,
+  },
+
+  benefitContent: {
     flex: 1,
-    color: GOLD,
-    fontFamily: "Inter_400Regular",
+  },
+
+  benefitTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 3,
+  },
+
+  benefitDescription: {
+    color: "#91859f",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  sectionTitle: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+
+  plans: {
+    gap: 12,
+  },
+
+  plan: {
+    minHeight: 82,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#2a2038",
+    backgroundColor: "#120c1e",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  selectedPlan: {
+    borderColor: "#8b5cf6",
+    backgroundColor: "#18102a",
+  },
+
+  planRadioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#655777",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 13,
+  },
+
+  planRadioInner: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: "#8b5cf6",
+  },
+
+  planInfo: {
+    flex: 1,
+  },
+
+  planTitle: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  planDescription: {
+    color: "#8f849c",
+    fontSize: 12,
+    marginTop: 3,
+  },
+
+  priceContainer: {
+    alignItems: "flex-end",
+  },
+
+  planPrice: {
+    color: "#ffffff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
+  pricePeriod: {
+    color: "#8f849c",
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  continueButton: {
+    height: 56,
+    borderRadius: 17,
+    backgroundColor: "#7c3aed",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
+  },
+
+  continueButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  restoreButton: {
+    minHeight: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 5,
+  },
+
+  restoreText: {
+    color: "#a78bfa",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
+  statusBox: {
+    borderRadius: 15,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+  },
+
+  successBox: {
+    backgroundColor: "#102018",
+    borderColor: "#245d3c",
+  },
+
+  errorBox: {
+    backgroundColor: "#241217",
+    borderColor: "#71303b",
+  },
+
+  infoBox: {
+    backgroundColor: "#151125",
+    borderColor: "#332758",
+  },
+
+  statusTitle: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+
+  statusMessage: {
+    color: "#c7bed2",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  previewNotice: {
+    backgroundColor: "#171126",
+    borderRadius: 15,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#30244b",
+  },
+
+  previewTitle: {
+    color: "#c4b5fd",
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 5,
+  },
+
+  previewText: {
+    color: "#91859f",
     fontSize: 12,
     lineHeight: 18,
   },
 
-  headerWrap: { alignItems: "center", marginBottom: 24 },
-  crownRow: { marginBottom: 14 },
-  crownBadge: {
-    width: 60, height: 60, borderRadius: 18,
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
-  },
-  title: {
-    fontSize: 26, fontFamily: "Inter_700Bold", color: TEXT,
-    textAlign: "center", marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 13, fontFamily: "Inter_400Regular", color: MUTED,
-    textAlign: "center", lineHeight: 20,
+  freeButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    marginTop: 8,
   },
 
-  loadingWrap: { alignItems: "center", paddingVertical: 48 },
-
-  // Plan card
-  planCard: {
-    backgroundColor: CARD, borderRadius: 18, padding: 18,
-    marginBottom: 14, borderWidth: 1, borderColor: BORDER,
+  freeButtonText: {
+    color: "#8f849c",
+    fontSize: 14,
+    fontWeight: "600",
   },
-  planCardHighlighted: {
-    borderColor: PURPLE, borderWidth: 1.5,
-    shadowColor: PURPLE, shadowOpacity: 0.28, shadowRadius: 18, elevation: 6,
-  },
-  badge: {
-    alignSelf: "center", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4,
-    borderWidth: 1, marginBottom: 12,
-  },
-  badgeText: { fontSize: 12, fontFamily: "Inter_700Bold" },
 
-  planHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  planIconWrap: {
-    width: 40, height: 40, borderRadius: 11,
-    alignItems: "center", justifyContent: "center",
-  },
-  planName: { fontSize: 18, fontFamily: "Inter_700Bold", color: TEXT },
-
-  planPrice: { fontSize: 32, fontFamily: "Inter_700Bold", marginBottom: 2 },
-  planPeriod: { fontSize: 12, fontFamily: "Inter_400Regular", color: MUTED, marginBottom: 14 },
-
-  planDivider: { height: 1, backgroundColor: BORDER, marginBottom: 14 },
-
-  featureList: { gap: 9, marginBottom: 18 },
-  featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  featureText: { fontSize: 13, fontFamily: "Inter_400Regular", color: TEXT, flex: 1 },
-
-  planBtn: {
-    borderRadius: 12, paddingVertical: 13, alignItems: "center",
-  },
-  planBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
-
-  // Footer
-  footer: { alignItems: "center", gap: 12, marginTop: 8 },
-  continueFreeBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    paddingVertical: 10, paddingHorizontal: 20,
-  },
-  continueFreeText: { color: GOLD, fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  restoreBtn: { paddingVertical: 8 },
-  restoreText: { color: MUTED, fontFamily: "Inter_400Regular", fontSize: 13 },
-  legal: {
-    color: "#4B5563", fontFamily: "Inter_400Regular",
-    fontSize: 11, textAlign: "center", lineHeight: 16, paddingHorizontal: 12,
+  terms: {
+    color: "#61576d",
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: "center",
+    marginTop: 12,
+    paddingHorizontal: 20,
   },
 });

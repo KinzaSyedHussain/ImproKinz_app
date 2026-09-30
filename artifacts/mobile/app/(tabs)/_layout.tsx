@@ -15,6 +15,7 @@ function lucideTab(name: string) {
 export default function TabLayout() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
@@ -27,30 +28,51 @@ export default function TabLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         headerShown: false,
+
         tabBarStyle: {
-          position: "absolute",
-          backgroundColor: "transparent",
+          position: isWeb ? "relative" : "absolute",
+          backgroundColor: isWeb ? colors.card : "transparent",
           borderTopWidth: 1,
           borderTopColor: colors.border,
           elevation: 0,
-          height: TAB_HEIGHT + bottomPad + (isWeb ? 24 : 0),
+          height: TAB_HEIGHT + bottomPad,
           paddingBottom: bottomPad,
           paddingTop: 4,
+          zIndex: 100,
         },
+
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView intensity={100} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />
+            <BlurView
+              intensity={100}
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+            />
+          ) : isWeb ? null : (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: colors.card,
+                },
+              ]}
+            />
           ),
+
         tabBarLabelStyle: {
           fontFamily: "Inter_500Medium",
           fontSize: 11,
         },
-        tabBarIconStyle: { marginTop: 2 },
+
+        tabBarIconStyle: {
+          marginTop: 2,
+        },
       }}
     >
-      {/* ── Visible tabs ─────────────────────────────────── */}
+      {/* =========================
+          VISIBLE TABS
+          ========================= */}
+
       <Tabs.Screen
         name="index"
         options={{
@@ -58,20 +80,15 @@ export default function TabLayout() {
           tabBarIcon: lucideTab("home"),
         }}
       />
+
       <Tabs.Screen
-        name="groups"
+        name="youtube"
         options={{
-          title: "Groups",
-          tabBarIcon: lucideTab("users-round"),
+          title: "Videos",
+          tabBarIcon: lucideTab("youtube"),
         }}
       />
-      <Tabs.Screen
-        name="focus"
-        options={{
-          title: "Focus",
-          tabBarIcon: lucideTab("timer"),
-        }}
-      />
+
       <Tabs.Screen
         name="opportunities"
         options={{
@@ -79,6 +96,7 @@ export default function TabLayout() {
           tabBarIcon: lucideTab("briefcase"),
         }}
       />
+
       <Tabs.Screen
         name="profile"
         options={{
@@ -87,12 +105,58 @@ export default function TabLayout() {
         }}
       />
 
-      {/* ── Hidden from tab bar ──────────────────────────── */}
-      <Tabs.Screen name="create"        options={{ href: null }} />
-      <Tabs.Screen name="youtube"       options={{ href: null }} />
-      <Tabs.Screen name="community"     options={{ href: null }} />
-      <Tabs.Screen name="dashboard"     options={{ href: null }} />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
+      {/* =========================
+          HIDDEN ROUTES
+          ========================= */}
+
+      <Tabs.Screen
+        name="focus"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="groups"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="create"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="community"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          href: null,
+        }}
+      />
+
+      <Tabs.Screen
+        name="opportunity-details"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

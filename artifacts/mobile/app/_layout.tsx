@@ -9,11 +9,11 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import React, { useEffect } from "react";
-import { Platform } from "react-native";
+import { Platform, View, Text, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ClerkProvider } from "@clerk/clerk-expo";
-import { tokenCache } from "@/lib/tokenCache";
+import { tokenCache } from "@clerk/clerk-expo/token-cache";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
@@ -25,9 +25,10 @@ import { initializeRevenueCat, SubscriptionProvider } from "@/lib/revenuecat";
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
-const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
-// Safe initialization
+const publishableKey = "pk_test_bG92ZWQtbWlubm93LTc0LmNsZXJrLmFjY291bnRzLmRldiQ";
+
+// Safe RevenueCat initialization
 try {
   initializeRevenueCat();
 } catch (error) {
@@ -73,13 +74,13 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
   if (Platform.OS !== "web") {
     const { KeyboardProvider } = require("react-native-keyboard-controller");
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={styles.flex}>
         <KeyboardProvider>{children}</KeyboardProvider>
       </GestureHandlerRootView>
     );
   }
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.flex}>
       {children}
     </GestureHandlerRootView>
   );
@@ -99,8 +100,25 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // On web, fonts may load asynchronously — don't block render indefinitely
   if (!fontsLoaded && !fontError && Platform.OS !== "web") return null;
+
+  // Fallback UI when Clerk Publishable Key is missing instead of returning null / blank screen
+  if (!publishableKey) {
+    return (
+      <GestureHandlerRootView style={styles.fallbackContainer}>
+        <View style={styles.card}>
+          <Text style={styles.errorTitle}>Missing Environment Variables</Text>
+          <Text style={styles.errorText}>
+            <Text style={styles.bold}>EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY</Text> is missing from your <Text style={styles.bold}>.env</Text> file.
+          </Text>
+          <Text style={styles.subText}>
+            Add key to your root <Text style={styles.bold}>.env</Text> and restart server:
+          </Text>
+          <Text style={styles.codeSnippet}>npx expo start -c</Text>
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
@@ -125,3 +143,55 @@ export default function RootLayout() {
     </ClerkProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  fallbackContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#121212",
+  },
+  card: {
+    padding: 24,
+    borderRadius: 12,
+    backgroundColor: "#1e1e1e",
+    maxWidth: 400,
+    width: "100%",
+    alignItems: "center",
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ff5252",
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#e0e0e0",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  subText: {
+    fontSize: 12,
+    color: "#a0a0a0",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  bold: {
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  codeSnippet: {
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    backgroundColor: "#2d2d2d",
+    color: "#00e676",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    fontSize: 13,
+  },
+});

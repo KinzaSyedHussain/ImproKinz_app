@@ -26,9 +26,55 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── API base ──────────────────────────────────────────────────────────────────
-const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "http://localhost:8080";
+// FIX: the old code hardcoded `https://` for the fallback AND for the
+// EXPO_PUBLIC_DOMAIN branch. That's wrong for local dev:
+//   - "localhost" on a phone/simulator refers to the device itself, not your
+//     dev machine, so http://localhost:8080 will always ERR_CONNECTION_REFUSED
+//     there even if your backend is running fine on your laptop.
+//   - Local dev servers are almost never serving HTTPS, so forcing https://
+//     on EXPO_PUBLIC_DOMAIN breaks that path too if it's just an IP:port.
+//
+// Set EXPO_PUBLIC_DOMAIN in your .env, e.g.:
+//   EXPO_PUBLIC_DOMAIN=192.168.1.23:8080      (LAN IP, for physical devices)
+//   EXPO_PUBLIC_DOMAIN=localhost:8080          (simulator only, same machine)
+//   EXPO_PUBLIC_DOMAIN=your-api.example.com    (production, gets https://)
+//
+// Restart with `npx expo start -c` after changing env vars — Expo only reads
+// EXPO_PUBLIC_* at bundle time, not at runtime.
+
+function resolveApiBase(): string {
+  // Use an explicitly configured API URL if available.
+  const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
+  }
+
+  // Support EXPO_PUBLIC_DOMAIN if your project uses it.
+  const domain = process.env.EXPO_PUBLIC_DOMAIN?.trim();
+
+  if (domain) {
+    if (/^https?:\/\//i.test(domain)) {
+      return domain.replace(/\/+$/, "");
+    }
+
+    const isLocal =
+      domain.startsWith("localhost") ||
+      domain.startsWith("127.0.0.1") ||
+      /^\d{1,3}(\.\d{1,3}){3}(:\d+)?$/.test(domain);
+
+    return `${isLocal ? "http" : "https"}://${domain}`.replace(/\/+$/, "");
+  }
+
+  // Local development backend.
+  return "http://localhost:3001";
+}
+
+const API_BASE = resolveApiBase();
+
+if (__DEV__) {
+  console.log("[GroupsScreen] API_BASE:", API_BASE);
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface StudyGroup {
@@ -149,6 +195,7 @@ export default function GroupsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [joining, setJoining] = useState<Record<string, boolean>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const currentUid = userId ?? "";
 
@@ -183,10 +230,17 @@ export default function GroupsScreen() {
 
       setPublicGroups(publicData.groups ?? []);
       setMyGroups(mineData.groups ?? []);
-    } catch (e) {
+      setLoadError(null);
+    } catch (e: any) {
       console.warn("fetchGroups error (falling back to empty state):", e);
       setPublicGroups([]);
       setMyGroups([]);
+      // Surface a hint in dev so this doesn't look like a silent empty state.
+      setLoadError(
+        __DEV__
+          ? `Couldn't reach ${API_BASE}. Is the backend running and is EXPO_PUBLIC_DOMAIN set correctly?`
+          : "Couldn't load groups. Check your connection and try again."
+      );
     }
   }, [currentUid, getToken]);
 
@@ -316,6 +370,13 @@ export default function GroupsScreen() {
         </View>
       </LinearGradient>
 
+      {__DEV__ && loadError && (
+        <View style={styles.devErrorBanner}>
+          <Icon name="alert-triangle" size={14} color="#fff" />
+          <Text style={styles.devErrorText}>{loadError}</Text>
+        </View>
+      )}
+
       <FlatList
         data={search ? filtered : publicGroups}
         keyExtractor={(g) => g.id}
@@ -427,4 +488,13 @@ const styles = StyleSheet.create({
   emptyText: { fontFamily: "Inter_400Regular", fontSize: 14, textAlign: "center" },
   emptyBtn: { marginTop: 6, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
   emptyBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  devErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  devErrorText: { color: "#fff", fontSize: 12, flex: 1 },
 });

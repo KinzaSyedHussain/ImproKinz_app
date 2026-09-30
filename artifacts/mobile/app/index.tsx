@@ -11,378 +11,517 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { useAuth } from "@/context/AuthContext";
+import { asyncStorage as AsyncStorage } from "@/lib/asyncStorage";
 
-const { width: W, height: H } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
-const STARS = Array.from({ length: 55 }, (_, i) => ({
-  key: i,
-  x: ((i * 137.508) % 1) * W + (i % 7) * 14,
-  y: ((i * 79.37) % 1) * H + (i % 5) * 10,
-  size: i % 4 === 0 ? 2.5 : i % 3 === 0 ? 1.8 : 1.2,
-  delay: (i * 197) % 2200,
-  duration: 600 + (i % 5) * 200,
-}));
+const SPLASH_DURATION = 3200;
 
-const FEATURES = [
-  { icon: "🧠", label: "AI Study Tools" },
-  { icon: "📚", label: "Smart Notes" },
-  { icon: "🏆", label: "XP & Rewards" },
-  { icon: "🌐", label: "Study Community" },
-];
-
-const MESSAGES = [
-  "Unlocking knowledge treasures",
-  "Preparing AI-powered tools",
-  "Loading your study space",
-  "Almost ready",
-];
-
-export default function Root() {
-  const { user, profile, loading, configured } = useAuth();
-  const { isSignedIn } = useClerkAuth();
+export default function Index() {
   const router = useRouter();
 
-  useEffect(() => {
-    if (loading) return;
-    if (!configured) return;
-    // If authenticated but profile hasn't loaded from Firestore yet, wait a bit more
-    const isAuthenticated = !!user || !!isSignedIn;
-    if (isAuthenticated && profile === undefined) return;
+  const { user, profile, loading } = useAuth();
+  const { isSignedIn } = useClerkAuth();
 
-    const t = setTimeout(() => {
-      // Clerk session exists but Firebase hasn't bridged yet — still signed in
-      const isAuthenticated = !!user || !!isSignedIn;
-      if (isAuthenticated) {
-        // Route new accounts (profile loaded, onboarding not done) to onboarding.
-        // Null profile means Firebase isn't configured or still loading — go to app.
-        if (profile !== null && !profile.onboardingComplete) {
-          router.replace("/onboarding");
-        } else {
-          router.replace("/(tabs)");
-        }
-      } else {
-        router.replace("/auth");
-      }
-    }, 3200);
-    return () => clearTimeout(t);
-  }, [user, loading, configured, isSignedIn, router]);
+  const hasNavigated = useRef(false);
 
-  const fadeIn = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0.7)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const titleFade = useRef(new Animated.Value(0)).current;
-  const taglineFade = useRef(new Animated.Value(0)).current;
-  const featuresFade = useRef(new Animated.Value(0)).current;
+  const [splashFinished, setSplashFinished] = useState(false);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.82)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0.6)).current;
-  const starAnims = useRef(STARS.map(() => new Animated.Value(0.1))).current;
+  const starAnim = useRef(new Animated.Value(0)).current;
 
-  const [pct, setPct] = useState(0);
-  const [msgIndex, setMsgIndex] = useState(0);
-
+  /*
+   * ---------------------------------------
+   * Main splash animations
+   * ---------------------------------------
+   */
   useEffect(() => {
-    // Staggered entrance animations
-    Animated.sequence([
-      Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.parallel([
-        Animated.spring(logoScale, { toValue: 1, friction: 7, tension: 60, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-      ]),
-      Animated.timing(titleFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(taglineFade, { toValue: 1, duration: 350, useNativeDriver: true }),
-      Animated.timing(featuresFade, { toValue: 1, duration: 350, useNativeDriver: true }),
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 7,
+        tension: 45,
+        useNativeDriver: true,
+      }),
+
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: SPLASH_DURATION,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: false,
+      }),
     ]).start();
 
-    // Glow pulse on logo
-    Animated.loop(
+    const starLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.5, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    ).start();
+        Animated.timing(starAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(starAnim, {
+          toValue: 0,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
 
-    // Progress bar
-    Animated.timing(progressAnim, {
-      toValue: 100,
-      duration: 3200,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: false,
-    }).start();
-    const id = progressAnim.addListener(({ value }) => setPct(Math.round(value)));
+    starLoop.start();
 
-    // Stars
-    starAnims.forEach((anim, i) => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(STARS[i].delay),
-          Animated.timing(anim, { toValue: 0.9, duration: STARS[i].duration, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0.05, duration: STARS[i].duration * 1.4, useNativeDriver: true }),
-        ])
-      ).start();
-    });
-
-    const msgTimer = setInterval(() => setMsgIndex((m) => (m + 1) % MESSAGES.length), 900);
     return () => {
-      progressAnim.removeListener(id);
-      clearInterval(msgTimer);
+      starLoop.stop();
+    };
+  }, [fadeAnim, scaleAnim, progressAnim, starAnim]);
+
+  /*
+   * The timer controls ONLY when the splash animation is
+   * considered finished. It does not decide authentication.
+   */
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSplashFinished(true);
+    }, SPLASH_DURATION);
+
+    return () => {
+      clearTimeout(timer);
     };
   }, []);
 
+  /*
+   * ---------------------------------------
+   * Authentication / navigation
+   * ---------------------------------------
+   *
+   * Signed out:
+   *     /auth
+   *
+   * New account waiting for onboarding:
+   *     /onboarding
+   *
+   * Existing authenticated account:
+   *     /(tabs)
+   */
+  useEffect(() => {
+    if (loading || !splashFinished || hasNavigated.current) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const decideNavigation = async () => {
+      const authenticated = !!user || !!isSignedIn;
+
+      /*
+       * User is not signed in.
+       */
+      if (!authenticated) {
+        if (cancelled || hasNavigated.current) {
+          return;
+        }
+
+        hasNavigated.current = true;
+        router.replace("/auth");
+        return;
+      }
+
+      let pendingOnboarding = false;
+
+      try {
+        const pendingNickname = await AsyncStorage.getItem(
+          "pending_onboarding_nickname",
+        );
+
+        pendingOnboarding = !!pendingNickname;
+      } catch (error) {
+        console.warn(
+          "Could not read pending onboarding state:",
+          error,
+        );
+      }
+
+      if (cancelled || hasNavigated.current) {
+        return;
+      }
+
+      /*
+       * We only use onboardingComplete when it is explicitly true.
+       *
+       * This is important because older users may not have this
+       * property on their profile.
+       */
+      const onboardingComplete =
+        (profile as any)?.onboardingComplete === true;
+
+      /*
+       * Newly registered user who has not completed onboarding.
+       */
+      if (pendingOnboarding && !onboardingComplete) {
+        hasNavigated.current = true;
+        router.replace("/onboarding");
+        return;
+      }
+
+      /*
+       * If onboarding has already been completed, remove the
+       * temporary signup marker so the user does not get sent
+       * back to onboarding on every future app launch.
+       */
+      if (pendingOnboarding && onboardingComplete) {
+        try {
+          await AsyncStorage.removeItem(
+            "pending_onboarding_nickname",
+          );
+        } catch (error) {
+          console.warn(
+            "Could not clear pending onboarding state:",
+            error,
+          );
+        }
+      }
+
+      if (cancelled || hasNavigated.current) {
+        return;
+      }
+
+      /*
+       * Normal authenticated user.
+       */
+      hasNavigated.current = true;
+      router.replace("/(tabs)");
+    };
+
+    decideNavigation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    splashFinished,
+    user,
+    isSignedIn,
+    profile,
+    router,
+  ]);
+
   const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 100],
-    outputRange: ["0%", "100%"],
+    inputRange: [0, 1],
+    outputRange: [0, width * 0.62],
+  });
+
+  const starOpacity = starAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 0.9],
+  });
+
+  const starTranslate = starAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -8],
   });
 
   return (
-    <Animated.View style={[styles.root, { opacity: fadeIn }]}>
+    <View style={styles.container}>
       <LinearGradient
-        colors={["#110932", "#0D0B2B", "#1A0945", "#0D0B2B"]}
-        locations={[0, 0.35, 0.7, 1]}
+        colors={[
+          "#080016",
+          "#12002B",
+          "#1C063A",
+          "#090012",
+        ]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Ambient glow orbs */}
-      <View style={[styles.orb, { top: -80, left: -80, width: 280, height: 280, backgroundColor: "#7C3AED18" }]} />
-      <View style={[styles.orb, { top: H * 0.3, right: -100, width: 320, height: 320, backgroundColor: "#4C1D9510" }]} />
-      <View style={[styles.orb, { bottom: 0, left: W * 0.1, width: 250, height: 250, backgroundColor: "#F59E0B08" }]} />
+      {/* Background stars */}
+      <Animated.View
+        style={[
+          styles.star,
+          styles.starOne,
+          {
+            opacity: starOpacity,
+            transform: [{ translateY: starTranslate }],
+          },
+        ]}
+      />
 
-      {/* Stars */}
-      {STARS.map((s, i) => (
-        <Animated.View
-          key={s.key}
-          style={[
-            styles.star,
-            { left: s.x, top: s.y, width: s.size, height: s.size, borderRadius: s.size, opacity: starAnims[i] },
-          ]}
-        />
-      ))}
+      <Animated.View
+        style={[
+          styles.star,
+          styles.starTwo,
+          {
+            opacity: starOpacity,
+            transform: [{ translateY: starTranslate }],
+          },
+        ]}
+      />
 
-      {/* Main content */}
-      <View style={styles.content}>
+      <Animated.View
+        style={[
+          styles.star,
+          styles.starThree,
+          {
+            opacity: starOpacity,
+            transform: [{ translateY: starTranslate }],
+          },
+        ]}
+      />
 
-        {/* Logo with glow */}
-        <Animated.View style={[styles.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
-          <Animated.View style={[styles.logoGlow, { opacity: glowAnim }]} />
-          <View style={styles.logoBg}>
-            <Image
-              source={require("../assets/images/logo_nobg.png")}
-              style={styles.logoImg}
-              resizeMode="contain"
-            />
-          </View>
-        </Animated.View>
+      <Animated.View
+        style={[
+          styles.star,
+          styles.starFour,
+          {
+            opacity: starOpacity,
+            transform: [{ translateY: starTranslate }],
+          },
+        ]}
+      />
 
-        {/* App name */}
-        <Animated.View style={[styles.titleWrap, { opacity: titleFade }]}>
-          <Text style={styles.titleImpro}>Impro</Text>
-          <Text style={styles.titleKinz}>Kinz</Text>
-        </Animated.View>
+      <Animated.View
+        style={[
+          styles.star,
+          styles.starFive,
+          {
+            opacity: starOpacity,
+            transform: [{ translateY: starTranslate }],
+          },
+        ]}
+      />
 
-        {/* Tagline */}
-        <Animated.Text style={[styles.tagline, { opacity: taglineFade }]}>
-          Your AI-Powered Study Companion
-        </Animated.Text>
+      <Animated.View
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        <View style={styles.logoWrapper}>
+          <View style={styles.logoGlow} />
 
-        {/* Feature pills */}
-        <Animated.View style={[styles.featuresRow, { opacity: featuresFade }]}>
-          {FEATURES.map((f) => (
-            <View key={f.label} style={styles.featurePill}>
-              <Text style={styles.featureIcon}>{f.icon}</Text>
-              <Text style={styles.featureLabel}>{f.label}</Text>
-            </View>
-          ))}
-        </Animated.View>
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Progress */}
-        <View style={styles.progressWrap}>
-          <View style={styles.progressTrack}>
-            <Animated.View style={[styles.progressBar, { width: progressWidth }]}>
-              <LinearGradient
-                colors={["#F59E0B", "#D97706", "#F59E0B"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <View style={styles.progressShine} />
-            </Animated.View>
-          </View>
-          <Text style={styles.progressPct}>{pct}%</Text>
+          <Image
+            source={require("../assets/images/logo_nobg.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
 
-        <Text style={styles.loadingMsg} numberOfLines={1}>
-          {MESSAGES[msgIndex]}…
+        <Text style={styles.title}>Improkinz</Text>
+
+        <Text style={styles.subtitle}>
+          Improve. Learn. Create.
+        </Text>
+
+        <View style={styles.pillsContainer}>
+          <View style={styles.pill}>
+            <Text style={styles.pillIcon}>✦</Text>
+            <Text style={styles.pillText}>
+              AI Study Tools
+            </Text>
+          </View>
+
+          <View style={styles.pill}>
+            <Text style={styles.pillIcon}>◈</Text>
+            <Text style={styles.pillText}>
+              Learn Together
+            </Text>
+          </View>
+
+          <View style={styles.pill}>
+            <Text style={styles.pillIcon}>⚡</Text>
+            <Text style={styles.pillText}>
+              Level Up
+            </Text>
+          </View>
+        </View>
+      </Animated.View>
+
+      <View style={styles.bottomSection}>
+        <Text style={styles.loadingText}>
+          Loading your workspace...
+        </Text>
+
+        <View style={styles.progressBackground}>
+          <Animated.View
+            style={[
+              styles.progressBar,
+              {
+                width: progressWidth,
+              },
+            ]}
+          />
+        </View>
+
+        <Text style={styles.footerText}>
+          Your space to learn, build & improve
         </Text>
       </View>
-
-      {/* Bottom badge */}
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>✦  Study Smart. Level Up.</Text>
-      </View>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  orb: { position: "absolute", borderRadius: 200 },
-  star: { position: "absolute", backgroundColor: "#FFFFFF" },
+  container: {
+    flex: 1,
+    backgroundColor: "#080016",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
 
   content: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
-    paddingTop: H * 0.05,
-    gap: 0,
+    marginTop: -height * 0.05,
   },
 
-  // Logo
-  logoWrap: {
+  logoWrapper: {
+    width: 145,
+    height: 145,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
-  },
-  logoGlow: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "#F59E0B22",
-  },
-  logoBg: {
-    width: 160,
-    height: 160,
-    borderRadius: 40,
-    backgroundColor: "#1E1050",
-    borderWidth: 1.5,
-    borderColor: "#F59E0B33",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#F59E0B",
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 12,
-    overflow: "hidden",
-  },
-  logoImg: {
-    width: 140,
-    height: 140,
-  },
-
-  // Title
-  titleWrap: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  titleImpro: {
-    fontSize: 40,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: -0.5,
-  },
-  titleKinz: {
-    fontSize: 40,
-    fontWeight: "800",
-    color: "#F59E0B",
-    letterSpacing: -0.5,
-  },
-
-  tagline: {
-    fontSize: 15,
-    color: "#A78BFA",
-    textAlign: "center",
-    letterSpacing: 0.3,
-    marginBottom: 28,
-  },
-
-  // Feature pills
-  featuresRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-    marginBottom: 28,
-  },
-  featurePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#FFFFFF0D",
-    borderWidth: 1,
-    borderColor: "#FFFFFF15",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  featureIcon: { fontSize: 13 },
-  featureLabel: { fontSize: 12, color: "#C4B5FD", fontWeight: "500" },
-
-  divider: {
-    width: 60,
-    height: 1,
-    backgroundColor: "#F59E0B33",
-    marginBottom: 24,
-  },
-
-  // Progress
-  progressWrap: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 5,
-    backgroundColor: "#FFFFFF12",
-    borderRadius: 4,
-    overflow: "hidden",
-  },
-  progressBar: {
-    height: "100%",
-    borderRadius: 4,
-    overflow: "hidden",
     position: "relative",
   },
-  progressShine: {
+
+  logoGlow: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: "#FFFFFF44",
-    borderRadius: 2,
-  },
-  progressPct: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#F59E0B",
-    minWidth: 34,
-    textAlign: "right",
-  },
-  loadingMsg: {
-    fontSize: 13,
-    color: "#7C6FAA",
-    textAlign: "center",
-    letterSpacing: 0.2,
+    width: 125,
+    height: 125,
+    borderRadius: 63,
+    backgroundColor: "#8B5CF6",
+    opacity: 0.18,
+    transform: [{ scale: 1.25 }],
   },
 
-  // Bottom badge
-  badge: {
-    paddingBottom: 36,
-    alignItems: "center",
+  logo: {
+    width: 125,
+    height: 125,
   },
-  badgeText: {
+
+  title: {
+    color: "#FFFFFF",
+    fontSize: 36,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    marginTop: 8,
+  },
+
+  subtitle: {
+    color: "#BFA8E8",
+    fontSize: 16,
+    marginTop: 7,
+    letterSpacing: 0.4,
+  },
+
+  pillsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 30,
+    maxWidth: width * 0.88,
+  },
+
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.18)",
+    borderRadius: 20,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+  },
+
+  pillIcon: {
+    color: "#C4B5FD",
     fontSize: 13,
-    color: "#FFFFFF22",
-    letterSpacing: 1,
+    marginRight: 6,
+  },
+
+  pillText: {
+    color: "#DDD6FE",
+    fontSize: 12,
     fontWeight: "600",
+  },
+
+  bottomSection: {
+    position: "absolute",
+    bottom: 40,
+    alignItems: "center",
+    width: "100%",
+  },
+
+  loadingText: {
+    color: "#A78BFA",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+
+  progressBackground: {
+    width: width * 0.62,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+
+  progressBar: {
+    height: 3,
+    backgroundColor: "#A78BFA",
+    borderRadius: 4,
+  },
+
+  footerText: {
+    color: "#6D5A89",
+    fontSize: 10,
+    marginTop: 12,
+  },
+
+  star: {
+    position: "absolute",
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#FFFFFF",
+  },
+
+  starOne: {
+    top: height * 0.17,
+    left: width * 0.18,
+  },
+
+  starTwo: {
+    top: height * 0.28,
+    right: width * 0.15,
+  },
+
+  starThree: {
+    top: height * 0.42,
+    left: width * 0.08,
+  },
+
+  starFour: {
+    top: height * 0.63,
+    right: width * 0.1,
+  },
+
+  starFive: {
+    top: height * 0.75,
+    left: width * 0.2,
   },
 });

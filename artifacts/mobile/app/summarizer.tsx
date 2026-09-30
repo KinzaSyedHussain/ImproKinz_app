@@ -34,28 +34,48 @@ export default function SummarizerScreen() {
   const botPad = insets.bottom + 24;
 
   const generate = async () => {
-    if (!text.trim()) { Alert.alert("No content", "Paste some text to summarise first."); return; }
+    if (!text.trim()) {
+      Alert.alert("No content", "Paste some text to summarise first.");
+      return;
+    }
+  
     if (!(await consumeTool("summarizer"))) return;
+  
     setLoading(true);
+  
     try {
       const domain = process.env["EXPO_PUBLIC_DOMAIN"];
-      const res = await fetch(`https://${domain}/api/ai/summary`, {
+      const apiUrl =
+        process.env["EXPO_PUBLIC_API_URL"] ||
+        (domain ? `https://${domain}` : "http://localhost:3001");
+  
+      const res = await fetch(`${apiUrl}/api/ai/summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
       });
-      if (!res.ok) throw new Error("Generation failed");
+  
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("Summarizer API error:", res.status, errorText);
+        throw new Error("Generation failed");
+      }
+  
       const data = await res.json() as { summary: string };
+  
       setSummary(data.summary || "");
       await addXP(10);
-    } catch {
+    } catch (error) {
+      console.error("Summarizer generation error:", error);
       await refundCredits(10);
-      Alert.alert("Generation failed", "Make sure the API is connected and try again.");
+      Alert.alert(
+        "Generation failed",
+        "Make sure the API is connected and try again."
+      );
     } finally {
       setLoading(false);
     }
   };
-
   const reset = () => { setSummary(""); setText(""); };
 
   return (

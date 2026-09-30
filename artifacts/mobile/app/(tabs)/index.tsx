@@ -26,13 +26,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TOOLS = [
-  { icon: "timer",       label: "Focus",      route: "/(tabs)/focus",  color: "#7C3AED" },
-  { icon: "layers",      label: "Flashcards", route: "/flashcards",    color: "#4F46E5" },
-  { icon: "align-left",  label: "Summarizer", route: "/summarizer",    color: "#7C3AED" },
-  { icon: "check-square",label: "Quiz",       route: "/quiz",          color: "#D97706" },
-  { icon: "file-text",   label: "Notes",      route: "/notes",         color: "#0891B2" },
-  { icon: "message-circle", label: "Chatbot", route: "/chatbot",       color: "#059669" },
-  { icon: "calculator",  label: "Calculator", route: "/calculator",    color: "#DB2777" },
+  { icon: "timer",          label: "Focus",       route: "/(tabs)/focus",  color: "#7C3AED" },
+  { icon: "layers",         label: "Flashcards", route: "/flashcards",    color: "#4F46E5" },
+  { icon: "align-left",     label: "Summarizer", route: "/summarizer",    color: "#7C3AED" },
+  { icon: "check-square",   label: "Quiz",       route: "/quiz",          color: "#D97706" },
+  { icon: "file-text",      label: "Notes",      route: "/notes",         color: "#0891B2" },
+  { icon: "message-circle", label: "Chatbot",    route: "/chatbot",       color: "#059669" },
+  { icon: "calculator",     label: "Calculator", route: "/calculator",    color: "#DB2777" },
 ];
 
 const PAGE_SIZE = 20;
@@ -77,8 +77,7 @@ function CreateMenuSheet({
   };
 
   const ACTIONS = [
-    { icon: "edit-3",   label: "New Post",        sub: "Share something with the community",       route: "/create-post" },
-    { icon: "users-round", label: "New Group",     sub: "Create a study group for your subject",    route: "/create-group" },
+    { icon: "edit-3",       label: "New Post",        sub: "Share something with the community",       route: "/create-post" },
     { icon: "briefcase",   label: "New Opportunity", sub: "Post a hackathon, job or internship",  route: "/create-opportunity" },
   ];
 
@@ -97,7 +96,6 @@ function CreateMenuSheet({
             { backgroundColor: colors.card, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          {/* Handle */}
           <View style={[styles.sheetHandle, { backgroundColor: colors.muted }]} />
           <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Create</Text>
 
@@ -158,7 +156,7 @@ function ToolsRow() {
   );
 }
 
-// ─── Feed Header (inside FlatList ListHeaderComponent) ───────────────────────
+// ─── Feed Header ─────────────────────────────────────────────────────────────
 
 function FeedHeader({
   displayName,
@@ -176,11 +174,10 @@ function FeedHeader({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const topPad = insets.top + (Platform.OS === "web" ? 67 : 0);
+  const topPad = insets.top + (Platform.OS === "web" ? 12 : 0);
 
   return (
     <>
-      {/* ── Hero gradient header ── */}
       <LinearGradient
         colors={[colors.purpleEnd, colors.purpleStart]}
         start={{ x: 0, y: 0 }}
@@ -197,9 +194,7 @@ function FeedHeader({
             </Text>
             <Text style={styles.heroSub}>Ready to study today?</Text>
           </View>
-          {/* Credits pill */}
           <CreditBalancePill />
-          {/* Create "+" button */}
           <TouchableOpacity
             onPress={onPressPlus}
             style={styles.plusBtn}
@@ -217,7 +212,6 @@ function FeedHeader({
           </TouchableOpacity>
         </View>
 
-        {/* Stats row */}
         <View style={styles.statsRow}>
           <View style={styles.statPill}>
             <Text style={styles.statEmoji}>🔥</Text>
@@ -239,10 +233,8 @@ function FeedHeader({
         </View>
       </LinearGradient>
 
-      {/* ── Compact tools row ── */}
       <ToolsRow />
 
-      {/* ── Feed section label ── */}
       <View style={[styles.feedLabelRow, { borderBottomColor: colors.border }]}>
         <Icon name="rss" size={14} color={colors.primary} />
         <Text style={[styles.feedLabel, { color: colors.foreground }]}>Community Feed</Text>
@@ -262,45 +254,55 @@ export default function HomeScreen() {
   const [loading, setLoading]         = useState(true);
   const [refreshing, setRefreshing]   = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  // Start false so onEndReached cannot trigger loadMore before the first page has landed.
   const [hasMore, setHasMore]         = useState(false);
   const [loadError, setLoadError]     = useState<string | null>(null);
   const [attempt, setAttempt]         = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  // Cursor is the document ID of the last post on the current page, returned by the API.
   const cursorRef = useRef<string | null>(null);
 
-  const botPad = 60 + insets.bottom + (Platform.OS === "web" ? 34 : 0);
+  const botPad = 80 + insets.bottom;
 
   const displayName = profile?.displayName || user?.displayName || "Learner";
   const streak = (profile as any)?.streak ?? 0;
   const xp = profile?.xp ?? 0;
 
-  const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-    : "";
+  // The API server is separate from the Expo Web dev server.
+  // Set EXPO_PUBLIC_API_URL in artifacts/mobile/.env.local, e.g. http://localhost:3001.
+  // Do not fall back to window.location.origin: that points to Expo, not the API server.
+  const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
-  // ── API fetch — ordered by createdAt desc, document-ID cursor ───────────
-  // `cursor` is the document ID of the last post on the previous page.
-  // The server resolves it to a DocumentSnapshot for startAfter(), which handles
-  // duplicate createdAt timestamps correctly without a composite index.
-  // Throws a tagged error { stale: true } when the server returns 410 (cursor
-  // document was deleted), so callers can reset and reload from page 1.
   const fetchPage = useCallback(async (cursor?: string) => {
+    if (!API_BASE) {
+      throw new Error(
+        "Missing EXPO_PUBLIC_API_URL. Set it in artifacts/mobile/.env.local to your running API server URL (for example, http://localhost:3001), then restart Expo."
+      );
+    }
+
     const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
     if (cursor) params.set("cursor", cursor);
+
     const res = await fetch(`${API_BASE}/api/posts?${params}`);
+
     if (res.status === 410) {
-      // Cursor document was deleted — callers must reset and reload page 1.
       throw Object.assign(new Error("stale_cursor"), { stale: true });
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    if (!res.ok) {
+      throw new Error(`Server error (${res.status})`);
+    }
+
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("Invalid response format (expected JSON)");
+    }
+
     const json = await res.json();
     const raw: any[] = json.posts ?? [];
     const fetched: Post[] = raw
       .map((p) => { try { return normalizePost(p.id ?? "", p); } catch { return null; } })
       .filter((p): p is Post => p !== null);
+
     return { fetched, hasMore: !!json.hasMore, nextCursor: json.nextCursor as string | null };
   }, [API_BASE]);
 
@@ -321,16 +323,12 @@ export default function HomeScreen() {
       })
       .catch((e: any) => {
         if (!cancelled) {
-          setLoadError(e?.message ?? "Couldn't load posts");
+          setLoadError(e?.message ?? "Couldn't load feed");
           setLoading(false);
         }
       });
 
-    const timeout = setTimeout(() => {
-      if (!cancelled) { setLoadError("Timed out loading feed"); setLoading(false); }
-    }, 10000);
-
-    return () => { cancelled = true; clearTimeout(timeout); };
+    return () => { cancelled = true; };
   }, [attempt]);
 
   const handleRefresh = async () => {
@@ -350,10 +348,7 @@ export default function HomeScreen() {
   };
 
   const loadMore = async () => {
-    // Guard: do not paginate until the first page has fully landed,
-    // and do not fire if there are no more pages or a load is in flight.
-    if (!hasMore || loadingMore || loading) return;
-    // No cursor means we are at the start — do not append a duplicate page 1.
+    if (!hasMore || loadingMore || loading || loadError) return;
     if (!cursorRef.current) { setHasMore(false); return; }
     setLoadingMore(true);
     try {
@@ -364,17 +359,14 @@ export default function HomeScreen() {
       setHasMore(more);
     } catch (e: any) {
       if (e?.stale) {
-        // Cursor document was deleted — reset and reload from page 1.
         cursorRef.current = null;
         setAttempt((a) => a + 1);
       }
-      // Other network failures: silent — user can pull-to-refresh.
     } finally {
       setLoadingMore(false);
     }
   };
 
-  // ── Render helpers ───────────────────────────────────────────────────────
   const renderPost = useCallback(
     ({ item }: { item: Post }) => <PostCard post={item} />,
     []
@@ -436,7 +428,7 @@ export default function HomeScreen() {
         </View>
       );
     }
-    if (!hasMore && posts.length > 0) {
+    if (!hasMore && !loading && !loadError && posts.length > 0) {
       return (
         <View style={styles.endWrap}>
           <Text style={[styles.endText, { color: colors.mutedForeground }]}>
@@ -449,9 +441,9 @@ export default function HomeScreen() {
   };
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <FlatList
-        style={{ flex: 1, backgroundColor: colors.background }}
+        style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: botPad }}
         data={posts}
         keyExtractor={(item) => item.id}
@@ -478,30 +470,24 @@ export default function HomeScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews
-        maxToRenderPerBatch={8}
-        windowSize={10}
       />
 
-      {/* Create menu bottom sheet */}
       <CreateMenuSheet
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
       />
-    </>
+    </View>
   );
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  // Hero header
   hero: { paddingHorizontal: 18, paddingBottom: 20 },
-  heroRow: { flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 0 },
+  heroRow: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   heroGreeting: { color: "#fff", fontFamily: "Inter_700Bold", fontSize: 17 },
   heroSub: { color: "rgba(255,255,255,0.7)", fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
 
-  // Create "+" button in header
   plusBtn: { marginLeft: 10 },
   plusGradient: {
     width: 34,
@@ -517,7 +503,6 @@ const styles = StyleSheet.create({
   },
   plusText: { color: "#fff", fontSize: 22, lineHeight: 26, fontWeight: "300", marginTop: -1 },
 
-  // Stats row
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -532,7 +517,6 @@ const styles = StyleSheet.create({
   statLbl: { color: "rgba(255,255,255,0.65)", fontFamily: "Inter_400Regular", fontSize: 10 },
   statDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.2)" },
 
-  // Compact tools row
   toolsRowScroll: { flexGrow: 0 },
   toolsRowContent: { paddingHorizontal: 14, paddingVertical: 12, gap: 8 },
   toolPill: {
@@ -547,7 +531,6 @@ const styles = StyleSheet.create({
   toolPillIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   toolPillLabel: { fontFamily: "Inter_500Medium", fontSize: 13 },
 
-  // Feed section label
   feedLabelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -559,7 +542,6 @@ const styles = StyleSheet.create({
   },
   feedLabel: { fontFamily: "Inter_700Bold", fontSize: 15 },
 
-  // Empty / footer states
   emptyWrap: { alignItems: "center", paddingTop: 60, paddingHorizontal: 40, gap: 12 },
   emptyTitle: { fontFamily: "Inter_700Bold", fontSize: 18, textAlign: "center" },
   emptySub: { fontFamily: "Inter_400Regular", fontSize: 14, lineHeight: 20, textAlign: "center" },
@@ -571,7 +553,6 @@ const styles = StyleSheet.create({
   endWrap: { paddingVertical: 20, alignItems: "center" },
   endText: { fontFamily: "Inter_400Regular", fontSize: 13 },
 
-  // Create menu sheet
   menuOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",

@@ -6,6 +6,8 @@ import {
   getDocs,
   limit,
   query,
+  orderBy,
+  where,
   startAfter,
   QueryDocumentSnapshot,
   DocumentData,
@@ -30,7 +32,6 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { AdBanner } from "@/components/AdBanner";
 
-const POOL_SIZE = 60;
 const PAGE_SIZE = 12;
 
 const COMMUNITIES = [
@@ -44,15 +45,6 @@ const COMMUNITIES = [
   { id: "English", label: "English", icon: "type" },
   { id: "Languages", label: "Languages", icon: "languages" },
 ];
-
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
 
 export default function CommunityScreen() {
   const colors = useColors();
@@ -70,7 +62,6 @@ export default function CommunityScreen() {
   const [community, setCommunity] = useState("all");
 
   const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const poolRef = useRef<Post[]>([]);
 
   const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
     ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
@@ -81,67 +72,128 @@ export default function CommunityScreen() {
 
   useEffect(() => {
     let cancelled = false;
+
     async function load() {
       setLoading(true);
       setLoadError(null);
+
       try {
-        const res = await fetch(`${API_BASE}/api/posts`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        const raw: any[] = json.posts || [];
-        const all: Post[] = raw
-          .map((p) => { try { return normalizePost(p.id || "", p); } catch { return null; } })
-          .filter((p): p is Post => p !== null);
-        all.sort((a, b) => b.createdAt - a.createdAt);
+        let fetchedPosts: Post[] = [];
 
-        const filtered = community === "all"
-          ? all
-          : all.filter((p) => p.subject === community || p.tags?.includes(community));
+        // Try API endpoint if explicitly configured
+        if (API_BASE) {
+          const res = await fetch(`${API_BASE}/api/posts`);
+          const contentType = res.headers.get("content-type");
 
-        const firstPage = filtered.slice(0, PAGE_SIZE);
-        poolRef.current = filtered.slice(PAGE_SIZE);
+          if (res.ok && contentType && contentType.includes("application/json")) {
+            const json = await res.json();
+            const raw: any[] = json.posts || [];
+            fetchedPosts = raw
+              .map((p) => {
+                try {
+                  return normalizePost(p.id || "", p);
+                } catch {
+                  return null;
+                }
+              })
+              .filter((p): p is Post => p !== null);
+          }
+        }
+
+        // Direct Firestore fallback / primary data loading
+        if (fetchedPosts.length === 0) {
+          let q = query(
+            collection(db, "community_posts"),
+            orderBy("createdAt", "desc"),
+            limit(PAGE_SIZE)
+          );
+
+          if (community !== "all") {
+            q = query(
+              collection(db, "community_posts"),
+              where("subject", "==", community),
+              orderBy("createdAt", "desc"),
+              limit(PAGE_SIZE)
+            );
+          }
+
+          const snap = await getDocs(q);
+          if (snap.docs.length > 0) {
+            lastDocRef.current = snap.docs[snap.docs.length - 1];
+            fetchedPosts = snap.docs.map((d) => normalizePost(d.id, d.data()));
+          }
+        }
+
         if (!cancelled) {
-          setPosts(firstPage);
-          setHasMore(filtered.length > PAGE_SIZE);
+          setPosts(fetchedPosts);
+          setHasMore(fetchedPosts.length >= PAGE_SIZE);
           setLoading(false);
         }
       } catch (e: any) {
         if (!cancelled) {
-          setLoadError(e?.message || "Failed to load community");
+          setLoadError(e?.message || "Failed to load community feed");
           setLoading(false);
         }
       }
     }
+
     load();
-    const t = setTimeout(() => { if (!cancelled) { setLoadError("Timed out."); setLoading(false); } }, 8000);
-    return () => { cancelled = true; clearTimeout(t); };
+    const t = setTimeout(() => {
+      if (!cancelled && loading) {
+        setLoadError("Request timed out. Please check your network connection.");
+        setLoading(false);
+      }
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [feedAttempt, community]);
 
   const loadMore = async () => {
-    if (!hasMore || loadingMore) return;
+    if (!hasMore || loadingMore || !lastDocRef.current) return;
     setLoadingMore(true);
+
     try {
-      if (poolRef.current.length > 0) {
-        const next = poolRef.current.slice(0, PAGE_SIZE);
-        poolRef.current = poolRef.current.slice(PAGE_SIZE);
-        setPosts((prev) => [...prev, ...next]);
-        setHasMore(poolRef.current.length > 0);
+      let q = query(
+        collection(db, "community_posts"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastDocRef.current),
+        limit(PAGE_SIZE)
+      );
+
+      if (community !== "all") {
+        q = query(
+          collection(db, "community_posts"),
+          where("subject", "==", community),
+          orderBy("createdAt", "desc"),
+          startAfter(lastDocRef.current),
+          limit(PAGE_SIZE)
+        );
+      }
+
+      const snap = await getDocs(q);
+      if (!snap.docs.length) {
+        setHasMore(false);
         return;
       }
-      if (community !== "all" || !lastDocRef.current) { setHasMore(false); return; }
-      const q = query(collection(db, "community_posts"), startAfter(lastDocRef.current), limit(POOL_SIZE));
-      const snap = await getDocs(q);
-      if (!snap.docs.length) { setHasMore(false); return; }
+
       lastDocRef.current = snap.docs[snap.docs.length - 1];
-      const more = shuffle(snap.docs.map((d) => normalizePost(d.id, d.data())));
-      setPosts((prev) => [...prev, ...more.slice(0, PAGE_SIZE)]);
-      poolRef.current = more.slice(PAGE_SIZE);
-      setHasMore(more.length > PAGE_SIZE);
-    } finally { setLoadingMore(false); }
+      const morePosts = snap.docs.map((d) => normalizePost(d.id, d.data()));
+
+      setPosts((prev) => [...prev, ...morePosts]);
+      setHasMore(morePosts.length >= PAGE_SIZE);
+    } catch (err) {
+      console.error("Error loading more posts:", err);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const handleRefresh = () => {
     setRefreshing(true);
+    lastDocRef.current = null;
     setFeedAttempt((n) => n + 1);
     setTimeout(() => setRefreshing(false), 800);
   };
@@ -153,7 +205,7 @@ export default function CommunityScreen() {
         <View style={styles.headerRow}>
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Community</Text>
           <View style={{ flex: 1 }} />
-          <TouchableOpacity onPress={() => router.push("/search")} style={styles.headerBtn}>
+          <TouchableOpacity onPress={() => router.push("/usersearch")} style={styles.headerBtn}>
             <Icon name="search" size={21} color={colors.foreground} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push("/create-post")} style={[styles.composeBtn, { backgroundColor: colors.primary }]}>
@@ -168,7 +220,11 @@ export default function CommunityScreen() {
             return (
               <TouchableOpacity
                 key={c.id}
-                onPress={() => { setCommunity(c.id); setFeedAttempt((n) => n + 1); }}
+                onPress={() => {
+                  lastDocRef.current = null;
+                  setCommunity(c.id);
+                  setFeedAttempt((n) => n + 1);
+                }}
                 style={[
                   styles.communityChip,
                   {

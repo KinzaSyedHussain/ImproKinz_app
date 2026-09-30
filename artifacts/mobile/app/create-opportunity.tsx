@@ -28,9 +28,9 @@ const TYPE_COLORS: Record<OpportunityType, string> = {
   Internship: "#0D9488",
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "http://localhost:8080";
+const API_BASE = process.env.EXPO_PUBLIC_API_URL
+  ? process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, "")
+  : "http://192.168.1.15:3001";
 
 export default function CreateOpportunityScreen() {
   const colors = useColors();
